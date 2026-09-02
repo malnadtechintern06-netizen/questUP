@@ -521,7 +521,21 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
               requiredLines: quest.requiredLines,
               promptHint: quest.description,
               onTextChanged: (text, words, isSatisfied) {
-                ref.read(verificationNotifierProvider.notifier).updateTextProof(text, words, isSatisfied);
+                ref.read(verificationNotifierProvider.notifier).updateTextProof(
+                      text,
+                      words,
+                      isSatisfied,
+                    );
+              },
+              onDetailedTextChanged: (text, words, isSatisfied, isAuthentic, pastedChars) {
+                ref.read(verificationNotifierProvider.notifier).updateTextProof(
+                      text,
+                      words,
+                      isSatisfied,
+                      isPasted: !isAuthentic,
+                      pastedChars: pastedChars,
+                      isAuthentic: isAuthentic,
+                    );
               },
             ),
           ],

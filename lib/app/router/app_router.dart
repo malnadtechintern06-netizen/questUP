@@ -17,7 +17,6 @@ import 'package:quest_up/features/quests/presentation/screens/quest_list_screen.
 import 'package:quest_up/features/verification/presentation/screens/quest_verification_screen.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
-final GlobalKey<NavigatorState> _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 final GoRouter appRouter = GoRouter(
   navigatorKey: _rootNavigatorKey,
@@ -58,50 +57,77 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => const LocationPermissionScreen(),
     ),
 
-    // Shell Route for Main Bottom Nav tabs
-    ShellRoute(
-      navigatorKey: _shellNavigatorKey,
-      builder: (context, state, child) {
+    // Stateful Shell Route for Main Bottom Nav tabs
+    StatefulShellRoute.indexedStack(
+      builder: (context, state, navigationShell) {
         return AppScaffold(
-          location: state.uri.toString(),
-          child: child,
+          navigationShell: navigationShell,
         );
       },
-      routes: [
-        GoRoute(
-          path: RoutePaths.home,
-          name: RouteNames.home,
-          pageBuilder: (context, state) => const NoTransitionPage(
-            child: HomeRadarScreen(),
-          ),
+      branches: [
+        // Branch 0: Radar / Home
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: RoutePaths.home,
+              name: RouteNames.home,
+              pageBuilder: (context, state) => const NoTransitionPage(
+                child: HomeRadarScreen(),
+              ),
+            ),
+          ],
         ),
-        GoRoute(
-          path: RoutePaths.quests,
-          name: RouteNames.quests,
-          pageBuilder: (context, state) => const NoTransitionPage(
-            child: QuestListScreen(),
-          ),
+
+        // Branch 1: Quests
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: RoutePaths.quests,
+              name: RouteNames.quests,
+              pageBuilder: (context, state) => const NoTransitionPage(
+                child: QuestListScreen(),
+              ),
+            ),
+          ],
         ),
-        GoRoute(
-          path: RoutePaths.leaderboard,
-          name: RouteNames.leaderboard,
-          pageBuilder: (context, state) => const NoTransitionPage(
-            child: LeaderboardScreen(),
-          ),
+
+        // Branch 2: Leaderboard / Rankings
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: RoutePaths.leaderboard,
+              name: RouteNames.leaderboard,
+              pageBuilder: (context, state) => const NoTransitionPage(
+                child: LeaderboardScreen(),
+              ),
+            ),
+          ],
         ),
-        GoRoute(
-          path: RoutePaths.achievements,
-          name: RouteNames.achievements,
-          pageBuilder: (context, state) => const NoTransitionPage(
-            child: AchievementsScreen(),
-          ),
+
+        // Branch 3: Achievements / Badges
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: RoutePaths.achievements,
+              name: RouteNames.achievements,
+              pageBuilder: (context, state) => const NoTransitionPage(
+                child: AchievementsScreen(),
+              ),
+            ),
+          ],
         ),
-        GoRoute(
-          path: RoutePaths.profile,
-          name: RouteNames.profile,
-          pageBuilder: (context, state) => const NoTransitionPage(
-            child: ProfileScreen(),
-          ),
+
+        // Branch 4: Profile
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: RoutePaths.profile,
+              name: RouteNames.profile,
+              pageBuilder: (context, state) => const NoTransitionPage(
+                child: ProfileScreen(),
+              ),
+            ),
+          ],
         ),
       ],
     ),

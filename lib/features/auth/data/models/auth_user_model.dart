@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:quest_up/features/auth/domain/entities/auth_user.dart';
 
 class AuthUserModel extends AuthUser {
@@ -11,16 +10,17 @@ class AuthUserModel extends AuthUser {
     required super.createdAt,
   });
 
-  factory AuthUserModel.fromFirebaseUser(fb.User user) {
+  factory AuthUserModel.fromMySqlRow(Map<String, dynamic> row) {
     return AuthUserModel(
-      id: user.uid,
-      email: user.email ?? '',
-      displayName: (user.displayName != null && user.displayName!.isNotEmpty)
-          ? user.displayName!
-          : (user.email?.split('@').first ?? 'Explorer'),
-      photoUrl: user.photoURL,
-      isEmailVerified: user.emailVerified,
-      createdAt: user.metadata.creationTime ?? DateTime.now(),
+      id: row['id']?.toString() ?? '',
+      email: row['email']?.toString() ?? '',
+      displayName: row['name']?.toString() ??
+          (row['email']?.toString().split('@').first ?? 'Explorer'),
+      photoUrl: row['avatar_key']?.toString(),
+      isEmailVerified: true,
+      createdAt: row['created_at'] != null
+          ? (DateTime.tryParse(row['created_at'].toString()) ?? DateTime.now())
+          : DateTime.now(),
     );
   }
 

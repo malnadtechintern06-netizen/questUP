@@ -1,29 +1,37 @@
 import '../../../../core/utils/distance_calculator.dart';
 import '../../domain/entities/quest.dart';
 import '../../domain/repositories/quest_repository.dart';
-import '../datasources/quest_firestore_datasource.dart';
 import '../datasources/quest_local_datasource.dart';
+import '../datasources/quest_mysql_datasource.dart';
 
 class QuestRepositoryImpl implements QuestRepository {
   final IQuestLocalDataSource localDataSource;
-  final IQuestFirestoreDataSource firestoreDataSource;
+  final IQuestMySqlDataSource mySqlDataSource;
 
   QuestRepositoryImpl({
     required this.localDataSource,
-    required this.firestoreDataSource,
+    required this.mySqlDataSource,
   });
 
   @override
   Future<List<Quest>> getQuests() async {
-    // 1. Try remote Firestore first
-    final firestoreQuests = await firestoreDataSource.fetchQuestsFromFirestore();
-    if (firestoreQuests.isNotEmpty) {
-      return firestoreQuests.where((q) => q.isActive).toList();
-    }
-
-    // 2. Fallback to local storage
     final local = await localDataSource.getQuests();
-    return local.where((q) => q.isActive).toList();
+    final candidateQuests = List<Quest>.from(local.where((q) => q.isActive));
+
+    // Also check MySQL in the background without blocking
+    try {
+      final mySqlQuests = await mySqlDataSource.fetchQuestsFromMySql().timeout(
+        const Duration(milliseconds: 350),
+        onTimeout: () => [],
+      );
+      for (final q in mySqlQuests) {
+        if (q.isActive && !candidateQuests.any((existing) => existing.id == q.id)) {
+          candidateQuests.add(q);
+        }
+      }
+    } catch (_) {}
+
+    return candidateQuests;
   }
 
   @override
@@ -32,38 +40,30 @@ class QuestRepositoryImpl implements QuestRepository {
     required double userLon,
     double maxDistanceMeters = 50000,
   }) async {
-    List<Quest> candidateQuests = [];
+    // 1. Fetch dynamic local landmarks and activity quests instantly
+    final localQuests = await localDataSource.getQuestsForLocation(
+      userLat,
+      userLon,
+      maxRadiusMeters: maxDistanceMeters,
+    );
+    final List<Quest> candidateQuests = List<Quest>.from(localQuests);
 
-    // 1. Check if Firestore has active quests in the area
-    final firestoreQuests = await firestoreDataSource.fetchQuestsFromFirestore();
-    if (firestoreQuests.isNotEmpty) {
-      // Check if any firestore quest is actually near the user
-      final nearbyFirestore = firestoreQuests.where((q) {
-        if (!q.isActive) return false;
-        final distance = DistanceCalculator.calculateDistanceMeters(
-          lat1: userLat,
-          lon1: userLon,
-          lat2: q.latitude,
-          lon2: q.longitude,
-        );
-        return distance <= maxDistanceMeters;
-      }).toList();
-
-      if (nearbyFirestore.isNotEmpty) {
-        candidateQuests = nearbyFirestore;
-      }
-    }
-
-    // 2. If no nearby Firestore quests, use local dynamic location-anchored quests
-    if (candidateQuests.isEmpty) {
-      candidateQuests = await localDataSource.getQuestsForLocation(
-        userLat,
-        userLon,
-        maxRadiusMeters: maxDistanceMeters,
+    // 2. Fetch any remote MySQL custom quests with non-blocking fast timeout
+    try {
+      final mySqlQuests = await mySqlDataSource.fetchQuestsFromMySql().timeout(
+        const Duration(milliseconds: 350),
+        onTimeout: () => [],
       );
-    }
+      if (mySqlQuests.isNotEmpty) {
+        for (final q in mySqlQuests) {
+          if (q.isActive && !candidateQuests.any((existing) => existing.id == q.id)) {
+            candidateQuests.add(q);
+          }
+        }
+      }
+    } catch (_) {}
 
-    // 3. Calculate exact Haversine distance for location quests, retain universal activity quests
+    // 3. Calculate exact Haversine distance for location quests
     final List<Quest> calculatedQuests = candidateQuests.map((quest) {
       if (quest.latitude != 0.0 && quest.longitude != 0.0) {
         final distance = DistanceCalculator.calculateDistanceMeters(
@@ -77,7 +77,7 @@ class QuestRepositoryImpl implements QuestRepository {
       return quest;
     }).toList();
 
-    // 4. Filter: Include location quests within radius, and all universal activity quests
+    // 4. Filter: Include location quests within radius, and universal activity quests
     final filtered = calculatedQuests.where((q) {
       if (q.latitude != 0.0 && q.longitude != 0.0) {
         return (q.distanceMeters ?? double.infinity) <= maxDistanceMeters;
@@ -85,7 +85,7 @@ class QuestRepositoryImpl implements QuestRepository {
       return true; // Universal activity quest available everywhere
     }).toList();
 
-    // 5. Sort: Nearest location-based quests first, followed by activity quests
+    // 5. Sort: Nearest location quests first, followed by activity quests
     filtered.sort((a, b) {
       final isALocation = a.latitude != 0.0 && a.longitude != 0.0;
       final isBLocation = b.latitude != 0.0 && b.longitude != 0.0;

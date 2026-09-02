@@ -42,10 +42,9 @@ dependencies:
   intl: ^0.20.3
   uuid: ^4.6.0
   google_fonts: ^8.2.1
-  firebase_core: ^4.14.0
-  firebase_auth: ^6.6.1
-  cloud_firestore: ^6.9.0
   url_launcher: ^6.3.1
+  mysql_client: ^0.0.27
+  crypto: ^3.0.7
 
 dev_dependencies:
   flutter_test:

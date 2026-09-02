@@ -1,6 +1,7 @@
 import 'package:quest_up/features/quests/domain/entities/quest.dart';
 import 'package:quest_up/features/verification/domain/entities/quest_attempt.dart';
 import 'package:quest_up/features/verification/domain/entities/validator_result.dart';
+import 'validators/anti_cheat_writing_verifier.dart';
 import 'validators/distance_verifier.dart';
 import 'validators/drawing_verifier.dart';
 import 'validators/fresh_photo_verifier.dart';
@@ -59,6 +60,7 @@ class QuestVerificationService implements IQuestVerificationService {
   final TextVerifier _textVerifier = TextVerifier();
   final WordCountVerifier _wordCountVerifier = WordCountVerifier();
   final LineCountVerifier _lineCountVerifier = LineCountVerifier();
+  final AntiCheatWritingVerifier _antiCheatWritingVerifier = AntiCheatWritingVerifier();
   final DrawingVerifier _drawingVerifier = DrawingVerifier();
   final DistanceVerifier _distanceVerifier = DistanceVerifier();
   final GameplayTimeVerifier _gameplayTimeVerifier = GameplayTimeVerifier();
@@ -101,9 +103,10 @@ class QuestVerificationService implements IQuestVerificationService {
       validators.add(_timedActivityVerifier);
     }
 
-    // 8. Text Content & Word Count
+    // 8. Text Content, Anti-Cheat, & Word Count
     if (quest.requiresText || quest.verificationType == QuestVerificationType.writingText) {
       validators.add(_textVerifier);
+      validators.add(_antiCheatWritingVerifier);
       if (quest.requiredWords > 0) {
         validators.add(_wordCountVerifier);
       }

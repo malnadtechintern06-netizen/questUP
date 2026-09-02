@@ -4,10 +4,10 @@ import 'package:quest_up/core/utils/distance_calculator.dart';
 import 'package:quest_up/features/auth/data/models/auth_user_model.dart';
 import 'package:quest_up/features/profile/data/models/user_profile_model.dart';
 import 'package:quest_up/features/profile/data/repositories/user_repository_impl.dart';
-import 'package:quest_up/features/profile/data/datasources/user_local_datasource.dart';
 import 'package:quest_up/core/services/google_place_photo_service.dart';
-import 'package:quest_up/features/quests/data/datasources/quest_firestore_datasource.dart';
+import 'package:quest_up/features/profile/data/datasources/user_local_datasource.dart';
 import 'package:quest_up/features/quests/data/datasources/quest_local_datasource.dart';
+import 'package:quest_up/features/quests/data/datasources/quest_mysql_datasource.dart';
 import 'package:quest_up/features/quests/data/models/quest_model.dart';
 import 'package:quest_up/features/quests/data/repositories/quest_repository_impl.dart';
 import 'package:quest_up/features/quests/domain/entities/quest.dart';
@@ -63,15 +63,15 @@ class MockQuestLocalDataSource implements IQuestLocalDataSource {
   Future<void> markCompleted(String id) async {}
 }
 
-class MockQuestFirestoreDataSource implements IQuestFirestoreDataSource {
+class MockQuestMySqlDataSource implements IQuestMySqlDataSource {
   @override
-  Future<List<QuestModel>> fetchQuestsFromFirestore() async => [];
+  Future<List<QuestModel>> fetchQuestsFromMySql() async => [];
 
   @override
-  Future<void> saveQuestToFirestore(QuestModel quest) async {}
+  Future<void> saveQuestToMySql(QuestModel quest) async {}
 
   @override
-  Future<void> markCompletedInFirestore(String questId, String userId) async {}
+  Future<void> markCompletedInMySql(String questId, String userId, {int xp = 0, int coins = 0}) async {}
 }
 
 void main() {
@@ -176,10 +176,10 @@ void main() {
       );
 
       final mockLocal = MockQuestLocalDataSource([questFar, questNear, questOutsideRadius]);
-      final mockRemote = MockQuestFirestoreDataSource();
+      final mockRemote = MockQuestMySqlDataSource();
       final repo = QuestRepositoryImpl(
         localDataSource: mockLocal,
-        firestoreDataSource: mockRemote,
+        mySqlDataSource: mockRemote,
       );
 
       final nearbyQuests = await repo.getNearbyQuests(
@@ -485,6 +485,95 @@ void main() {
       expect(completeReport.isSuccessful, isTrue);
       expect(completeReport.results.length, greaterThanOrEqualTo(2));
       expect(completeReport.results.every((r) => r.passed), isTrue);
+    });
+
+    test('Anti-Cheat Writing Verification detects and blocks copy-paste from ChatGPT and AI phrases', () async {
+      final attempt = QuestAttempt(
+        attemptId: 'att_writing_cheat_1',
+        userId: 'u_1',
+        questId: 'q_hometown_essay',
+        startedAt: DateTime.now(),
+      );
+
+      const writingQuest = Quest(
+        id: 'q_hometown_essay',
+        title: 'Describe Your Hometown',
+        description: 'Write 20 words about your hometown and favorite spot.',
+        storyline: 'Creative Writing',
+        category: QuestCategory.writing,
+        difficulty: QuestDifficulty.easy,
+        verificationType: QuestVerificationType.writingText,
+        latitude: 0,
+        longitude: 0,
+        locationName: 'Home',
+        radiusMeters: 0,
+        xpReward: 50,
+        coinReward: 25,
+        requiredLevel: 1,
+        requiredWords: 20,
+        requirements: [],
+        iconKey: 'writing',
+      );
+
+      // Case A: User copy-pasted a summary from ChatGPT or external notes -> Rejected
+      final pastedReport = await engine.evaluateAttempt(
+        quest: writingQuest,
+        attempt: attempt,
+        payload: const VerificationProofPayload(
+          textContent: 'My hometown is a beautiful valley surrounded by lush green hills, fresh streams, calm temples, and wonderful kind people.',
+          wordCount: 20,
+          isPasted: true,
+          pastedCharactersCount: 130,
+          isAuthenticallyTyped: false,
+        ),
+      );
+      expect(pastedReport.isSuccessful, isFalse);
+      expect(pastedReport.results.any((r) => r.validatorName == 'Originality & Anti-Cheat' && !r.passed), isTrue);
+
+      // Case B: User typed AI chatbot prompt boilerplate -> Rejected
+      final aiReport = await engine.evaluateAttempt(
+        quest: writingQuest,
+        attempt: attempt,
+        payload: const VerificationProofPayload(
+          textContent: 'As an AI language model, here is a 20-word summary of a hometown with scenic hills, tranquil lakes, and welcoming communities everywhere.',
+          wordCount: 22,
+          isPasted: false,
+          pastedCharactersCount: 0,
+          isAuthenticallyTyped: true,
+        ),
+      );
+      expect(aiReport.isSuccessful, isFalse);
+      expect(aiReport.results.any((r) => r.validatorName == 'Originality & Anti-Cheat' && !r.passed), isTrue);
+
+      // Case C: User repeated the same word 20 times (spam) -> Rejected
+      final spamReport = await engine.evaluateAttempt(
+        quest: writingQuest,
+        attempt: attempt,
+        payload: const VerificationProofPayload(
+          textContent: 'hometown hometown hometown hometown hometown hometown hometown hometown hometown hometown hometown hometown hometown hometown hometown hometown hometown hometown hometown hometown',
+          wordCount: 20,
+          isPasted: false,
+          isAuthenticallyTyped: true,
+        ),
+      );
+      expect(spamReport.isSuccessful, isFalse);
+      expect(spamReport.results.any((r) => r.validatorName == 'Originality & Anti-Cheat' && !r.passed), isTrue);
+
+      // Case D: User typed original authentic text directly -> Passed
+      final authenticReport = await engine.evaluateAttempt(
+        quest: writingQuest,
+        attempt: attempt,
+        payload: const VerificationProofPayload(
+          textContent: 'I grew up near the riverbank where morning mist rolls over the fields and neighbors always greet each other with warm smiles.',
+          wordCount: 22,
+          isPasted: false,
+          pastedCharactersCount: 0,
+          isAuthenticallyTyped: true,
+        ),
+      );
+      expect(authenticReport.isSuccessful, isTrue);
+      expect(authenticReport.results.any((r) => r.validatorName == 'Originality & Anti-Cheat' && r.passed), isTrue);
+      expect(authenticReport.results.any((r) => r.validatorName == 'Word Count Requirement' && r.passed), isTrue);
     });
   });
 

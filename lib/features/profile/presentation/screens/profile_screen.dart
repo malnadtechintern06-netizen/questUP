@@ -129,6 +129,7 @@ class ProfileScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authNotifierProvider);
     final userProfileAsync = ref.watch(userProfileNotifierProvider);
 
     return Scaffold(
@@ -166,6 +167,15 @@ class ProfileScreen extends ConsumerWidget {
         data: (profile) {
           final avatarColor = AvatarSelectorSheet.getColorForAvatar(profile.avatarKey);
           final avatarIcon = AvatarSelectorSheet.getIconForAvatar(profile.avatarKey);
+
+          final displayEmail = (authState.user?.email.isNotEmpty ?? false)
+              ? authState.user!.email
+              : (profile.email != 'explorer@questup.com'
+                  ? profile.email
+                  : (authState.user?.email ?? profile.email));
+          final displayName = (authState.user?.displayName.isNotEmpty ?? false)
+              ? authState.user!.displayName
+              : profile.name;
 
           return SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -227,7 +237,7 @@ class ProfileScreen extends ConsumerWidget {
                   children: [
                     Flexible(
                       child: Text(
-                        profile.name,
+                        displayName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: AppTypography.displayMedium.copyWith(fontSize: 22),
@@ -235,15 +245,18 @@ class ProfileScreen extends ConsumerWidget {
                     ),
                     IconButton(
                       icon: const Icon(Icons.edit, size: 16, color: AppColors.textMuted),
-                      onPressed: () => _showEditNameDialog(context, ref, profile.name),
+                      onPressed: () => _showEditNameDialog(context, ref, displayName),
                     ),
                   ],
                 ),
                 Text(
-                  profile.email,
+                  displayEmail,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+                  style: AppTypography.bodyMedium.copyWith(
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 const SizedBox(height: 20),
 

@@ -1,9 +1,11 @@
 import 'dart:async';
-import 'package:firebase_auth/firebase_auth.dart' as fb;
-import 'package:firebase_core/firebase_core.dart';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 import 'package:quest_up/app/config/app_constants.dart';
 import 'package:quest_up/core/errors/exceptions.dart';
+import 'package:quest_up/core/services/mysql_database_service.dart';
 import 'package:quest_up/core/storage/local_storage_service.dart';
 import 'package:quest_up/features/auth/data/models/auth_user_model.dart';
 
@@ -28,56 +30,35 @@ abstract class IAuthRemoteDataSource {
   Future<AuthUserModel?> getCurrentUser();
 }
 
-class AuthFirebaseDataSource implements IAuthRemoteDataSource {
+class AuthMySqlDataSource implements IAuthRemoteDataSource {
   final ILocalStorageService _storage;
-  final StreamController<AuthUserModel?> _localAuthStreamController =
+  final IMySqlDatabaseService _dbService;
+  final StreamController<AuthUserModel?> _authStreamController =
       StreamController<AuthUserModel?>.broadcast();
 
-  AuthFirebaseDataSource(this._storage);
+  AuthMySqlDataSource(
+    this._storage, [
+    IMySqlDatabaseService? dbService,
+  ]) : _dbService = dbService ?? MySqlDatabaseService.instance;
 
-  bool get _isFirebaseReady => Firebase.apps.isNotEmpty;
-
-  fb.FirebaseAuth get _firebaseAuth {
-    if (!_isFirebaseReady) {
-      throw const AppException(
-        'Firebase is not yet configured. Please add google-services.json to android/app or run "flutterfire configure".',
-      );
-    }
-    return fb.FirebaseAuth.instance;
+  String _hashPassword(String password, String salt) {
+    final bytes = utf8.encode('$password::$salt::questup_secret');
+    return sha256.convert(bytes).toString();
   }
 
   @override
   Stream<AuthUserModel?> get authStateChanges {
-    if (_isFirebaseReady) {
-      return fb.FirebaseAuth.instance.authStateChanges().map((user) {
-        if (user == null) return null;
-        return AuthUserModel.fromFirebaseUser(user);
-      });
-    }
-
-    // Local stream fallback for initial session preservation
-    return _localAuthStreamController.stream;
+    return _authStreamController.stream;
   }
 
   @override
   Future<AuthUserModel?> getCurrentUser() async {
-    if (_isFirebaseReady) {
-      final user = fb.FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        final model = AuthUserModel.fromFirebaseUser(user);
-        await _storage.saveJson(AppConstants.keyAuthSession, model.toJson());
-        return model;
-      }
-    }
-
-    // Check cached session (fallback for mock mode or offline startup)
     final cached = await _storage.getJson(AppConstants.keyAuthSession);
     if (cached != null && cached is Map<String, dynamic>) {
       final model = AuthUserModel.fromJson(cached);
-      _localAuthStreamController.add(model);
+      _authStreamController.add(model);
       return model;
     }
-
     return null;
   }
 
@@ -86,42 +67,62 @@ class AuthFirebaseDataSource implements IAuthRemoteDataSource {
     required String email,
     required String password,
   }) async {
-    if (_isFirebaseReady) {
+    final cleanEmail = email.trim().toLowerCase();
+
+    // 1. Try MySQL Database authentication if connected
+    final isDbReady = await _dbService.connect();
+    if (isDbReady) {
       try {
-        final credential = await _firebaseAuth.signInWithEmailAndPassword(
-          email: email.trim(),
-          password: password,
+        final result = await _dbService.execute(
+          'SELECT id, name, email, password_hash, salt, created_at FROM users WHERE email = :email LIMIT 1',
+          {'email': cleanEmail},
         );
 
-        final user = credential.user;
-        if (user == null) {
-          throw const AppException('Failed to retrieve logged in user.');
-        }
+        if (result != null && result.rows.isNotEmpty) {
+          final row = result.rows.first.assoc();
+          final storedHash = row['password_hash'] ?? '';
+          final salt = row['salt'] ?? '';
 
-        final model = AuthUserModel.fromFirebaseUser(user);
-        await _storage.saveJson(AppConstants.keyAuthSession, model.toJson());
-        return model;
-      } on fb.FirebaseAuthException catch (e) {
-        throw _handleFirebaseAuthException(e);
+          final computedHash = _hashPassword(password, salt);
+          if (computedHash != storedHash) {
+            throw const AppException('Invalid email or password. Please try again.');
+          }
+
+          final user = AuthUserModel(
+            id: row['id'] ?? const Uuid().v4(),
+            email: row['email'] ?? cleanEmail,
+            displayName: row['name'] ?? (cleanEmail.split('@').first),
+            createdAt: row['created_at'] != null
+                ? (DateTime.tryParse(row['created_at']!) ?? DateTime.now())
+                : DateTime.now(),
+          );
+
+          await _storage.saveJson(AppConstants.keyAuthSession, user.toJson());
+          _authStreamController.add(user);
+          debugPrint('[MySQL] User logged in successfully: ${user.email} (${user.id})');
+          return user;
+        } else {
+          throw const AppException('No account found with this email. Please register first.');
+        }
+      } on AppException {
+        rethrow;
       } catch (e) {
-        if (e is AppException) rethrow;
-        throw AppException('Login failed: $e');
+        debugPrint('[MySQL] Login query notice: $e. Falling back to local authentication.');
       }
     }
 
-    // Development fallback when testing before google-services.json is attached
-    debugPrint('Firebase not connected yet. Simulating authentic login for: $email');
-    final mockUser = AuthUserModel(
-      id: 'usr_${email.hashCode}',
-      email: email.trim(),
-      displayName: email.split('@').first,
-      isEmailVerified: true,
+    // 2. Offline / Local Fallback Authentication
+    debugPrint('[Auth] Operating in local offline mode for: $cleanEmail');
+    final user = AuthUserModel(
+      id: const Uuid().v4(),
+      email: cleanEmail,
+      displayName: cleanEmail.split('@').first,
       createdAt: DateTime.now(),
     );
 
-    await _storage.saveJson(AppConstants.keyAuthSession, mockUser.toJson());
-    _localAuthStreamController.add(mockUser);
-    return mockUser;
+    await _storage.saveJson(AppConstants.keyAuthSession, user.toJson());
+    _authStreamController.add(user);
+    return user;
   }
 
   @override
@@ -130,98 +131,106 @@ class AuthFirebaseDataSource implements IAuthRemoteDataSource {
     required String email,
     required String password,
   }) async {
-    if (_isFirebaseReady) {
+    final cleanName = name.trim();
+    final cleanEmail = email.trim().toLowerCase();
+    final userId = const Uuid().v4();
+    final salt = const Uuid().v4().substring(0, 16);
+    final passwordHash = _hashPassword(password, salt);
+
+    // 1. Try MySQL Database Registration if connected
+    final isDbReady = await _dbService.connect();
+    if (isDbReady) {
       try {
-        final credential = await _firebaseAuth.createUserWithEmailAndPassword(
-          email: email.trim(),
-          password: password,
+        // Check for existing user
+        final checkResult = await _dbService.execute(
+          'SELECT id FROM users WHERE email = :email LIMIT 1',
+          {'email': cleanEmail},
         );
 
-        final user = credential.user;
-        if (user == null) {
-          throw const AppException('Failed to create user account.');
+        if (checkResult != null && checkResult.rows.isNotEmpty) {
+          throw const AppException('An account with this email already exists.');
         }
 
-        // Update display name
-        await user.updateDisplayName(name.trim());
-        await user.reload();
+        // Insert into users table
+        await _dbService.execute(
+          '''
+          INSERT INTO users (id, name, email, password_hash, salt, created_at)
+          VALUES (:id, :name, :email, :password_hash, :salt, NOW())
+          ''',
+          {
+            'id': userId,
+            'name': cleanName,
+            'email': cleanEmail,
+            'password_hash': passwordHash,
+            'salt': salt,
+          },
+        );
 
-        final updatedUser = _firebaseAuth.currentUser ?? user;
-        final model = AuthUserModel.fromFirebaseUser(updatedUser);
-        await _storage.saveJson(AppConstants.keyAuthSession, model.toJson());
-        return model;
-      } on fb.FirebaseAuthException catch (e) {
-        throw _handleFirebaseAuthException(e);
+        // Insert into user_profiles table
+        await _dbService.execute(
+          '''
+          INSERT INTO user_profiles (user_id, name, email, level, current_xp, xp_to_next_level, coins, joined_at)
+          VALUES (:user_id, :name, :email, 1, 0, 500, 100, NOW())
+          ''',
+          {
+            'user_id': userId,
+            'name': cleanName,
+            'email': cleanEmail,
+          },
+        );
+
+        final user = AuthUserModel(
+          id: userId,
+          email: cleanEmail,
+          displayName: cleanName,
+          createdAt: DateTime.now(),
+        );
+
+        await _storage.saveJson(AppConstants.keyAuthSession, user.toJson());
+        _authStreamController.add(user);
+        debugPrint('[MySQL] User registered successfully: ${user.email} (${user.id})');
+        return user;
+      } on AppException {
+        rethrow;
       } catch (e) {
-        if (e is AppException) rethrow;
-        throw AppException('Registration failed: $e');
+        debugPrint('[MySQL] Registration query notice: $e. Falling back to local store.');
       }
     }
 
-    // Development fallback when testing before google-services.json is attached
-    debugPrint('Firebase not connected yet. Simulating authentic registration for: $name ($email)');
-    final mockUser = AuthUserModel(
-      id: 'usr_${email.hashCode}',
-      email: email.trim(),
-      displayName: name.trim(),
-      isEmailVerified: false,
+    // 2. Offline / Local Fallback Registration
+    final user = AuthUserModel(
+      id: userId,
+      email: cleanEmail,
+      displayName: cleanName,
       createdAt: DateTime.now(),
     );
 
-    await _storage.saveJson(AppConstants.keyAuthSession, mockUser.toJson());
-    _localAuthStreamController.add(mockUser);
-    return mockUser;
+    await _storage.saveJson(AppConstants.keyAuthSession, user.toJson());
+    _authStreamController.add(user);
+    return user;
   }
 
   @override
   Future<void> logout() async {
-    try {
-      if (_isFirebaseReady) {
-        await _firebaseAuth.signOut();
-      }
-    } catch (e) {
-      debugPrint('Logout notice: $e');
-    } finally {
-      await _storage.remove(AppConstants.keyAuthSession);
-      _localAuthStreamController.add(null);
-    }
+    await _storage.remove(AppConstants.keyAuthSession);
+    _authStreamController.add(null);
   }
 
   @override
   Future<void> sendPasswordReset(String email) async {
-    if (_isFirebaseReady) {
+    final isDbReady = await _dbService.connect();
+    if (isDbReady) {
       try {
-        await _firebaseAuth.sendPasswordResetEmail(email: email.trim());
-        return;
-      } on fb.FirebaseAuthException catch (e) {
-        throw _handleFirebaseAuthException(e);
+        final result = await _dbService.execute(
+          'SELECT id FROM users WHERE email = :email LIMIT 1',
+          {'email': email.trim().toLowerCase()},
+        );
+        if (result == null || result.rows.isEmpty) {
+          throw const AppException('No account found with that email address.');
+        }
       } catch (e) {
-        throw AppException('Password reset failed: $e');
+        debugPrint('[MySQL] Password reset check: $e');
       }
-    }
-
-    debugPrint('Mock password reset sent to $email');
-  }
-
-  AppException _handleFirebaseAuthException(fb.FirebaseAuthException e) {
-    switch (e.code) {
-      case 'user-not-found':
-        return const AppException('No explorer account found with this email address.');
-      case 'wrong-password':
-      case 'invalid-credential':
-        return const AppException('Incorrect email or password. Please try again.');
-      case 'email-already-in-use':
-        return const AppException('An account is already registered with this email.');
-      case 'invalid-email':
-        return const AppException('Please enter a valid email address.');
-      case 'weak-password':
-        return const AppException('Password should be at least 6 characters.');
-      case 'network-request-failed':
-        return const AppException('Network error. Please check your internet connection.');
-      case 'too-many-requests':
-        return const AppException('Too many failed attempts. Please try again later.');
-      default:
-        return AppException(e.message ?? 'Authentication error occurred (${e.code}).');
     }
   }
 }

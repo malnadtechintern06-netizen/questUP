@@ -18,6 +18,10 @@ class VerificationProofPayload {
   final double? distanceMeters;
   final int? gameplaySeconds;
   final int? repetitionCount;
+  final bool isPasted;
+  final int? pastedCharactersCount;
+  final int? keystrokeCount;
+  final bool isAuthenticallyTyped;
 
   const VerificationProofPayload({
     this.userLat,
@@ -35,6 +39,10 @@ class VerificationProofPayload {
     this.distanceMeters,
     this.gameplaySeconds,
     this.repetitionCount,
+    this.isPasted = false,
+    this.pastedCharactersCount = 0,
+    this.keystrokeCount,
+    this.isAuthenticallyTyped = true,
   });
 }
 

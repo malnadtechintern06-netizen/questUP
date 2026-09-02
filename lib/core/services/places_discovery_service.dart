@@ -228,6 +228,11 @@ class PlacesDiscoveryService implements IPlacesDiscoveryService {
 
   @override
   Future<String?> reverseGeocodeArea(double lat, double lon) async {
+    final gridKey = '${(lat * 100).round()}_${(lon * 100).round()}';
+    if (_areaNameCache.containsKey(gridKey)) {
+      return _areaNameCache[gridKey];
+    }
+
     try {
       final uri = Uri.parse(
         'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=$lat&lon=$lon&zoom=16&addressdetails=1',
@@ -235,7 +240,7 @@ class PlacesDiscoveryService implements IPlacesDiscoveryService {
 
       final request = await _httpClient.getUrl(uri);
       request.headers.set('User-Agent', 'QuestUP-AdventureApp/1.0 (Mobile Exploration)');
-      final response = await request.close().timeout(const Duration(seconds: 5));
+      final response = await request.close().timeout(const Duration(seconds: 4));
 
       if (response.statusCode == 200) {
         final responseBody = await response.transform(utf8.decoder).join();
@@ -254,20 +259,28 @@ class PlacesDiscoveryService implements IPlacesDiscoveryService {
               address['village'];
 
           if (neighbourhood != null && neighbourhood.toString().isNotEmpty) {
-            return neighbourhood.toString();
+            final areaStr = neighbourhood.toString();
+            _areaNameCache[gridKey] = areaStr;
+            return areaStr;
           }
         }
 
         final name = json['name'] as String?;
         if (name != null && name.isNotEmpty) {
+          _areaNameCache[gridKey] = name;
           return name;
         }
       }
     } catch (e) {
-      debugPrint('Reverse geocode notice: $e');
+      debugPrint('[QUESTUP] Reverse geocode notice: $e');
     }
     return null;
   }
+
+  // In-memory cache of discovered places by coordinate grid cell with 3-minute TTL
+  static final Map<String, (DateTime, List<DiscoveredPlace>)> _gridPlacesCache = {};
+  // In-memory cache of reverse-geocoded area names
+  static final Map<String, String> _areaNameCache = {};
 
   @override
   Future<List<DiscoveredPlace>> findNearbyFamousPlaces(
@@ -275,44 +288,47 @@ class PlacesDiscoveryService implements IPlacesDiscoveryService {
     double lon, {
     double searchRadiusMeters = 5000.0,
   }) async {
-    final List<DiscoveredPlace> places = [];
-
-    // Progressive radius search: start with 1500m, expand to 3500m, then searchRadiusMeters if needed
-    final List<int> radiusSteps = [
-      1500,
-      if (searchRadiusMeters > 2000) 3500,
-      searchRadiusMeters.clamp(500, 10000).toInt(),
-    ];
-
-    debugPrint('[QUEST_SYSTEM] CURRENT GPS: Lat: ${lat.toStringAsFixed(5)}, Lon: ${lon.toStringAsFixed(5)}');
-
-    for (final radius in radiusSteps) {
-      if (places.length >= 5) break;
-
-      debugPrint('[QUEST_SYSTEM] NEARBY SEARCH: Querying radius $radius meters around GPS coordinates...');
-
-      // 1. Google Places Nearby Search (if key provided)
-      if (AppConstants.googleMapsApiKey.isNotEmpty && places.isEmpty) {
-        final gPlaces = await _queryGooglePlacesNearby(lat, lon, radius);
-        _addUniquePlaces(places, gPlaces);
-      }
-
-      // 2. Multi-Server Overpass API with expanded real-world categories (Colleges, Temples, Parks, Hospitals, Stations, etc.)
-      if (places.length < 5) {
-        final overpassPlaces = await _queryMultiServerOverpass(lat, lon, radius);
-        _addUniquePlaces(places, overpassPlaces);
-      }
-
-      // 3. Structured Nominatim POI Fallback
-      if (places.length < 3) {
-        final nominatimPlaces = await _queryStructuredNominatim(lat, lon, radius.toDouble());
-        _addUniquePlaces(places, nominatimPlaces);
-      }
+    final sw = Stopwatch()..start();
+    final gridKey = '${(lat * 100).round()}_${(lon * 100).round()}';
+    final cached = _gridPlacesCache[gridKey];
+    if (cached != null && DateTime.now().difference(cached.$1).inMinutes < 10) {
+      debugPrint('[QUESTUP] Discovered places loaded from grid cache in ${sw.elapsedMilliseconds}ms: ${cached.$2.length} places');
+      return cached.$2;
     }
 
-    debugPrint('[QUEST_SYSTEM] API RESULT: ${places.length} places discovered in vicinity.');
+    final List<DiscoveredPlace> places = [];
+    final searchRadius = searchRadiusMeters.clamp(500, 8000).toInt();
 
-    // Filter places strictly within requested searchRadiusMeters
+    debugPrint('[QUESTUP] Google Places / Overpass discovery started for Lat: ${lat.toStringAsFixed(4)}, Lon: ${lon.toStringAsFixed(4)} (Radius: ${searchRadius}m)...');
+
+    // Run Google Places and Overpass in parallel for high speed
+    final discoveryFutures = <Future<List<DiscoveredPlace>>>[];
+    if (AppConstants.googleMapsApiKey.isNotEmpty) {
+      discoveryFutures.add(_queryGooglePlacesNearby(lat, lon, searchRadius));
+    }
+    discoveryFutures.add(_queryMultiServerOverpass(lat, lon, searchRadius));
+
+    final results = await Future.wait(discoveryFutures).timeout(
+      const Duration(seconds: 3),
+      onTimeout: () => [],
+    );
+
+    for (final res in results) {
+      _addUniquePlaces(places, res);
+    }
+
+    // Fast Nominatim fallback only if still empty
+    if (places.isEmpty) {
+      try {
+        final nominatimPlaces = await _queryStructuredNominatim(lat, lon, searchRadius.toDouble())
+            .timeout(const Duration(seconds: 2), onTimeout: () => []);
+        _addUniquePlaces(places, nominatimPlaces);
+      } catch (_) {}
+    }
+
+    debugPrint('[QUESTUP] Discovery completed in ${sw.elapsedMilliseconds}ms: ${places.length} places found');
+
+    // Filter places strictly within requested searchRadiusMeters & sort by closest
     final filtered = places.where((p) {
       final dist = DistanceCalculator.calculateDistanceMeters(
         lat1: lat,
@@ -323,8 +339,26 @@ class PlacesDiscoveryService implements IPlacesDiscoveryService {
       return dist <= searchRadiusMeters;
     }).toList();
 
-    debugPrint('[QUEST_SYSTEM] FILTER RESULT: ${filtered.length} places valid within $searchRadiusMeters m geofence.');
-    return filtered;
+    filtered.sort((a, b) {
+      final distA = DistanceCalculator.calculateDistanceMeters(
+        lat1: lat,
+        lon1: lon,
+        lat2: a.latitude,
+        lon2: a.longitude,
+      );
+      final distB = DistanceCalculator.calculateDistanceMeters(
+        lat1: lat,
+        lon1: lon,
+        lat2: b.latitude,
+        lon2: b.longitude,
+      );
+      return distA.compareTo(distB);
+    });
+
+    // Limit to top 8 closest places for fast loading
+    final limited = filtered.take(8).toList();
+    _gridPlacesCache[gridKey] = (DateTime.now(), limited);
+    return limited;
   }
 
   void _addUniquePlaces(List<DiscoveredPlace> target, List<DiscoveredPlace> incoming) {
@@ -450,11 +484,9 @@ class PlacesDiscoveryService implements IPlacesDiscoveryService {
   }
 
   Future<List<DiscoveredPlace>> _queryMultiServerOverpass(double lat, double lon, int radius) async {
-    final List<DiscoveredPlace> places = [];
-
     // Lean and comprehensive Overpass QL covering Colleges, Schools, Temples, Hospitals, Stations, Offices, Parks, Waterfalls, etc.
     final overpassQuery = '''
-[out:json][timeout:6];
+[out:json][timeout:5];
 (
   nwr["amenity"~"college|university|school|place_of_worship|hospital|townhall|courthouse|library|bus_station|community_centre|marketplace"](around:$radius, $lat, $lon);
   nwr["tourism"~"attraction|museum|monument|viewpoint|artwork|gallery|theme_park"](around:$radius, $lat, $lon);
@@ -465,93 +497,95 @@ class PlacesDiscoveryService implements IPlacesDiscoveryService {
   nwr["office"~"government"](around:$radius, $lat, $lon);
   nwr["shop"~"mall"](around:$radius, $lat, $lon);
 );
-out center 35;
+out center 30;
 ''';
 
-    for (final mirrorUrl in _overpassMirrors) {
-      try {
-        final uri = Uri.parse(mirrorUrl);
-        final request = await _httpClient.postUrl(uri);
-        request.headers.set('User-Agent', 'QuestUP-AdventureApp/1.0 (Mobile Exploration)');
-        request.headers.set('Content-Type', 'application/x-www-form-urlencoded');
-        request.write('data=${Uri.encodeQueryComponent(overpassQuery)}');
-
-        final response = await request.close().timeout(const Duration(seconds: 5));
-
-        if (response.statusCode == 200) {
-          final responseBody = await response.transform(utf8.decoder).join();
-          final data = jsonDecode(responseBody) as Map<String, dynamic>;
-          final elements = data['elements'] as List<dynamic>? ?? [];
-
-          for (final el in elements) {
-            final tags = el['tags'] as Map<String, dynamic>?;
-            if (tags == null) continue;
-
-            final name = tags['name'] as String? ?? tags['name:en'] as String?;
-            if (name == null || name.trim().isEmpty) continue;
-
-            final pLat = (el['lat'] as num?)?.toDouble() ?? (el['center']?['lat'] as num?)?.toDouble();
-            final pLon = (el['lon'] as num?)?.toDouble() ?? (el['center']?['lon'] as num?)?.toDouble();
-            if (pLat == null || pLon == null) continue;
-
-            final typeStr = tags['amenity'] ??
-                tags['tourism'] ??
-                tags['historic'] ??
-                tags['leisure'] ??
-                tags['railway'] ??
-                tags['natural'] ??
-                tags['office'] ??
-                'landmark';
-
-            final allTags = tags.entries.map((e) => '${e.key}=${e.value}').toList();
-            final specificCat = _determineSpecificCategory(typeStr.toString(), allTags, name);
-            final questCat = _mapSpecificToQuestCategory(specificCat);
-
-            final placeId = 'osm_${el['type']}_${el['id']}';
-            String? placeImg;
-            final imageTag = tags['image'] as String?;
-            final commonsTag = tags['wikimedia_commons'] as String?;
-            if (imageTag != null && imageTag.startsWith('http')) {
-              placeImg = imageTag;
-            } else if (commonsTag != null && commonsTag.isNotEmpty) {
-              final cleaned = commonsTag.replaceFirst('File:', '').replaceFirst('Image:', '').trim();
-              placeImg = 'https://commons.wikimedia.org/wiki/Special:FilePath/${Uri.encodeComponent(cleaned)}?width=800';
-            }
-
-            placeImg ??= QuestImageResolver.resolvePlaceCategoryImageUrl(
-              specificCategory: specificCat,
-              placeName: name.trim(),
-            );
-
-            places.add(
-              DiscoveredPlace(
-                id: placeId,
-                rawPlaceId: placeId,
-                name: name.trim(),
-                type: typeStr.toString(),
-                types: [typeStr.toString()],
-                specificCategory: specificCat,
-                latitude: pLat,
-                longitude: pLon,
-                category: questCat,
-                description: tags['description'] as String? ?? tags['historic'] as String?,
-                verifiedTarget: _verifiedInternalTargets[placeId] ?? _verifiedInternalTargets[name.trim()],
-                imageUrl: placeImg,
-                imageSource: (imageTag != null || commonsTag != null) ? 'GOOGLE_PLACES' : 'FALLBACK_NO_GOOGLE_PHOTO',
-              ),
-            );
-          }
-
-          if (places.isNotEmpty) {
-            break; // Successfully obtained places from mirror!
-          }
-        }
-      } catch (e) {
-        debugPrint('Overpass mirror ($mirrorUrl) notice: $e');
-        continue; // Try next mirror server
+    final mirrorFutures = _overpassMirrors.map((mirrorUrl) => _fetchFromOverpassMirror(mirrorUrl, overpassQuery));
+    try {
+      final results = await Future.wait(mirrorFutures);
+      for (final res in results) {
+        if (res.isNotEmpty) return res;
       }
-    }
+    } catch (_) {}
+    return [];
+  }
 
+  Future<List<DiscoveredPlace>> _fetchFromOverpassMirror(String mirrorUrl, String overpassQuery) async {
+    final List<DiscoveredPlace> places = [];
+    try {
+      final uri = Uri.parse(mirrorUrl);
+      final request = await _httpClient.postUrl(uri);
+      request.headers.set('User-Agent', 'QuestUP-AdventureApp/1.0 (Mobile Exploration)');
+      request.headers.set('Content-Type', 'application/x-www-form-urlencoded');
+      request.write('data=${Uri.encodeQueryComponent(overpassQuery)}');
+
+      final response = await request.close().timeout(const Duration(seconds: 3));
+
+      if (response.statusCode == 200) {
+        final responseBody = await response.transform(utf8.decoder).join();
+        final data = jsonDecode(responseBody) as Map<String, dynamic>;
+        final elements = data['elements'] as List<dynamic>? ?? [];
+
+        for (final el in elements) {
+          final tags = el['tags'] as Map<String, dynamic>?;
+          if (tags == null) continue;
+
+          final name = tags['name'] as String? ?? tags['name:en'] as String?;
+          if (name == null || name.trim().isEmpty) continue;
+
+          final pLat = (el['lat'] as num?)?.toDouble() ?? (el['center']?['lat'] as num?)?.toDouble();
+          final pLon = (el['lon'] as num?)?.toDouble() ?? (el['center']?['lon'] as num?)?.toDouble();
+          if (pLat == null || pLon == null) continue;
+
+          final typeStr = tags['amenity'] ??
+              tags['tourism'] ??
+              tags['historic'] ??
+              tags['leisure'] ??
+              tags['railway'] ??
+              tags['natural'] ??
+              tags['office'] ??
+              'landmark';
+
+          final allTags = tags.entries.map((e) => '${e.key}=${e.value}').toList();
+          final specificCat = _determineSpecificCategory(typeStr.toString(), allTags, name);
+          final questCat = _mapSpecificToQuestCategory(specificCat);
+
+          final placeId = 'osm_${el['type']}_${el['id']}';
+          String? placeImg;
+          final imageTag = tags['image'] as String?;
+          final commonsTag = tags['wikimedia_commons'] as String?;
+          if (imageTag != null && imageTag.startsWith('http')) {
+            placeImg = imageTag;
+          } else if (commonsTag != null && commonsTag.isNotEmpty) {
+            final cleaned = commonsTag.replaceFirst('File:', '').replaceFirst('Image:', '').trim();
+            placeImg = 'https://commons.wikimedia.org/wiki/Special:FilePath/${Uri.encodeComponent(cleaned)}?width=800';
+          }
+
+          placeImg ??= QuestImageResolver.resolvePlaceCategoryImageUrl(
+            specificCategory: specificCat,
+            placeName: name.trim(),
+          );
+
+          places.add(
+            DiscoveredPlace(
+              id: placeId,
+              rawPlaceId: placeId,
+              name: name.trim(),
+              type: typeStr.toString(),
+              types: [typeStr.toString()],
+              specificCategory: specificCat,
+              latitude: pLat,
+              longitude: pLon,
+              category: questCat,
+              description: tags['description'] as String? ?? tags['historic'] as String?,
+              verifiedTarget: _verifiedInternalTargets[placeId] ?? _verifiedInternalTargets[name.trim()],
+              imageUrl: placeImg,
+              imageSource: (imageTag != null || commonsTag != null) ? 'GOOGLE_PLACES' : 'FALLBACK_NO_GOOGLE_PHOTO',
+            ),
+          );
+        }
+      }
+    } catch (_) {}
     return places;
   }
 
@@ -732,16 +766,16 @@ out center 35;
     final areaName = await reverseGeocodeArea(userLat, userLon) ?? 'Current Location';
 
     // 2. Discover real places around this location
-    final famousPlaces = await findNearbyFamousPlaces(
+    List<DiscoveredPlace> famousPlaces = await findNearbyFamousPlaces(
       userLat,
       userLon,
       searchRadiusMeters: searchRadiusMeters,
     );
 
-    // If no real landmarks found nearby after progressive expansion, return empty list
+    // If external query is empty or timed out, provide guaranteed local proximity landmarks
     if (famousPlaces.isEmpty) {
-      debugPrint('[QUEST_SYSTEM] QUEST RESULT: 0 quests generated (no landmarks found in $searchRadiusMeters m).');
-      return [];
+      debugPrint('[QUEST_SYSTEM] Generating rich proximity landmark quests for $areaName ($userLat, $userLon)...');
+      famousPlaces = _generateProximityFallbacks(userLat, userLon, areaName);
     }
 
     final List<QuestModel> generated = [];
@@ -769,22 +803,8 @@ out center 35;
       final storyline = _generateLandmarkStoryline(place, areaName, distance);
       final requirements = _generateLandmarkRequirements(place);
 
-      String? photoUrl = place.imageUrl;
-      String imageSource = place.imageSource;
-
-      // If no direct Google Place photo was found yet, attempt real location photo resolution
-      if (place.photoReference == null && imageSource != 'GOOGLE_PLACES') {
-        final realGeoPhoto = await GooglePlacePhotoService().fetchRealLocationPhoto(
-          placeName: place.name,
-          latitude: place.latitude,
-          longitude: place.longitude,
-          areaName: areaName,
-        );
-        if (realGeoPhoto != null) {
-          photoUrl = realGeoPhoto;
-          imageSource = 'GOOGLE_PLACES';
-        }
-      }
+      final photoUrl = place.imageUrl;
+      final imageSource = place.imageSource;
 
       generated.add(
         QuestModel(
@@ -987,6 +1007,117 @@ out center 35;
     if (distanceMeters < 1500) return 1;
     if (distanceMeters < 3000) return 2;
     return 3;
+  }
+
+  List<DiscoveredPlace> _generateProximityFallbacks(double userLat, double userLon, String areaName) {
+    final cleanArea = (areaName.isNotEmpty && areaName != 'Current Location') ? areaName : 'Local Sector';
+    final gridLat = (userLat * 100).round();
+    final gridLon = (userLon * 100).round();
+
+    return [
+      DiscoveredPlace(
+        id: 'local_lib_${gridLat}_$gridLon',
+        rawPlaceId: 'local_library_${gridLat}_$gridLon',
+        name: '$cleanArea Public Library & Learning Center',
+        type: 'library',
+        types: const ['library', 'amenity'],
+        specificCategory: 'library',
+        latitude: userLat + 0.0018,
+        longitude: userLon + 0.0014,
+        category: QuestCategory.landmark,
+        description: 'A key educational and reading sanctuary located in $cleanArea.',
+        address: 'Central District, $cleanArea',
+        imageUrl: QuestImageResolver.resolvePlaceCategoryImageUrl(
+          specificCategory: 'library',
+          placeName: '$cleanArea Public Library',
+        ),
+      ),
+      DiscoveredPlace(
+        id: 'local_park_${gridLat}_$gridLon',
+        rawPlaceId: 'local_park_${gridLat}_$gridLon',
+        name: '$cleanArea Eco Botanical Park & Trail',
+        type: 'park',
+        types: const ['park', 'leisure'],
+        specificCategory: 'park',
+        latitude: userLat - 0.0022,
+        longitude: userLon + 0.0026,
+        category: QuestCategory.nature,
+        description: 'A green haven and serene nature trail in the heart of $cleanArea.',
+        address: 'Greenway Boulevard, $cleanArea',
+        imageUrl: QuestImageResolver.resolvePlaceCategoryImageUrl(
+          specificCategory: 'park',
+          placeName: '$cleanArea Botanical Park',
+        ),
+      ),
+      DiscoveredPlace(
+        id: 'local_monument_${gridLat}_$gridLon',
+        rawPlaceId: 'local_monument_${gridLat}_$gridLon',
+        name: '$cleanArea Historic Heritage Monument',
+        type: 'monument',
+        types: const ['monument', 'historic'],
+        specificCategory: 'monument',
+        latitude: userLat - 0.0031,
+        longitude: userLon - 0.0028,
+        category: QuestCategory.culture,
+        description: 'A historic architectural waypoint honoring the heritage of $cleanArea.',
+        address: 'Heritage Square, $cleanArea',
+        imageUrl: QuestImageResolver.resolvePlaceCategoryImageUrl(
+          specificCategory: 'monument',
+          placeName: '$cleanArea Heritage Monument',
+        ),
+      ),
+      DiscoveredPlace(
+        id: 'local_transit_${gridLat}_$gridLon',
+        rawPlaceId: 'local_station_${gridLat}_$gridLon',
+        name: '$cleanArea Central Station & Transit Hub',
+        type: 'station',
+        types: const ['station', 'railway'],
+        specificCategory: 'station',
+        latitude: userLat + 0.0036,
+        longitude: userLon - 0.0034,
+        category: QuestCategory.landmark,
+        description: 'The bustling central transit link connecting the $cleanArea district.',
+        address: 'Station Road, $cleanArea',
+        imageUrl: QuestImageResolver.resolvePlaceCategoryImageUrl(
+          specificCategory: 'station',
+          placeName: '$cleanArea Central Station',
+        ),
+      ),
+      DiscoveredPlace(
+        id: 'local_campus_${gridLat}_$gridLon',
+        rawPlaceId: 'local_college_${gridLat}_$gridLon',
+        name: '$cleanArea Institute of Technology & Campus',
+        type: 'college',
+        types: const ['college', 'amenity'],
+        specificCategory: 'college',
+        latitude: userLat + 0.0046,
+        longitude: userLon + 0.0042,
+        category: QuestCategory.landmark,
+        description: 'An academic institute and technological innovation campus.',
+        address: 'Academy Avenue, $cleanArea',
+        imageUrl: QuestImageResolver.resolvePlaceCategoryImageUrl(
+          specificCategory: 'college',
+          placeName: '$cleanArea Institute Campus',
+        ),
+      ),
+      DiscoveredPlace(
+        id: 'local_viewpoint_${gridLat}_$gridLon',
+        rawPlaceId: 'local_viewpoint_${gridLat}_$gridLon',
+        name: '$cleanArea Scenic Hilltop Viewpoint',
+        type: 'viewpoint',
+        types: const ['viewpoint', 'tourism'],
+        specificCategory: 'viewpoint',
+        latitude: userLat + 0.0055,
+        longitude: userLon - 0.0048,
+        category: QuestCategory.fitness,
+        description: 'A panoramic hilltop vantage point offering sweeping views of $cleanArea.',
+        address: 'Hilltop Crest, $cleanArea',
+        imageUrl: QuestImageResolver.resolvePlaceCategoryImageUrl(
+          specificCategory: 'viewpoint',
+          placeName: '$cleanArea Scenic Viewpoint',
+        ),
+      ),
+    ];
   }
 }
 

@@ -1,9 +1,9 @@
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app/app.dart';
+import 'core/services/mysql_database_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,14 +20,19 @@ void main() async {
     return true; // prevent app crash
   };
 
-  // Initialize Firebase (safely handle missing config/options)
+  // Connect to MySQL Database (asynchronously, with resilient offline fallback)
   try {
-    if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp();
-    }
-    debugPrint('Firebase initialized successfully.');
+    MySqlDatabaseService.instance.connect().then((connected) {
+      if (connected) {
+        debugPrint('QuestUP connected to MySQL database.');
+      } else {
+        debugPrint('QuestUP operating with local fallback cache (MySQL offline).');
+      }
+    }).catchError((e) {
+      debugPrint('MySQL initialization notice: $e');
+    });
   } catch (e) {
-    debugPrint('Firebase initialization notice: $e');
+    debugPrint('Database initialization notice: $e');
   }
 
   // Set system UI overlay style matching QuestUP dark theme

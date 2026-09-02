@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:quest_up/app/config/app_constants.dart';
 import 'package:quest_up/app/router/route_paths.dart';
 import 'package:quest_up/app/theme/app_colors.dart';
 import 'package:quest_up/app/theme/app_typography.dart';
@@ -9,7 +8,7 @@ import 'package:quest_up/core/widgets/custom_button.dart';
 import 'package:quest_up/features/auth/presentation/providers/auth_providers.dart';
 import 'package:quest_up/features/auth/presentation/widgets/auth_text_field.dart';
 import 'package:quest_up/features/auth/presentation/widgets/forgot_password_dialog.dart';
-import 'package:quest_up/features/profile/presentation/providers/user_providers.dart';
+import 'package:quest_up/features/quests/presentation/providers/quest_providers.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -39,13 +38,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         );
 
     if (success && mounted) {
-      final storage = ref.read(localStorageServiceProvider);
-      final isPermissionGranted =
-          await storage.getString(AppConstants.keyLocationPermissionGranted) == 'true';
+      final isLocationReady =
+          await ref.read(locationServiceProvider).isLocationEnabledAndPermitted();
 
       if (!mounted) return;
 
-      if (isPermissionGranted) {
+      if (isLocationReady) {
         context.go(RoutePaths.home);
       } else {
         context.go(RoutePaths.locationPermission);

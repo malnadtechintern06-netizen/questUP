@@ -1,53 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../app/router/route_paths.dart';
 import '../../app/theme/app_colors.dart';
 
 class AppScaffold extends StatelessWidget {
-  final Widget child;
-  final String location;
+  final StatefulNavigationShell navigationShell;
 
   const AppScaffold({
     super.key,
-    required this.child,
-    required this.location,
+    required this.navigationShell,
   });
 
-  int _calculateSelectedIndex(BuildContext context) {
-    if (location == RoutePaths.home) return 0;
-    if (location.startsWith('/quests')) return 1;
-    if (location.startsWith('/leaderboard')) return 2;
-    if (location.startsWith('/achievements')) return 3;
-    if (location.startsWith('/profile')) return 4;
-    return 0;
-  }
-
-  void _onItemTapped(int index, BuildContext context) {
-    switch (index) {
-      case 0:
-        context.go(RoutePaths.home);
-        break;
-      case 1:
-        context.go(RoutePaths.quests);
-        break;
-      case 2:
-        context.go(RoutePaths.leaderboard);
-        break;
-      case 3:
-        context.go(RoutePaths.achievements);
-        break;
-      case 4:
-        context.go(RoutePaths.profile);
-        break;
-    }
+  void _onItemTapped(int index) {
+    navigationShell.goBranch(
+      index,
+      initialLocation: index == navigationShell.currentIndex,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final selectedIndex = _calculateSelectedIndex(context);
-
     return Scaffold(
-      body: child,
+      body: navigationShell,
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
           border: Border(
@@ -55,8 +28,8 @@ class AppScaffold extends StatelessWidget {
           ),
         ),
         child: NavigationBar(
-          selectedIndex: selectedIndex,
-          onDestinationSelected: (index) => _onItemTapped(index, context),
+          selectedIndex: navigationShell.currentIndex,
+          onDestinationSelected: _onItemTapped,
           backgroundColor: AppColors.surface,
           indicatorColor: AppColors.primaryLight,
           elevation: 4,

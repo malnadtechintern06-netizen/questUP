@@ -14,7 +14,7 @@ import 'package:quest_up/features/profile/presentation/providers/user_providers.
 // Data Source Provider
 final authRemoteDataSourceProvider = Provider<IAuthRemoteDataSource>((ref) {
   final storage = ref.watch(localStorageServiceProvider);
-  return AuthFirebaseDataSource(storage);
+  return AuthMySqlDataSource(storage);
 });
 
 // Repository Provider
@@ -121,6 +121,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
             user: user,
             errorMessage: null,
           );
+          ref.read(userProfileNotifierProvider.notifier).updateProfile(
+                id: user.id,
+                name: user.displayName,
+                email: user.email,
+              );
         }
       }
     });
@@ -135,6 +140,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
           user: user,
           errorMessage: null,
         );
+        ref.read(userProfileNotifierProvider.notifier).updateProfile(
+              id: user.id,
+              name: user.displayName,
+              email: user.email,
+            );
       } else {
         state = state.copyWith(
           status: AuthStatus.unauthenticated,
@@ -167,9 +177,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
         errorMessage: null,
       );
 
-      // Sync profile name
+      // Sync profile name and real login email
       ref.read(userProfileNotifierProvider.notifier).updateProfile(
+            id: user.id,
             name: user.displayName,
+            email: user.email,
           );
       return true;
     } catch (e) {
@@ -199,9 +211,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
         errorMessage: null,
       );
 
-      // Set initial user profile alias
+      // Set user profile alias and registered email
       ref.read(userProfileNotifierProvider.notifier).updateProfile(
+            id: user.id,
             name: name,
+            email: email,
           );
       return true;
     } catch (e) {

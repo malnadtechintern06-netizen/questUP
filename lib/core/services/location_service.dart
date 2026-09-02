@@ -26,6 +26,8 @@ abstract class ILocationService {
   Future<LocationPermission> checkPermission();
   Future<LocationPermission> requestPermission();
   Future<bool> isLocationServiceEnabled();
+  Future<bool> hasLocationPermission();
+  Future<bool> isLocationEnabledAndPermitted();
   Future<bool> openAppSettings();
   Future<bool> openLocationSettings();
   Stream<LocationCoordinates> get locationStream;
@@ -94,6 +96,31 @@ class LocationService implements ILocationService {
   }
 
   @override
+  Future<bool> hasLocationPermission() async {
+    try {
+      final permission = await checkPermission();
+      return permission == LocationPermission.always ||
+          permission == LocationPermission.whileInUse;
+    } catch (e) {
+      debugPrint('Error checking location permission: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> isLocationEnabledAndPermitted() async {
+    if (isSimulated) return true;
+    try {
+      final isServiceOn = await isLocationServiceEnabled();
+      if (!isServiceOn) return false;
+      return await hasLocationPermission();
+    } catch (e) {
+      debugPrint('Error checking isLocationEnabledAndPermitted: $e');
+      return false;
+    }
+  }
+
+  @override
   Future<LocationPermission> checkPermission() async {
     try {
       return await Geolocator.checkPermission();
@@ -135,9 +162,22 @@ class LocationService implements ILocationService {
 
   @override
   Future<LocationCoordinates> getRealDeviceLocation() async {
+    final sw = Stopwatch()..start();
+    debugPrint('[QUESTUP] Requesting GPS location...');
+
     // 1. Check if location services (GPS) are enabled on the phone/emulator
     final serviceEnabled = await isLocationServiceEnabled();
     if (!serviceEnabled) {
+      final lastKnown = await Geolocator.getLastKnownPosition();
+      if (lastKnown != null) {
+        debugPrint('[QUESTUP] Using last known location: ${lastKnown.latitude}, ${lastKnown.longitude}');
+        return LocationCoordinates(
+          latitude: lastKnown.latitude,
+          longitude: lastKnown.longitude,
+          accuracy: lastKnown.accuracy,
+          timestamp: lastKnown.timestamp,
+        );
+      }
       throw const LocationException(
         'GPS / Location Services are turned off on your device. Please enable GPS in device settings.',
       );
@@ -160,50 +200,24 @@ class LocationService implements ILocationService {
       );
     }
 
-    // 3. Obtain real GPS position from device / emulator
-    // Tier 1: High Accuracy (GPS Satellites / Network Fused Provider)
-    try {
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 4),
-        ),
-      );
-
-      return LocationCoordinates(
-        latitude: position.latitude,
-        longitude: position.longitude,
-        accuracy: position.accuracy,
-        timestamp: position.timestamp,
-      );
-    } catch (e) {
-      debugPrint('High accuracy position timed out ($e). Trying Android LocationManager...');
-    }
-
-    // Tier 2: Android LocationManager (Vital for Android Emulators & indoor devices!)
-    try {
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: AndroidSettings(
-          accuracy: LocationAccuracy.medium,
-          forceLocationManager: true,
-          timeLimit: const Duration(seconds: 4),
-        ),
-      );
-
-      return LocationCoordinates(
-        latitude: position.latitude,
-        longitude: position.longitude,
-        accuracy: position.accuracy,
-        timestamp: position.timestamp,
-      );
-    } catch (e) {
-      debugPrint('Android LocationManager position failed ($e). Checking last known position...');
-    }
-
-    // Tier 3: Last Known Position
+    // 3. Fast Tier 1: Instant Last Known Position (5ms)
     try {
       final lastKnown = await Geolocator.getLastKnownPosition();
       if (lastKnown != null) {
+        debugPrint('[QUESTUP] Instant last known location acquired in ${sw.elapsedMilliseconds}ms: ${lastKnown.latitude.toStringAsFixed(4)}, ${lastKnown.longitude.toStringAsFixed(4)}');
+        
+        // Trigger non-blocking background fine-grain GPS refresh
+        unawaited(
+          Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              timeLimit: Duration(seconds: 4),
+            ),
+          ).then((pos) {
+            debugPrint('[QUESTUP] Background fine GPS updated: ${pos.latitude}, ${pos.longitude}');
+          }).catchError((_) {}),
+        );
+
         return LocationCoordinates(
           latitude: lastKnown.latitude,
           longitude: lastKnown.longitude,
@@ -211,11 +225,48 @@ class LocationService implements ILocationService {
           timestamp: lastKnown.timestamp,
         );
       }
+    } catch (_) {}
+
+    // 4. Fast Tier 2: Real-time GPS Position with 2.5s timeLimit
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 2, milliseconds: 500),
+        ),
+      );
+
+      debugPrint('[QUESTUP] GPS received in ${sw.elapsedMilliseconds}ms: ${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}');
+      return LocationCoordinates(
+        latitude: position.latitude,
+        longitude: position.longitude,
+        accuracy: position.accuracy,
+        timestamp: position.timestamp,
+      );
     } catch (e) {
-      debugPrint('Last known position failed: $e');
+      debugPrint('[QUESTUP] GPS query fallback: $e');
     }
 
-    throw const LocationException('Unable to acquire GPS signal. Please ensure location is enabled in emulator settings.');
+    // 5. Tier 3: Android LocationManager fallback with 1.5s timeout
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: AndroidSettings(
+          accuracy: LocationAccuracy.low,
+          forceLocationManager: true,
+          timeLimit: const Duration(seconds: 1, milliseconds: 500),
+        ),
+      );
+
+      debugPrint('[QUESTUP] Android LocationManager position in ${sw.elapsedMilliseconds}ms: ${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}');
+      return LocationCoordinates(
+        latitude: position.latitude,
+        longitude: position.longitude,
+        accuracy: position.accuracy,
+        timestamp: position.timestamp,
+      );
+    } catch (_) {}
+
+    throw const LocationException('Unable to acquire GPS signal. Please ensure location is enabled.');
   }
 
   @override
@@ -224,30 +275,6 @@ class LocationService implements ILocationService {
       return _simulatedLocation!;
     }
 
-    try {
-      return await getRealDeviceLocation();
-    } catch (e) {
-      debugPrint('Real location fetch fallback notice: $e');
-      // Try last known position if available
-      try {
-        final lastKnown = await Geolocator.getLastKnownPosition();
-        if (lastKnown != null) {
-          return LocationCoordinates(
-            latitude: lastKnown.latitude,
-            longitude: lastKnown.longitude,
-            accuracy: lastKnown.accuracy,
-            timestamp: lastKnown.timestamp,
-          );
-        }
-      } catch (_) {}
-
-      // Fallback default coordinates if GPS hardware completely unavailable
-      return LocationCoordinates(
-        latitude: 12.9716,
-        longitude: 77.5946,
-        accuracy: 10.0,
-        timestamp: DateTime.now(),
-      );
-    }
+    return await getRealDeviceLocation();
   }
 }

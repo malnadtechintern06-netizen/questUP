@@ -6,9 +6,13 @@ import 'package:quest_up/app/theme/app_colors.dart';
 import 'package:quest_up/app/theme/app_typography.dart';
 import 'package:quest_up/core/services/maps_launcher_service.dart';
 import 'package:quest_up/core/utils/distance_calculator.dart';
+import 'package:quest_up/core/widgets/app_drawer.dart';
 import 'package:quest_up/core/widgets/custom_button.dart';
 import 'package:quest_up/core/widgets/error_state_widget.dart';
 import 'package:quest_up/core/widgets/shimmer_loading.dart';
+import 'package:quest_up/features/location_permission/presentation/providers/location_permission_provider.dart';
+import 'package:quest_up/features/notifications/presentation/providers/notification_providers.dart';
+import 'package:quest_up/features/notifications/presentation/widgets/notifications_sheet.dart';
 import 'package:quest_up/features/profile/presentation/providers/user_providers.dart';
 import 'package:quest_up/features/quests/domain/entities/quest.dart';
 import 'package:quest_up/features/quests/presentation/providers/quest_providers.dart';
@@ -17,8 +21,32 @@ import 'package:quest_up/features/quests/presentation/widgets/google_maps_marker
 import 'package:quest_up/features/quests/presentation/widgets/quest_card_widget.dart';
 import 'package:quest_up/features/quests/presentation/widgets/radar_display_widget.dart';
 
-class HomeRadarScreen extends ConsumerWidget {
+class HomeRadarScreen extends ConsumerStatefulWidget {
   const HomeRadarScreen({super.key});
+
+  @override
+  ConsumerState<HomeRadarScreen> createState() => _HomeRadarScreenState();
+}
+
+class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAndAutoAcquireLocation();
+    });
+  }
+
+  Future<void> _checkAndAutoAcquireLocation() async {
+    final activeGps = ref.read(activeGpsCoordinatesProvider);
+    if (activeGps == null) {
+      final locService = ref.read(locationServiceProvider);
+      final isReady = await locService.isLocationEnabledAndPermitted();
+      if (isReady && mounted) {
+        ref.read(questsNotifierProvider.notifier).fetchQuests(showLoading: false);
+      }
+    }
+  }
 
   void _showGpsSimulatorDialog(BuildContext context, WidgetRef ref) {
     final currentGps = ref.read(activeGpsCoordinatesProvider);
@@ -158,7 +186,7 @@ class HomeRadarScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final userProfileAsync = ref.watch(userProfileNotifierProvider);
     final questsAsync = ref.watch(questsNotifierProvider);
     final selectedCategory = ref.watch(selectedCategoryProvider);
@@ -166,17 +194,26 @@ class HomeRadarScreen extends ConsumerWidget {
     final activeGps = ref.watch(activeGpsCoordinatesProvider);
     final isSimulated = ref.watch(locationServiceProvider).isSimulated;
     final locationDetailsAsync = ref.watch(liveLocationDetailsProvider);
+    final unreadNotifsCount = ref.watch(unreadNotificationsCountProvider);
 
     final userName = userProfileAsync.valueOrNull?.name ?? 'Explorer';
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      drawer: AppDrawer(
+        onOpenGpsSimulator: () => _showGpsSimulatorDialog(context, ref),
+      ),
       appBar: AppBar(
         backgroundColor: AppColors.background,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.menu_rounded, color: AppColors.textPrimary),
-          onPressed: () {},
+        leading: Builder(
+          builder: (scaffoldContext) => IconButton(
+            icon: const Icon(Icons.menu_rounded, color: AppColors.textPrimary),
+            tooltip: 'Open Menu',
+            onPressed: () {
+              Scaffold.of(scaffoldContext).openDrawer();
+            },
+          ),
         ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -225,28 +262,37 @@ class HomeRadarScreen extends ConsumerWidget {
             alignment: Alignment.topRight,
             children: [
               IconButton(
+                tooltip: 'Notifications',
                 icon: const Icon(Icons.notifications_outlined, color: AppColors.textPrimary),
-                onPressed: () {},
+                onPressed: () => NotificationsSheet.show(context),
               ),
-              Positioned(
-                right: 10,
-                top: 10,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: const BoxDecoration(
-                    color: AppColors.accentDanger,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Text(
-                    '2',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
+              if (unreadNotifsCount > 0)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: AppColors.accentDanger,
+                      shape: BoxShape.circle,
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
+                    child: Center(
+                      child: Text(
+                        '$unreadNotifsCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          height: 1.0,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
             ],
           ),
         ],
@@ -283,73 +329,78 @@ class HomeRadarScreen extends ConsumerWidget {
                       color: AppColors.textPrimary,
                     ),
                   ),
-                  InkWell(
-                    onTap: () => context.go(RoutePaths.quests),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                      child: Text(
-                        'View all',
-                        style: AppTypography.bodyMedium.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w600,
+                  if (activeGps != null)
+                    InkWell(
+                      onTap: () => context.go(RoutePaths.quests),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        child: Text(
+                          'View all',
+                          style: AppTypography.bodyMedium.copyWith(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),
-                  ),
                 ],
               ),
               const SizedBox(height: 12),
 
-              // Horizontal Scrollable Cards for Nearby Discovered Landmarks
-              questsAsync.when(
-                data: (quests) {
-                  if (quests.isEmpty) {
-                    return Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: Center(
-                        child: Text(
-                          'No nearby quests found. Move to another location to discover new quests.',
-                          textAlign: TextAlign.center,
-                          style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+              // If GPS is not yet active/enabled, display the Location Required Card instead of quests
+              if (activeGps == null)
+                _buildLocationRequiredCard(context, ref)
+              else
+                // Horizontal Scrollable Cards for Nearby Discovered Landmarks
+                questsAsync.when(
+                  data: (quests) {
+                    if (quests.isEmpty) {
+                      return Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: AppColors.border),
                         ),
+                        child: Center(
+                          child: Text(
+                            'No nearby quests found. Move to another location to discover new quests.',
+                            textAlign: TextAlign.center,
+                            style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+                          ),
+                        ),
+                      );
+                    }
+                    return SizedBox(
+                      height: 235,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: quests.length,
+                        itemBuilder: (context, index) {
+                          final quest = quests[index];
+                          return _buildAdventureCard(context, quest);
+                        },
                       ),
                     );
-                  }
-                  return SizedBox(
+                  },
+                  loading: () => SizedBox(
                     height: 235,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
-                      itemCount: quests.length,
-                      itemBuilder: (context, index) {
-                        final quest = quests[index];
-                        return _buildAdventureCard(context, quest);
-                      },
-                    ),
-                  );
-                },
-                loading: () => SizedBox(
-                  height: 235,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: 3,
-                    itemBuilder: (context, index) => const Padding(
-                      padding: EdgeInsets.only(right: 12),
-                      child: ShimmerBox(width: 150, height: 235, borderRadius: 18),
+                      itemCount: 3,
+                      itemBuilder: (context, index) => const Padding(
+                        padding: EdgeInsets.only(right: 12),
+                        child: ShimmerBox(width: 150, height: 235, borderRadius: 18),
+                      ),
                     ),
                   ),
+                  error: (err, stack) => ErrorStateWidget(
+                    message: 'Failed to load nearby quests',
+                    onRetry: () =>
+                        ref.read(questsNotifierProvider.notifier).refreshLocationAndQuests(),
+                  ),
                 ),
-                error: (err, stack) => ErrorStateWidget(
-                  message: 'Failed to load nearby quests',
-                  onRetry: () =>
-                      ref.read(questsNotifierProvider.notifier).refreshLocationAndQuests(),
-                ),
-              ),
 
               const SizedBox(height: 24),
 
@@ -467,23 +518,25 @@ class HomeRadarScreen extends ConsumerWidget {
               ],
 
               // 5. Category Chips & Quests List
-              CategoryFilterChips(
-                selectedCategory: selectedCategory,
-                onSelected: (cat) {
-                  ref.read(selectedCategoryProvider.notifier).state = cat;
-                },
-              ),
-              const SizedBox(height: 12),
-
-              ...filteredQuests.map(
-                (quest) => QuestCardWidget(
-                  quest: quest,
-                  onTap: () {
-                    context.push(RoutePaths.questDetailPath(quest.id));
+              if (activeGps != null) ...[
+                CategoryFilterChips(
+                  selectedCategory: selectedCategory,
+                  onSelected: (cat) {
+                    ref.read(selectedCategoryProvider.notifier).state = cat;
                   },
                 ),
-              ),
-              const SizedBox(height: 24),
+                const SizedBox(height: 12),
+
+                ...filteredQuests.map(
+                  (quest) => QuestCardWidget(
+                    quest: quest,
+                    onTap: () {
+                      context.push(RoutePaths.questDetailPath(quest.id));
+                    },
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
             ],
           ),
         ),
@@ -497,10 +550,11 @@ class HomeRadarScreen extends ConsumerWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 16,
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 14,
             offset: const Offset(0, 4),
           ),
         ],
@@ -511,13 +565,14 @@ class HomeRadarScreen extends ConsumerWidget {
           Stack(
             children: [
               ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(21)),
                 child: SizedBox(
-                  height: 130,
+                  height: 150,
                   width: double.infinity,
                   child: Image.asset(
                     'assets/images/hero_poster.jpg',
                     fit: BoxFit.cover,
+                    alignment: Alignment.center,
                     errorBuilder: (context, error, stackTrace) => Container(
                       color: AppColors.primary,
                     ),
@@ -527,58 +582,93 @@ class HomeRadarScreen extends ConsumerWidget {
               Positioned.fill(
                 child: Container(
                   decoration: BoxDecoration(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(21)),
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        Colors.black.withValues(alpha: 0.25),
-                        Colors.black.withValues(alpha: 0.55),
+                        Colors.black.withValues(alpha: 0.15),
+                        Colors.black.withValues(alpha: 0.68),
                       ],
                     ),
                   ),
                 ),
               ),
               Positioned(
-                left: 18,
-                bottom: 14,
+                left: 20,
+                bottom: 16,
+                right: 20,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text(
+                        'DAILY MOTIVATION',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
                     const Text(
                       'Keep Exploring.',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 19,
+                        fontSize: 20,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 0.2,
+                        height: 1.15,
+                        shadows: [
+                          Shadow(
+                            color: Colors.black54,
+                            blurRadius: 8,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
                       ),
                     ),
                     const Text(
                       'Keep Growing.',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 19,
+                        fontSize: 20,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 0.2,
+                        height: 1.15,
+                        shadows: [
+                          Shadow(
+                            color: Colors.black54,
+                            blurRadius: 8,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
               Positioned(
-                top: 8,
-                right: 8,
+                top: 12,
+                right: 12,
                 child: Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.3),
+                    color: Colors.black.withValues(alpha: 0.35),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
-                    Icons.bookmark_outline_rounded,
+                    Icons.explore_rounded,
                     color: Colors.white,
-                    size: 20,
+                    size: 18,
                   ),
                 ),
               ),
@@ -916,6 +1006,87 @@ class HomeRadarScreen extends ConsumerWidget {
           size: 24,
         ),
       ],
+    );
+  }
+
+  Widget _buildLocationRequiredCard(BuildContext context, WidgetRef ref) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.35), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.08),
+            blurRadius: 20,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.primaryLight,
+              border: Border.all(color: AppColors.primary, width: 2),
+            ),
+            child: const Center(
+              child: Icon(
+                Icons.location_on_rounded,
+                color: AppColors.primary,
+                size: 28,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Enable Location to View Quests',
+            textAlign: TextAlign.center,
+            style: AppTypography.titleMedium.copyWith(
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Quests will load and appear as soon as your device location is turned on.',
+            textAlign: TextAlign.center,
+            style: AppTypography.bodyMedium.copyWith(
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 16),
+          CustomButton(
+            text: 'TURN ON LOCATION',
+            icon: Icons.my_location_rounded,
+            width: double.infinity,
+            onPressed: () async {
+              final notifier = ref.read(locationPermissionNotifierProvider.notifier);
+              final success = await notifier.requestAndAcquireLocation();
+              if (!success && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Text(
+                      'Please enable GPS and location permissions in device settings to load quests.',
+                    ),
+                    action: SnackBarAction(
+                      label: 'SETTINGS',
+                      onPressed: () => notifier.openAppSettings(),
+                    ),
+                  ),
+                );
+              }
+            },
+          ),
+        ],
+      ),
     );
   }
 }

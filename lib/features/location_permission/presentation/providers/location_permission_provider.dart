@@ -97,7 +97,8 @@ class LocationPermissionNotifier extends StateNotifier<LocationPermissionState> 
       final storage = _ref.read(localStorageServiceProvider);
       await storage.saveString(AppConstants.keyLocationPermissionGranted, 'true');
 
-      // Refresh quests notifier with real user coordinates
+      // Set active GPS coordinates and fetch quests for real user coordinates
+      _ref.read(activeGpsCoordinatesProvider.notifier).state = coords;
       await _ref.read(questsNotifierProvider.notifier).fetchQuests(coords: coords);
 
       state = state.copyWith(
@@ -125,8 +126,7 @@ class LocationPermissionNotifier extends StateNotifier<LocationPermissionState> 
   }
 
   Future<void> skipForNow() async {
-    final storage = _ref.read(localStorageServiceProvider);
-    await storage.saveString(AppConstants.keyLocationPermissionGranted, 'true');
+    // Do not mark permission granted so user can enable GPS later
   }
 }
 

@@ -14,16 +14,40 @@ class UserLocalDataSource implements IUserLocalDataSource {
 
   @override
   Future<UserProfileModel> getUserProfile() async {
-    final json = await _storage.getJson(AppConstants.keyUserProfile);
-    if (json != null && json is Map<String, dynamic>) {
-      return UserProfileModel.fromJson(json);
+    // Check if there is an active logged-in user session
+    final authSession = await _storage.getJson(AppConstants.keyAuthSession);
+    String? sessionEmail;
+    String? sessionName;
+    String? sessionId;
+    if (authSession != null && authSession is Map<String, dynamic>) {
+      sessionEmail = authSession['email']?.toString();
+      sessionName = authSession['displayName']?.toString() ?? authSession['name']?.toString();
+      sessionId = authSession['id']?.toString();
     }
 
-    // Default Initial Profile
+    final json = await _storage.getJson(AppConstants.keyUserProfile);
+    if (json != null && json is Map<String, dynamic>) {
+      final model = UserProfileModel.fromJson(json);
+      // If user is logged in, synchronize profile email & name with active session
+      if (sessionEmail != null && sessionEmail.isNotEmpty && model.email != sessionEmail) {
+        final updated = UserProfileModel.fromEntity(
+          model.copyWith(
+            id: sessionId ?? model.id,
+            name: (sessionName != null && sessionName.isNotEmpty) ? sessionName : model.name,
+            email: sessionEmail,
+          ),
+        );
+        await saveUserProfile(updated);
+        return updated;
+      }
+      return model;
+    }
+
+    // Default Initial Profile populated with logged in session if available
     final defaultProfile = UserProfileModel(
-      id: 'player_main',
-      name: 'Alex Vanguard',
-      email: 'explorer@questup.com',
+      id: sessionId ?? 'player_main',
+      name: (sessionName != null && sessionName.isNotEmpty) ? sessionName : 'Explorer',
+      email: (sessionEmail != null && sessionEmail.isNotEmpty) ? sessionEmail : 'explorer@questup.com',
       avatarKey: 'avatar_ranger',
       level: 1,
       currentXp: 150,

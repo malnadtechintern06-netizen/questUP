@@ -62,6 +62,9 @@ class VerificationState {
   final int durationSeconds;
   final double distanceMeters;
   final bool isRequirementSatisfied;
+  final bool isPasted;
+  final int pastedCharactersCount;
+  final bool isAuthenticallyTyped;
   final VerificationResult? result;
   final List<ValidatorResult> validatorResults;
   final String? errorMessage;
@@ -79,6 +82,9 @@ class VerificationState {
     this.durationSeconds = 0,
     this.distanceMeters = 0.0,
     this.isRequirementSatisfied = false,
+    this.isPasted = false,
+    this.pastedCharactersCount = 0,
+    this.isAuthenticallyTyped = true,
     this.result,
     this.validatorResults = const [],
     this.errorMessage,
@@ -97,6 +103,9 @@ class VerificationState {
     int? durationSeconds,
     double? distanceMeters,
     bool? isRequirementSatisfied,
+    bool? isPasted,
+    int? pastedCharactersCount,
+    bool? isAuthenticallyTyped,
     VerificationResult? result,
     List<ValidatorResult>? validatorResults,
     String? errorMessage,
@@ -114,6 +123,9 @@ class VerificationState {
       durationSeconds: durationSeconds ?? this.durationSeconds,
       distanceMeters: distanceMeters ?? this.distanceMeters,
       isRequirementSatisfied: isRequirementSatisfied ?? this.isRequirementSatisfied,
+      isPasted: isPasted ?? this.isPasted,
+      pastedCharactersCount: pastedCharactersCount ?? this.pastedCharactersCount,
+      isAuthenticallyTyped: isAuthenticallyTyped ?? this.isAuthenticallyTyped,
       result: result ?? this.result,
       validatorResults: validatorResults ?? this.validatorResults,
       errorMessage: errorMessage,
@@ -181,13 +193,23 @@ class VerificationNotifier extends StateNotifier<VerificationState> {
     state = state.copyWith(drawingProofSummary: summary, isRequirementSatisfied: true);
   }
 
-  void updateTextProof(String text, int words, bool isSatisfied) {
+  void updateTextProof(
+    String text,
+    int words,
+    bool isSatisfied, {
+    bool isPasted = false,
+    int pastedChars = 0,
+    bool isAuthentic = true,
+  }) {
     final lines = text.isEmpty ? 0 : text.split('\n').length;
     state = state.copyWith(
       textContent: text,
       wordCount: words,
       lineCount: lines,
-      isRequirementSatisfied: isSatisfied,
+      isRequirementSatisfied: isSatisfied && !isPasted && isAuthentic,
+      isPasted: isPasted,
+      pastedCharactersCount: pastedChars,
+      isAuthenticallyTyped: isAuthentic,
     );
   }
 
@@ -252,6 +274,9 @@ class VerificationNotifier extends StateNotifier<VerificationState> {
         drawingProofSummary: state.drawingProofSummary,
         distanceMeters: state.distanceMeters,
         gameplaySeconds: state.durationSeconds,
+        isPasted: state.isPasted,
+        pastedCharactersCount: state.pastedCharactersCount,
+        isAuthenticallyTyped: state.isAuthenticallyTyped,
       );
 
       final result = await _verifyQuestUseCase(

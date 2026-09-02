@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +8,7 @@ import 'package:quest_up/app/theme/app_colors.dart';
 import 'package:quest_up/app/theme/app_typography.dart';
 import 'package:quest_up/features/auth/presentation/providers/auth_providers.dart';
 import 'package:quest_up/features/profile/presentation/providers/user_providers.dart';
+import 'package:quest_up/features/quests/presentation/providers/quest_providers.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -36,31 +38,43 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 
   Future<void> _navigateAfterDelay() async {
-    final minimumDelay = Future.delayed(const Duration(milliseconds: 1800));
+    final minimumDelay = Future.delayed(const Duration(milliseconds: 500));
     final authCheck = ref.read(authNotifierProvider.notifier).checkInitialAuthState();
-    final storage = ref.read(localStorageServiceProvider);
-    final permissionCheck = storage.getString(AppConstants.keyLocationPermissionGranted);
+    final locationService = ref.read(locationServiceProvider);
+    final locationCheck = locationService.isLocationEnabledAndPermitted();
 
     final results = await Future.wait([
       minimumDelay,
       authCheck,
-      permissionCheck,
+      locationCheck,
     ]);
 
     if (!mounted) return;
 
     final authState = results[1] as AuthState;
-    final isPermissionGranted = (results[2] as String?) == 'true';
+    final isLocationReady = results[2] as bool;
 
     if (authState.isAuthenticated) {
-      if (authState.user?.displayName.isNotEmpty ?? false) {
+      if (authState.user != null) {
         ref.read(userProfileNotifierProvider.notifier).updateProfile(
+              id: authState.user!.id,
               name: authState.user!.displayName,
+              email: authState.user!.email,
             );
       }
 
-      if (isPermissionGranted) {
-        context.go(RoutePaths.home);
+      if (isLocationReady) {
+        // Pre-acquire GPS coordinates and initiate quest loading so HomeRadarScreen opens ready
+        try {
+          final coords = await locationService.getCurrentLocation();
+          ref.read(activeGpsCoordinatesProvider.notifier).state = coords;
+          // Trigger non-blocking quest fetch
+          unawaited(ref.read(questsNotifierProvider.notifier).fetchQuests(coords: coords, showLoading: false));
+        } catch (_) {}
+
+        if (mounted) {
+          context.go(RoutePaths.home);
+        }
       } else {
         context.go(RoutePaths.locationPermission);
       }

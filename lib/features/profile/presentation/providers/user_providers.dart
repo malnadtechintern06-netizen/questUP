@@ -60,7 +60,9 @@ class UserProfileNotifier extends StateNotifier<AsyncValue<UserProfile>> {
   }
 
   Future<void> updateProfile({
+    String? id,
     String? name,
+    String? email,
     String? avatarKey,
   }) async {
     UserProfile? current = state.value;
@@ -74,7 +76,9 @@ class UserProfileNotifier extends StateNotifier<AsyncValue<UserProfile>> {
     if (current == null) return;
 
     final updated = current.copyWith(
-      name: name ?? current.name,
+      id: id ?? current.id,
+      name: (name != null && name.trim().isNotEmpty) ? name.trim() : current.name,
+      email: (email != null && email.trim().isNotEmpty) ? email.trim() : current.email,
       avatarKey: avatarKey ?? current.avatarKey,
     );
 

@@ -12,7 +12,7 @@ import 'package:quest_up/core/widgets/shimmer_loading.dart';
 import 'package:quest_up/features/profile/presentation/providers/user_providers.dart';
 import 'package:quest_up/features/quests/domain/entities/quest.dart';
 import 'package:quest_up/features/quests/presentation/providers/quest_providers.dart';
-import 'package:quest_up/features/quests/presentation/widgets/quest_image_widget.dart';
+import 'package:quest_up/features/quests/presentation/widgets/google_maps_marker_card_widget.dart';
 
 class QuestDetailScreen extends ConsumerWidget {
   final String questId;
@@ -90,12 +90,11 @@ class QuestDetailScreen extends ConsumerWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            QuestImageWidget(
+                            GoogleMapsMarkerCardWidget(
                               quest: quest,
-                              height: 150,
+                              height: 160,
                               width: double.infinity,
                               borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                              fit: BoxFit.cover,
                             ),
                             Padding(
                               padding: const EdgeInsets.all(18),

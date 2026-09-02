@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:quest_up/core/services/location_service.dart';
 import 'package:quest_up/core/services/places_discovery_service.dart';
 import 'package:quest_up/core/utils/distance_calculator.dart';
+import 'package:quest_up/features/notifications/domain/entities/app_notification.dart';
+import 'package:quest_up/features/notifications/presentation/providers/notification_providers.dart';
 import 'package:quest_up/features/profile/presentation/providers/user_providers.dart';
-import 'package:quest_up/features/quests/data/datasources/quest_firestore_datasource.dart';
 import 'package:quest_up/features/quests/data/datasources/quest_local_datasource.dart';
+import 'package:quest_up/features/quests/data/datasources/quest_mysql_datasource.dart';
 import 'package:quest_up/features/quests/data/repositories/quest_repository_impl.dart';
 import 'package:quest_up/features/quests/domain/entities/quest.dart';
 import 'package:quest_up/features/quests/domain/repositories/quest_repository.dart';
@@ -53,17 +56,17 @@ final questLocalDataSourceProvider = Provider<IQuestLocalDataSource>((ref) {
   return QuestLocalDataSource(storage, discovery);
 });
 
-final questFirestoreDataSourceProvider = Provider<IQuestFirestoreDataSource>((ref) {
-  return QuestFirestoreDataSource();
+final questMySqlDataSourceProvider = Provider<IQuestMySqlDataSource>((ref) {
+  return QuestMySqlDataSource();
 });
 
 // Repository Provider
 final questRepositoryProvider = Provider<QuestRepository>((ref) {
   final localDataSource = ref.watch(questLocalDataSourceProvider);
-  final firestoreDataSource = ref.watch(questFirestoreDataSourceProvider);
+  final mySqlDataSource = ref.watch(questMySqlDataSourceProvider);
   return QuestRepositoryImpl(
     localDataSource: localDataSource,
-    firestoreDataSource: firestoreDataSource,
+    mySqlDataSource: mySqlDataSource,
   );
 });
 
@@ -86,10 +89,18 @@ final getQuestByIdUseCaseProvider = Provider<GetQuestByIdUseCase>((ref) {
 // Filter & Category state
 final selectedCategoryProvider = StateProvider<QuestCategory?>((ref) => null);
 final searchQueryProvider = StateProvider<String>((ref) => '');
-final maxRadiusFilterMetersProvider = StateProvider<double>((ref) => 5000.0); // 5km default
+final maxRadiusFilterMetersProvider = StateProvider<double>((ref) => 50000.0); // 50km default
 
 // Latest Coordinates Provider (updated by GPS and simulation)
 final activeGpsCoordinatesProvider = StateProvider<LocationCoordinates?>((ref) => null);
+
+// Check if location services and permissions are currently active
+final isLocationEnabledProvider = FutureProvider.autoDispose<bool>((ref) async {
+  final activeGps = ref.watch(activeGpsCoordinatesProvider);
+  if (activeGps != null) return true;
+  final service = ref.watch(locationServiceProvider);
+  return await service.isLocationEnabledAndPermitted();
+});
 
 // Quests List Notifier with live GPS tracking, nearest-first sorting, and manual refresh
 class QuestsNotifier extends StateNotifier<AsyncValue<List<Quest>>> {
@@ -98,14 +109,32 @@ class QuestsNotifier extends StateNotifier<AsyncValue<List<Quest>>> {
   final Ref ref;
   StreamSubscription<LocationCoordinates>? _locationSubscription;
   LocationCoordinates? _lastFetchedLocation;
+  bool _isFetching = false;
 
   QuestsNotifier({
     required this.getNearbyQuestsUseCase,
     required this.locationService,
     required this.ref,
   }) : super(const AsyncValue.loading()) {
-    fetchQuests();
+    _initQuestsWithLocationCheck();
     _startLocationTracking();
+  }
+
+  Future<void> _initQuestsWithLocationCheck() async {
+    try {
+      final isLocationReady = await locationService.isLocationEnabledAndPermitted();
+      if (isLocationReady) {
+        // Location is enabled on device -> fetch quests for real location
+        await fetchQuests(showLoading: true);
+      } else {
+        // Location is not active -> quests remain unloaded until location is enabled
+        ref.read(activeGpsCoordinatesProvider.notifier).state = null;
+        state = const AsyncValue.data([]);
+      }
+    } catch (_) {
+      ref.read(activeGpsCoordinatesProvider.notifier).state = null;
+      state = const AsyncValue.data([]);
+    }
   }
 
   void _startLocationTracking() {
@@ -160,11 +189,29 @@ class QuestsNotifier extends StateNotifier<AsyncValue<List<Quest>>> {
     LocationCoordinates? coords,
     bool showLoading = true,
   }) async {
-    if (showLoading) {
+    if (_isFetching) return;
+    _isFetching = true;
+
+    if (showLoading && (state.valueOrNull == null || state.valueOrNull!.isEmpty)) {
       state = const AsyncValue.loading();
     }
+
+    final sw = Stopwatch()..start();
     try {
-      final loc = coords ?? await locationService.getCurrentLocation();
+      LocationCoordinates loc;
+      if (coords != null) {
+        loc = coords;
+      } else {
+        final isReady = await locationService.isLocationEnabledAndPermitted();
+        if (!isReady) {
+          ref.read(activeGpsCoordinatesProvider.notifier).state = null;
+          state = const AsyncValue.data([]);
+          _isFetching = false;
+          return;
+        }
+        loc = await locationService.getCurrentLocation();
+      }
+
       _lastFetchedLocation = loc;
       ref.read(activeGpsCoordinatesProvider.notifier).state = loc;
 
@@ -175,9 +222,34 @@ class QuestsNotifier extends StateNotifier<AsyncValue<List<Quest>>> {
         maxDistanceMeters: maxRadius,
       );
 
+      debugPrint('[QUESTUP] Quests refreshed in ${sw.elapsedMilliseconds}ms: ${quests.length} quests displayed.');
       state = AsyncValue.data(quests);
+
+      if (quests.isNotEmpty) {
+        final nearest = quests.first;
+        final distText = (nearest.distanceMeters != null)
+            ? ' (${(nearest.distanceMeters!).round()}m away)'
+            : '';
+        ref.read(notificationsNotifierProvider.notifier).addNotification(
+          AppNotification(
+            id: 'notif-quest-${nearest.id}',
+            title: 'Nearby Quest: ${nearest.title}',
+            message: 'A quest is available at ${nearest.locationName}$distText. Tap to explore!',
+            timestamp: DateTime.now(),
+            type: NotificationType.quest,
+            isRead: false,
+            routeTarget: '/quests',
+            actionLabel: 'View Quests',
+          ),
+        );
+      }
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      debugPrint('[QUESTUP] Error fetching quests: $e');
+      if (state.valueOrNull == null || state.valueOrNull!.isEmpty) {
+        state = AsyncValue.error(e, st);
+      }
+    } finally {
+      _isFetching = false;
     }
   }
 
