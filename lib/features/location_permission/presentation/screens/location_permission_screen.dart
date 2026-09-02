@@ -7,13 +7,86 @@ import 'package:quest_up/app/theme/app_typography.dart';
 import 'package:quest_up/core/widgets/custom_button.dart';
 import 'package:quest_up/features/location_permission/presentation/providers/location_permission_provider.dart';
 
-class LocationPermissionScreen extends ConsumerWidget {
+class LocationPermissionScreen extends ConsumerStatefulWidget {
   const LocationPermissionScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<LocationPermissionScreen> createState() => _LocationPermissionScreenState();
+}
+
+class _LocationPermissionScreenState extends ConsumerState<LocationPermissionScreen>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(locationPermissionNotifierProvider.notifier).checkInitialState();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.read(locationPermissionNotifierProvider.notifier).checkAndAutoResume().then((isReady) {
+        if (isReady && mounted) {
+          context.go(RoutePaths.home);
+        }
+      });
+    }
+  }
+
+  void _navigateToHome() {
+    if (mounted) {
+      context.go(RoutePaths.home);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Listen for completion to automatically transition to Home
+    ref.listen<LocationPermissionState>(locationPermissionNotifierProvider, (previous, next) {
+      if (next.isReady) {
+        _navigateToHome();
+      }
+    });
+
     final state = ref.watch(locationPermissionNotifierProvider);
     final notifier = ref.read(locationPermissionNotifierProvider.notifier);
+
+    // Dynamic icon and color based on state
+    IconData headerIcon = Icons.location_on_rounded;
+    Color headerColor = AppColors.accentLocation;
+    String headerTitle = '📍 Enable Location';
+    String headerSubtitle = 'QuestUP uses your location to find nearby real-world quests and verify that you have reached quest locations.';
+
+    if (state.status == LocationPermissionUIState.gpsDisabled) {
+      headerIcon = Icons.location_searching_rounded;
+      headerColor = AppColors.secondary;
+      headerTitle = '🛰️ Location Services Disabled';
+      headerSubtitle = 'Location services are disabled on your device. Please turn on GPS in your Android device settings.';
+    } else if (state.status == LocationPermissionUIState.permissionDeniedForever) {
+      headerIcon = Icons.location_off_rounded;
+      headerColor = AppColors.accentDanger;
+      headerTitle = '📍 Permission Required';
+      headerSubtitle = 'Location permission is permanently denied. Please enable it in QuestUP App Settings to discover nearby quests.';
+    } else if (state.status == LocationPermissionUIState.permissionDenied) {
+      headerIcon = Icons.location_on_outlined;
+      headerColor = AppColors.accentLocation;
+      headerTitle = '📍 Enable Location';
+      headerSubtitle = 'QuestUP needs your location permission to detect nearby landmarks and verify your adventures.';
+    } else if (state.status == LocationPermissionUIState.locationReady) {
+      headerIcon = Icons.check_circle_rounded;
+      headerColor = AppColors.accentSuccess;
+      headerTitle = '📍 Location Signal Locked';
+      headerSubtitle = 'Your real-world GPS position has been verified. You are ready to explore!';
+    }
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -29,26 +102,26 @@ class LocationPermissionScreen extends ConsumerWidget {
                     children: [
                       const Spacer(flex: 1),
 
-                      // Animated Glowing Radar / GPS Icon
+                      // Animated Glowing Radar / GPS Emblem
                       Container(
-                        width: 100,
-                        height: 100,
+                        width: 104,
+                        height: 104,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: AppColors.surface,
-                          border: Border.all(color: AppColors.accentLocation, width: 2.5),
+                          border: Border.all(color: headerColor, width: 2.5),
                           boxShadow: [
                             BoxShadow(
-                              color: AppColors.accentLocation.withValues(alpha: 0.35),
+                              color: headerColor.withValues(alpha: 0.35),
                               blurRadius: 32,
                               spreadRadius: 4,
                             ),
                           ],
                         ),
-                        child: const Center(
+                        child: Center(
                           child: Icon(
-                            Icons.location_on_rounded,
-                            color: AppColors.accentLocation,
+                            headerIcon,
+                            color: headerColor,
                             size: 52,
                           ),
                         ),
@@ -57,15 +130,15 @@ class LocationPermissionScreen extends ConsumerWidget {
 
                       // Heading
                       Text(
-                        '📍 Enable Location',
-                        style: AppTypography.displayMedium.copyWith(fontSize: 24),
+                        headerTitle,
+                        style: AppTypography.displayMedium.copyWith(fontSize: 22),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 10),
 
                       // Description
                       Text(
-                        'QuestUP uses your location to find nearby real-world quests and verify that you have reached quest locations.',
+                        headerSubtitle,
                         style: AppTypography.bodyLarge.copyWith(
                           color: AppColors.textSecondary,
                           height: 1.4,
@@ -74,7 +147,7 @@ class LocationPermissionScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 24),
 
-                      // Live Status / Coordinates Card
+                      // Live Status / Coordinates Card or Alert Card
                       if (state.coordinates != null) ...[
                         Container(
                           width: double.infinity,
@@ -133,24 +206,29 @@ class LocationPermissionScreen extends ConsumerWidget {
                           ),
                         ),
                         const SizedBox(height: 16),
-                      ] else if (state.message != null) ...[
+                      ] else if (state.message != null &&
+                          state.status != LocationPermissionUIState.initial) ...[
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: state.status == LocationPermissionUIState.requesting
+                            color: state.isLoading
                                 ? AppColors.surfaceElevated
-                                : AppColors.accentDanger.withValues(alpha: 0.15),
+                                : (state.status == LocationPermissionUIState.gpsDisabled
+                                    ? AppColors.secondary.withValues(alpha: 0.12)
+                                    : AppColors.accentDanger.withValues(alpha: 0.12)),
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
-                              color: state.status == LocationPermissionUIState.requesting
+                              color: state.isLoading
                                   ? AppColors.border
-                                  : AppColors.accentDanger.withValues(alpha: 0.5),
+                                  : (state.status == LocationPermissionUIState.gpsDisabled
+                                      ? AppColors.secondary.withValues(alpha: 0.4)
+                                      : AppColors.accentDanger.withValues(alpha: 0.4)),
                             ),
                           ),
                           child: Row(
                             children: [
-                              if (state.status == LocationPermissionUIState.requesting)
+                              if (state.isLoading)
                                 const SizedBox(
                                   width: 18,
                                   height: 18,
@@ -160,16 +238,26 @@ class LocationPermissionScreen extends ConsumerWidget {
                                   ),
                                 )
                               else
-                                const Icon(Icons.info_outline_rounded,
-                                    color: AppColors.accentDanger, size: 20),
+                                Icon(
+                                  state.status == LocationPermissionUIState.gpsDisabled
+                                      ? Icons.location_searching_rounded
+                                      : Icons.info_outline_rounded,
+                                  color: state.status == LocationPermissionUIState.gpsDisabled
+                                      ? AppColors.secondary
+                                      : AppColors.accentDanger,
+                                  size: 20,
+                                ),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
                                   state.message!,
                                   style: AppTypography.bodyMedium.copyWith(
-                                    color: state.status == LocationPermissionUIState.requesting
+                                    color: state.isLoading
                                         ? AppColors.textPrimary
-                                        : AppColors.accentDanger,
+                                        : (state.status == LocationPermissionUIState.gpsDisabled
+                                            ? AppColors.textPrimary
+                                            : AppColors.accentDanger),
+                                    fontSize: 13,
                                   ),
                                 ),
                               ),
@@ -179,61 +267,62 @@ class LocationPermissionScreen extends ConsumerWidget {
                         const SizedBox(height: 16),
                       ],
 
-                      // Settings Helper Buttons if permission denied or GPS disabled
-                      if (state.status == LocationPermissionUIState.permanentlyDenied) ...[
-                        CustomButton(
-                          text: 'OPEN APP SETTINGS',
-                          icon: Icons.settings_rounded,
-                          isOutlined: true,
-                          width: double.infinity,
-                          onPressed: () => notifier.openAppSettings(),
-                        ),
-                        const SizedBox(height: 12),
-                      ] else if (state.status == LocationPermissionUIState.serviceDisabled) ...[
+                      const Spacer(flex: 2),
+
+                      // Contextual Primary Action Button
+                      if (state.status == LocationPermissionUIState.gpsDisabled) ...[
                         CustomButton(
                           text: 'ENABLE GPS IN SETTINGS',
                           icon: Icons.location_searching_rounded,
-                          isOutlined: true,
+                          customColor: AppColors.secondary,
                           width: double.infinity,
                           onPressed: () => notifier.openLocationSettings(),
                         ),
-                        const SizedBox(height: 12),
-                      ],
-
-                      const Spacer(flex: 2),
-
-                      // Action CTA: Allow Location / Continue
-                      CustomButton(
-                        text: state.coordinates != null ? 'CONTINUE TO QUESTS' : 'ALLOW LOCATION',
-                        icon: state.coordinates != null
-                            ? Icons.check_circle_outline_rounded
-                            : Icons.my_location_rounded,
-                        customColor: AppColors.primary,
-                        isLoading: state.status == LocationPermissionUIState.requesting,
-                        width: double.infinity,
-                        onPressed: () async {
-                          if (state.coordinates != null) {
-                            context.go(RoutePaths.home);
-                          } else {
-                            final success = await notifier.requestAndAcquireLocation();
-                            if (success && context.mounted) {
-                              await Future.delayed(const Duration(milliseconds: 600));
-                              if (context.mounted) {
-                                context.go(RoutePaths.home);
+                      ] else if (state.status == LocationPermissionUIState.permissionDeniedForever) ...[
+                        CustomButton(
+                          text: 'OPEN APP SETTINGS',
+                          icon: Icons.settings_rounded,
+                          customColor: AppColors.accentDanger,
+                          width: double.infinity,
+                          onPressed: () => notifier.openAppSettings(),
+                        ),
+                      ] else if (state.status == LocationPermissionUIState.error) ...[
+                        CustomButton(
+                          text: 'TRY AGAIN',
+                          icon: Icons.refresh_rounded,
+                          customColor: AppColors.primary,
+                          isLoading: state.isLoading,
+                          width: double.infinity,
+                          onPressed: () => notifier.requestAndAcquireLocation(),
+                        ),
+                      ] else ...[
+                        CustomButton(
+                          text: state.coordinates != null ? 'CONTINUE TO QUESTS' : 'ALLOW LOCATION',
+                          icon: state.coordinates != null
+                              ? Icons.check_circle_outline_rounded
+                              : Icons.my_location_rounded,
+                          customColor: AppColors.primary,
+                          isLoading: state.isLoading,
+                          width: double.infinity,
+                          onPressed: () async {
+                            if (state.coordinates != null) {
+                              _navigateToHome();
+                            } else {
+                              final success = await notifier.requestAndAcquireLocation();
+                              if (success) {
+                                _navigateToHome();
                               }
                             }
-                          }
-                        },
-                      ),
+                          },
+                        ),
+                      ],
                       const SizedBox(height: 12),
 
                       // Maybe Later button
                       TextButton(
                         onPressed: () async {
                           await notifier.skipForNow();
-                          if (context.mounted) {
-                            context.go(RoutePaths.home);
-                          }
+                          _navigateToHome();
                         },
                         child: Text(
                           'Maybe Later',

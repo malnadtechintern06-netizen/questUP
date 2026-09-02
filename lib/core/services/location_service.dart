@@ -80,7 +80,7 @@ class LocationService implements ILocationService {
             timestamp: pos.timestamp,
           ));
     } catch (e) {
-      debugPrint('Position stream notice: $e');
+      debugPrint('[LOCATION] Position stream notice: $e');
       return _simulatedStreamController.stream;
     }
   }
@@ -88,9 +88,12 @@ class LocationService implements ILocationService {
   @override
   Future<bool> isLocationServiceEnabled() async {
     try {
-      return await Geolocator.isLocationServiceEnabled();
+      debugPrint('[LOCATION] Checking GPS service');
+      final enabled = await Geolocator.isLocationServiceEnabled();
+      debugPrint('[LOCATION] GPS service enabled: $enabled');
+      return enabled;
     } catch (e) {
-      debugPrint('Error checking location service: $e');
+      debugPrint('[LOCATION] Error checking location service: $e');
       return false;
     }
   }
@@ -102,7 +105,7 @@ class LocationService implements ILocationService {
       return permission == LocationPermission.always ||
           permission == LocationPermission.whileInUse;
     } catch (e) {
-      debugPrint('Error checking location permission: $e');
+      debugPrint('[LOCATION] Error checking location permission: $e');
       return false;
     }
   }
@@ -111,11 +114,12 @@ class LocationService implements ILocationService {
   Future<bool> isLocationEnabledAndPermitted() async {
     if (isSimulated) return true;
     try {
+      final hasPerm = await hasLocationPermission();
+      if (!hasPerm) return false;
       final isServiceOn = await isLocationServiceEnabled();
-      if (!isServiceOn) return false;
-      return await hasLocationPermission();
+      return isServiceOn;
     } catch (e) {
-      debugPrint('Error checking isLocationEnabledAndPermitted: $e');
+      debugPrint('[LOCATION] Error checking isLocationEnabledAndPermitted: $e');
       return false;
     }
   }
@@ -123,9 +127,12 @@ class LocationService implements ILocationService {
   @override
   Future<LocationPermission> checkPermission() async {
     try {
-      return await Geolocator.checkPermission();
+      debugPrint('[LOCATION] Checking permission');
+      final permission = await Geolocator.checkPermission();
+      debugPrint('[LOCATION] Permission result: $permission');
+      return permission;
     } catch (e) {
-      debugPrint('Error checking permission: $e');
+      debugPrint('[LOCATION] Error checking permission: $e');
       return LocationPermission.denied;
     }
   }
@@ -133,9 +140,12 @@ class LocationService implements ILocationService {
   @override
   Future<LocationPermission> requestPermission() async {
     try {
-      return await Geolocator.requestPermission();
+      debugPrint('[LOCATION] Requesting permission');
+      final permission = await Geolocator.requestPermission();
+      debugPrint('[LOCATION] Permission after request: $permission');
+      return permission;
     } catch (e) {
-      debugPrint('Error requesting location permission: $e');
+      debugPrint('[LOCATION] Error requesting location permission: $e');
       return LocationPermission.denied;
     }
   }
@@ -143,9 +153,10 @@ class LocationService implements ILocationService {
   @override
   Future<bool> openAppSettings() async {
     try {
+      debugPrint('[LOCATION] Opening Android App Settings for QuestUP');
       return await Geolocator.openAppSettings();
     } catch (e) {
-      debugPrint('Error opening app settings: $e');
+      debugPrint('[LOCATION] Error opening app settings: $e');
       return false;
     }
   }
@@ -153,9 +164,10 @@ class LocationService implements ILocationService {
   @override
   Future<bool> openLocationSettings() async {
     try {
+      debugPrint('[LOCATION] Opening Android Device Location Settings');
       return await Geolocator.openLocationSettings();
     } catch (e) {
-      debugPrint('Error opening location settings: $e');
+      debugPrint('[LOCATION] Error opening location settings: $e');
       return false;
     }
   }
@@ -163,48 +175,13 @@ class LocationService implements ILocationService {
   @override
   Future<LocationCoordinates> getRealDeviceLocation() async {
     final sw = Stopwatch()..start();
-    debugPrint('[QUESTUP] Requesting GPS location...');
+    debugPrint('[LOCATION] Requesting current position');
 
-    // 1. Check if location services (GPS) are enabled on the phone/emulator
-    final serviceEnabled = await isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      final lastKnown = await Geolocator.getLastKnownPosition();
-      if (lastKnown != null) {
-        debugPrint('[QUESTUP] Using last known location: ${lastKnown.latitude}, ${lastKnown.longitude}');
-        return LocationCoordinates(
-          latitude: lastKnown.latitude,
-          longitude: lastKnown.longitude,
-          accuracy: lastKnown.accuracy,
-          timestamp: lastKnown.timestamp,
-        );
-      }
-      throw const LocationException(
-        'GPS / Location Services are turned off on your device. Please enable GPS in device settings.',
-      );
-    }
-
-    // 2. Check permission status & request if denied
-    LocationPermission permission = await checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await requestPermission();
-      if (permission == LocationPermission.denied) {
-        throw const LocationException(
-          'Location permission was denied. QuestUP needs your location to detect nearby quests.',
-        );
-      }
-    }
-
-    if (permission == LocationPermission.deniedForever) {
-      throw const LocationException(
-        'Location permission is permanently denied. Please enable location permissions in Android Settings > Apps > QuestUP.',
-      );
-    }
-
-    // 3. Fast Tier 1: Instant Last Known Position (5ms)
+    // 1. Fast Tier 1: Instant Last Known Position (5ms)
     try {
       final lastKnown = await Geolocator.getLastKnownPosition();
       if (lastKnown != null) {
-        debugPrint('[QUESTUP] Instant last known location acquired in ${sw.elapsedMilliseconds}ms: ${lastKnown.latitude.toStringAsFixed(4)}, ${lastKnown.longitude.toStringAsFixed(4)}');
+        debugPrint('[LOCATION] Position received: ${lastKnown.latitude}, ${lastKnown.longitude} (Last known, ${sw.elapsedMilliseconds}ms)');
         
         // Trigger non-blocking background fine-grain GPS refresh
         unawaited(
@@ -214,10 +191,11 @@ class LocationService implements ILocationService {
               timeLimit: Duration(seconds: 4),
             ),
           ).then((pos) {
-            debugPrint('[QUESTUP] Background fine GPS updated: ${pos.latitude}, ${pos.longitude}');
+            debugPrint('[LOCATION] Background fine GPS position received: ${pos.latitude}, ${pos.longitude}');
           }).catchError((_) {}),
         );
 
+        debugPrint('[LOCATION] Location flow completed');
         return LocationCoordinates(
           latitude: lastKnown.latitude,
           longitude: lastKnown.longitude,
@@ -227,7 +205,7 @@ class LocationService implements ILocationService {
       }
     } catch (_) {}
 
-    // 4. Fast Tier 2: Real-time GPS Position with 2.5s timeLimit
+    // 2. Fast Tier 2: Real-time GPS Position with 2.5s timeLimit
     try {
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
@@ -236,7 +214,8 @@ class LocationService implements ILocationService {
         ),
       );
 
-      debugPrint('[QUESTUP] GPS received in ${sw.elapsedMilliseconds}ms: ${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}');
+      debugPrint('[LOCATION] Position received: ${position.latitude}, ${position.longitude} (GPS lock, ${sw.elapsedMilliseconds}ms)');
+      debugPrint('[LOCATION] Location flow completed');
       return LocationCoordinates(
         latitude: position.latitude,
         longitude: position.longitude,
@@ -244,10 +223,10 @@ class LocationService implements ILocationService {
         timestamp: position.timestamp,
       );
     } catch (e) {
-      debugPrint('[QUESTUP] GPS query fallback: $e');
+      debugPrint('[LOCATION] GPS query fallback: $e');
     }
 
-    // 5. Tier 3: Android LocationManager fallback with 1.5s timeout
+    // 3. Tier 3: Android LocationManager fallback with 1.5s timeout
     try {
       final position = await Geolocator.getCurrentPosition(
         locationSettings: AndroidSettings(
@@ -257,7 +236,8 @@ class LocationService implements ILocationService {
         ),
       );
 
-      debugPrint('[QUESTUP] Android LocationManager position in ${sw.elapsedMilliseconds}ms: ${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}');
+      debugPrint('[LOCATION] Position received: ${position.latitude}, ${position.longitude} (LocationManager, ${sw.elapsedMilliseconds}ms)');
+      debugPrint('[LOCATION] Location flow completed');
       return LocationCoordinates(
         latitude: position.latitude,
         longitude: position.longitude,
@@ -266,12 +246,14 @@ class LocationService implements ILocationService {
       );
     } catch (_) {}
 
-    throw const LocationException('Unable to acquire GPS signal. Please ensure location is enabled.');
+    throw const LocationException('Unable to get your current location. Please ensure location is enabled and try again.');
   }
 
   @override
   Future<LocationCoordinates> getCurrentLocation() async {
     if (_simulatedLocation != null) {
+      debugPrint('[LOCATION] Position received: ${_simulatedLocation!.latitude}, ${_simulatedLocation!.longitude} (Simulated)');
+      debugPrint('[LOCATION] Location flow completed');
       return _simulatedLocation!;
     }
 

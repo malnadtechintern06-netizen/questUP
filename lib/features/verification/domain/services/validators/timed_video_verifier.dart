@@ -7,10 +7,16 @@ class TimedVideoVerifier implements IQuestValidator {
   @override
   String get validatorName => 'Timed Video Verification';
 
-  String _formatTime(int totalSeconds) {
-    final minutes = (totalSeconds ~/ 60).toString().padLeft(2, '0');
-    final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
+  String _formatReadableTime(int totalSeconds) {
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    if (minutes > 0 && seconds > 0) {
+      return '$minutes minutes $seconds seconds';
+    } else if (minutes > 0) {
+      return '$minutes minutes';
+    } else {
+      return '$seconds seconds';
+    }
   }
 
   @override
@@ -22,33 +28,32 @@ class TimedVideoVerifier implements IQuestValidator {
     final actual = payload.durationSeconds ?? 0;
     final target = quest.requiredDurationSeconds;
 
-    if (target > 0 && actual < target) {
-      final remaining = target - actual;
-      return ValidatorResult(
-        passed: false,
-        validatorName: 'Timed Video Verification',
-        actualValue: _formatTime(actual),
-        requiredValue: _formatTime(target),
-        message: 'Duration Incomplete: Completed ${_formatTime(actual)} / ${_formatTime(target)}. Need ${_formatTime(remaining)} more continuous session time.',
-      );
-    }
-
     if (payload.videoProofPath == null || payload.videoProofPath!.isEmpty) {
-      return ValidatorResult(
+      return const ValidatorResult(
         passed: false,
         validatorName: 'Timed Video Verification',
         actualValue: 'No video recorded',
         requiredValue: 'Recorded Video Proof',
-        message: 'Video Proof Required: Please record your activity session using the in-app camera.',
+        message: 'Video Proof Required: Please record and submit your activity session video.',
+      );
+    }
+
+    if (target > 0 && actual < target) {
+      return ValidatorResult(
+        passed: false,
+        validatorName: 'Timed Video Verification',
+        actualValue: _formatReadableTime(actual),
+        requiredValue: _formatReadableTime(target),
+        message: 'Duration Incomplete: Your video is only ${_formatReadableTime(actual)}. You need at least ${_formatReadableTime(target)}.',
       );
     }
 
     return ValidatorResult(
       passed: true,
       validatorName: 'Timed Video Verification',
-      actualValue: '${_formatTime(actual)} recorded',
-      requiredValue: _formatTime(target),
-      message: 'Timed Video Verified: Completed continuous session of ${_formatTime(actual)} with valid video proof.',
+      actualValue: '${_formatReadableTime(actual)} recorded',
+      requiredValue: _formatReadableTime(target),
+      message: 'Duration Requirement Satisfied: Activity video recorded for ${_formatReadableTime(actual)}.',
     );
   }
 }

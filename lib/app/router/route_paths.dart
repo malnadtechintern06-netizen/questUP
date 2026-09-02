@@ -11,6 +11,7 @@ class RoutePaths {
   static const String questVerify = '/quests/:id/verify';
   static const String leaderboard = '/leaderboard';
   static const String achievements = '/achievements';
+  static const String calendar = '/calendar';
   static const String profile = '/profile';
   static const String rewards = '/rewards';
 

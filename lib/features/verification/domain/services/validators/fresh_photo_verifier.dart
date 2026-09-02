@@ -20,24 +20,34 @@ class FreshPhotoVerifier implements IQuestValidator {
         validatorName: 'Fresh In-App Photo Proof',
         actualValue: 'No photo provided',
         requiredValue: 'Captured Photo',
-        message: 'Photo Proof Required: Please snap a photo using the Quest camera.',
+        message: 'Photo Proof Required: Please snap a photo using the QuestUP camera.',
       );
     }
 
-    if (quest.requiresFreshPhoto) {
-      // Strict fresh-photo verification: must originate from the active camera capture session
-      final isFresh = payload.isFreshCameraCapture ||
-          (payload.photoAttemptId != null && payload.photoAttemptId == attempt.attemptId) ||
-          photo.contains('camera_capture_') ||
-          photo.contains('fresh_proof_');
+    final photoLower = photo.toLowerCase();
+    final isExplicitGallery = photoLower.contains('gallery') ||
+        photoLower.contains('pre_existing') ||
+        photoLower.contains('downloaded') ||
+        photoLower.contains('saved_photo');
 
-      if (!isFresh) {
+    final requiresFreshOnly = quest.requiresFreshPhoto || quest.isCameraOnly;
+
+    if (requiresFreshOnly) {
+      // Strict fresh-photo verification: must originate from the active camera capture session
+      final isFresh = payload.isFreshCameraCapture &&
+          !isExplicitGallery &&
+          ((payload.photoAttemptId != null && payload.photoAttemptId == attempt.attemptId) ||
+              photo.contains('camera_capture_') ||
+              photo.contains('fresh_proof_') ||
+              payload.isFreshCameraCapture);
+
+      if (!isFresh || isExplicitGallery) {
         return const ValidatorResult(
           passed: false,
           validatorName: 'Fresh In-App Photo Proof',
           actualValue: 'Pre-existing or Gallery Image',
           requiredValue: 'Live In-App Camera Capture',
-          message: 'Fresh Photo Required: This quest requires taking a live photo right now using the in-app Quest camera. Gallery uploads are not permitted.',
+          message: 'Fresh Photo Required: This quest requires taking a live photo right now using the in-app QuestUP camera. Gallery uploads are not permitted.',
         );
       }
 
@@ -46,11 +56,11 @@ class FreshPhotoVerifier implements IQuestValidator {
         validatorName: 'Fresh In-App Photo Proof',
         actualValue: 'Live In-App Capture (Attempt: ${attempt.attemptId.substring(0, attempt.attemptId.length > 8 ? 8 : attempt.attemptId.length)})',
         requiredValue: 'Live Camera Capture',
-        message: 'Fresh In-App Photo Verified: Live capture successfully validated for this quest attempt.',
+        message: 'Fresh In-App Photo Verified: Live camera capture successfully validated for this active session.',
       );
     }
 
-    // Standard photo requirement
+    // Standard photo requirement (gallery allowed when requiresFreshPhoto is false)
     return ValidatorResult(
       passed: true,
       validatorName: 'Photo Proof',

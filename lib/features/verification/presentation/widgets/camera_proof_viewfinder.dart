@@ -64,10 +64,10 @@ class CameraProofViewfinder extends StatelessWidget {
           ),
           const SizedBox(height: 6),
 
-          if (requiresFreshPhoto)
+          if (requiresFreshPhoto) ...[
             Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(8),
@@ -75,11 +75,11 @@ class CameraProofViewfinder extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.verified_rounded, size: 14, color: AppColors.primary),
-                  const SizedBox(width: 6),
+                  const Icon(Icons.verified_rounded, size: 16, color: AppColors.primary),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Live In-App Capture Required (Gallery disabled for freshness)',
+                      'Live In-App Camera Only (Gallery disabled for anti-cheat)',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.caption.copyWith(
@@ -92,6 +92,32 @@ class CameraProofViewfinder extends StatelessWidget {
                 ],
               ),
             ),
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceElevated,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.shield_outlined, size: 14, color: AppColors.secondary),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Photos of screens, monitors, screenshots, or posters won\'t count. Photograph a real $subject in its natural surroundings.',
+                      style: AppTypography.caption.copyWith(
+                        color: AppColors.textSecondary,
+                        fontSize: 10.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
 
           if (hasPhoto)
             Container(
@@ -173,12 +199,12 @@ class CameraProofViewfinder extends StatelessWidget {
                     const Icon(Icons.camera_alt_rounded, color: AppColors.primary, size: 40),
                     const SizedBox(height: 10),
                     Text(
-                      'Open In-App Quest Camera',
+                      'Take Live Photo with Camera',
                       style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Snap a live photo of $subject',
+                      'Photograph real $subject with natural background',
                       style: AppTypography.caption.copyWith(color: AppColors.textMuted),
                     ),
                   ],

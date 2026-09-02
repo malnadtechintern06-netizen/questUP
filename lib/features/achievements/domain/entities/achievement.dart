@@ -3,6 +3,7 @@ class Achievement {
   final String title;
   final String description;
   final String iconKey;
+  final String tier;
   final int requiredQuestCount;
   final int requiredLevel;
   final int requiredCoins;
@@ -14,6 +15,7 @@ class Achievement {
     required this.title,
     required this.description,
     required this.iconKey,
+    this.tier = 'NOVICE',
     this.requiredQuestCount = 0,
     this.requiredLevel = 1,
     this.requiredCoins = 0,
@@ -21,11 +23,19 @@ class Achievement {
     this.unlockedAt,
   });
 
+  bool get isHardcore =>
+      tier == 'HARDCORE' ||
+      tier == 'MYTHIC' ||
+      requiredLevel >= 4 ||
+      requiredQuestCount >= 6 ||
+      requiredCoins >= 1000;
+
   Achievement copyWith({
     String? id,
     String? title,
     String? description,
     String? iconKey,
+    String? tier,
     int? requiredQuestCount,
     int? requiredLevel,
     int? requiredCoins,
@@ -37,6 +47,7 @@ class Achievement {
       title: title ?? this.title,
       description: description ?? this.description,
       iconKey: iconKey ?? this.iconKey,
+      tier: tier ?? this.tier,
       requiredQuestCount: requiredQuestCount ?? this.requiredQuestCount,
       requiredLevel: requiredLevel ?? this.requiredLevel,
       requiredCoins: requiredCoins ?? this.requiredCoins,

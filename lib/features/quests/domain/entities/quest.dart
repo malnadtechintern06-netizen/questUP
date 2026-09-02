@@ -182,6 +182,10 @@ class Quest {
       requiredPlace != null && requiredPlace!.trim().isNotEmpty;
   bool get hasGpsRequirement =>
       requiresGPS || (latitude != 0.0 && longitude != 0.0);
+  bool get isCameraOnly =>
+      requiresFreshPhoto || (hasObjectDetection && (requiresPhoto || verificationType == QuestVerificationType.photoProof));
+  bool get requiresAntiScreenCheck =>
+      requiresFreshPhoto || hasObjectDetection || verificationType == QuestVerificationType.photoProof;
 
   bool get isGooglePlacesPhoto => imageSource == 'google_places';
 

@@ -34,6 +34,11 @@ class QuestListScreen extends ConsumerWidget {
         title: const Text('Nearby Quests'),
         actions: [
           IconButton(
+            tooltip: 'Quest Activity Calendar',
+            icon: const Icon(Icons.calendar_month_rounded),
+            onPressed: () => context.push(RoutePaths.calendar),
+          ),
+          IconButton(
             tooltip: 'Refresh Quests',
             icon: const Icon(Icons.refresh_rounded),
             onPressed: () =>

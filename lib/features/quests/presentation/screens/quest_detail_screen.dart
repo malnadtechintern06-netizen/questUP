@@ -9,6 +9,7 @@ import 'package:quest_up/core/utils/distance_calculator.dart';
 import 'package:quest_up/core/widgets/custom_button.dart';
 import 'package:quest_up/core/widgets/error_state_widget.dart';
 import 'package:quest_up/core/widgets/shimmer_loading.dart';
+import 'package:quest_up/features/location_permission/presentation/providers/location_permission_provider.dart';
 import 'package:quest_up/features/profile/presentation/providers/user_providers.dart';
 import 'package:quest_up/features/quests/domain/entities/quest.dart';
 import 'package:quest_up/features/quests/presentation/providers/quest_providers.dart';
@@ -39,6 +40,7 @@ class QuestDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final questAsync = ref.watch(singleQuestProvider(questId));
     final userProfileAsync = ref.watch(userProfileNotifierProvider);
+    final userGps = ref.watch(activeGpsCoordinatesProvider) ?? ref.watch(currentLocationProvider).valueOrNull;
 
     return Scaffold(
       appBar: AppBar(
@@ -236,6 +238,9 @@ class QuestDetailScreen extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(height: 20),
+
+                      // Location & Proximity Verification Requirement Card
+                      _buildLocationRequirementCard(context, ref, quest, userGps),
 
                       // Origin & Destination Connection Journey
                       if (quest.originLocationName != null) ...[
@@ -674,6 +679,152 @@ class QuestDetailScreen extends ConsumerWidget {
           style: AppTypography.caption,
         ),
       ],
+    );
+  }
+
+  Widget _buildLocationRequirementCard(
+    BuildContext context,
+    WidgetRef ref,
+    Quest quest,
+    dynamic userCoords,
+  ) {
+    if (quest.latitude == 0.0 && quest.longitude == 0.0 && !quest.hasGpsRequirement) {
+      return const SizedBox.shrink();
+    }
+
+    final hasGps = userCoords != null;
+    double? distance;
+    bool isAtLocation = false;
+
+    if (hasGps) {
+      distance = DistanceCalculator.calculateDistanceMeters(
+        lat1: userCoords.latitude,
+        lon1: userCoords.longitude,
+        lat2: quest.latitude,
+        lon2: quest.longitude,
+      );
+      isAtLocation = distance <= quest.radiusMeters;
+    }
+
+    final cardColor = isAtLocation
+        ? AppColors.accentSuccess
+        : (hasGps ? const Color(0xFFF59E0B) : AppColors.accentDanger);
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cardColor.withValues(alpha: 0.5), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: cardColor.withValues(alpha: 0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: cardColor.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isAtLocation
+                      ? Icons.check_circle_rounded
+                      : (hasGps ? Icons.directions_walk_rounded : Icons.location_off_rounded),
+                  color: cardColor,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isAtLocation
+                          ? 'YOU ARE AT THE QUEST LOCATION!'
+                          : (hasGps ? 'LOCATION VISIT REQUIRED' : 'LOCATION SERVICES REQUIRED'),
+                      style: AppTypography.caption.copyWith(
+                        color: cardColor,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isAtLocation
+                          ? 'Within ${DistanceCalculator.formatDistance(distance!)} of ${quest.locationName}'
+                          : (hasGps
+                              ? '${DistanceCalculator.formatDistance(distance!)} away from ${quest.locationName}'
+                              : 'Turn on GPS to verify proximity'),
+                      style: AppTypography.bodyMedium.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            isAtLocation
+                ? 'Your GPS location is verified. You can now perform the required quest actions and submit proof!'
+                : 'To complete this quest, open the app, enable location services, and physically visit ${quest.locationName} (within ${quest.radiusMeters.round()}m).',
+            style: AppTypography.caption.copyWith(
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              if (!hasGps)
+                Expanded(
+                  child: CustomButton(
+                    text: 'ENABLE LOCATION / GPS',
+                    icon: Icons.my_location_rounded,
+                    customColor: AppColors.primary,
+                    onPressed: () {
+                      ref
+                          .read(locationPermissionNotifierProvider.notifier)
+                          .requestAndAcquireLocation();
+                    },
+                  ),
+                )
+              else
+                Expanded(
+                  child: CustomButton(
+                    text: isAtLocation ? 'VERIFIED AT LOCATION' : 'GET DIRECTIONS IN MAPS',
+                    icon: isAtLocation ? Icons.verified_rounded : Icons.directions_rounded,
+                    isOutlined: !isAtLocation,
+                    customColor: isAtLocation ? AppColors.accentSuccess : AppColors.secondary,
+                    onPressed: () {
+                      ref.read(mapsLauncherServiceProvider).openGoogleMapsDirections(
+                            originLat: userCoords.latitude,
+                            originLon: userCoords.longitude,
+                            destLat: quest.latitude,
+                            destLon: quest.longitude,
+                            destinationName: quest.locationName,
+                          );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

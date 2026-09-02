@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import 'package:quest_up/app/router/route_paths.dart';
 import 'package:quest_up/app/theme/app_colors.dart';
 import 'package:quest_up/app/theme/app_typography.dart';
+import 'package:quest_up/core/services/app_external_service.dart';
 import 'package:quest_up/core/widgets/animated_xp_bar.dart';
-import 'package:quest_up/core/widgets/custom_button.dart';
 import 'package:quest_up/core/widgets/error_state_widget.dart';
 import 'package:quest_up/core/widgets/shimmer_loading.dart';
 import 'package:quest_up/features/auth/presentation/providers/auth_providers.dart';
@@ -76,57 +74,6 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
-  void _showLogoutDialog(BuildContext context, WidgetRef ref) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: const BorderSide(color: AppColors.border),
-        ),
-        title: Row(
-          children: [
-            const Icon(Icons.logout_rounded, color: AppColors.accentDanger),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Log Out',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTypography.titleLarge,
-              ),
-            ),
-          ],
-        ),
-        content: Text(
-          'Are you sure you want to log out of your QuestUP explorer account?',
-          style: AppTypography.bodyMedium,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel', style: AppTypography.bodyMedium),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accentDanger,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () async {
-              Navigator.pop(context);
-              await ref.read(authNotifierProvider.notifier).logout();
-              if (context.mounted) {
-                context.go(RoutePaths.welcome);
-              }
-            },
-            child: const Text('Log Out'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authNotifierProvider);
@@ -136,11 +83,6 @@ class ProfileScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Explorer Profile'),
         actions: [
-          IconButton(
-            tooltip: 'Log Out',
-            icon: const Icon(Icons.logout_rounded, color: AppColors.textMuted),
-            onPressed: () => _showLogoutDialog(context, ref),
-          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             onPressed: () => ref.read(userProfileNotifierProvider.notifier).loadProfile(),
@@ -357,14 +299,52 @@ class ProfileScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 20),
 
-                // Log out button
-                CustomButton(
-                  text: 'LOG OUT OF QUESTUP',
-                  icon: Icons.logout_rounded,
-                  isOutlined: true,
-                  customColor: AppColors.accentDanger,
-                  width: double.infinity,
-                  onPressed: () => _showLogoutDialog(context, ref),
+                // ABOUT & SUPPORT Section (Privacy Policy, Rate Us, Share QuestUP)
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(18, 16, 18, 8),
+                        child: Text(
+                          'ABOUT & SUPPORT',
+                          style: AppTypography.caption.copyWith(
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.1,
+                          ),
+                        ),
+                      ),
+                      _buildMenuTile(
+                        icon: Icons.shield_outlined,
+                        iconColor: AppColors.accentSuccess,
+                        title: 'Privacy Policy',
+                        subtitle: 'Learn how QuestUP handles your data',
+                        onTap: () => const AppExternalService().openPrivacyPolicy(context: context),
+                      ),
+                      const Divider(height: 1, indent: 56, endIndent: 16, color: AppColors.border),
+                      _buildMenuTile(
+                        icon: Icons.star_rounded,
+                        iconColor: AppColors.secondary,
+                        title: 'Rate Us',
+                        subtitle: 'Enjoying QuestUP? Rate the app',
+                        onTap: () => const AppExternalService().openRateUs(context: context),
+                      ),
+                      const Divider(height: 1, indent: 56, endIndent: 16, color: AppColors.border),
+                      _buildMenuTile(
+                        icon: Icons.share_rounded,
+                        iconColor: AppColors.accentLocation,
+                        title: 'Share QuestUP',
+                        subtitle: 'Invite friends to join your quests',
+                        onTap: () => const AppExternalService().shareQuestUp(context: context),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 16),
 
@@ -401,6 +381,68 @@ class ProfileScreen extends ConsumerWidget {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildMenuTile({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: iconColor, size: 20),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.titleMedium.copyWith(fontSize: 14),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.caption.copyWith(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.textMuted,
+                size: 20,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

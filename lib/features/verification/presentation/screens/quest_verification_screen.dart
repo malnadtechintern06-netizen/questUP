@@ -9,6 +9,7 @@ import 'package:quest_up/core/widgets/custom_button.dart';
 import 'package:quest_up/core/widgets/error_state_widget.dart';
 import 'package:quest_up/core/widgets/reward_dialog.dart';
 import 'package:quest_up/core/widgets/shimmer_loading.dart';
+import 'package:quest_up/features/location_permission/presentation/providers/location_permission_provider.dart';
 import 'package:quest_up/features/profile/presentation/providers/user_providers.dart';
 import 'package:quest_up/features/quests/domain/entities/quest.dart';
 import 'package:quest_up/features/quests/presentation/providers/quest_providers.dart';
@@ -56,7 +57,7 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Quest Verification'),
+        title: const Text('Smart Proof Verification'),
       ),
       body: questAsync.when(
         loading: () => const Padding(
@@ -106,11 +107,67 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Quest Header Card
-                      _buildQuestHeader(quest),
+                      _buildQuestHeader(quest, verificationState),
                       const SizedBox(height: 14),
 
+                      // Location Services & Proximity Check Prompt
+                      if (isLocationRequired && userCoords == null) ...[
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: AppColors.accentDanger.withValues(alpha: 0.6),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.location_off_rounded, color: AppColors.accentDanger, size: 22),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      'Location Services Disabled',
+                                      style: AppTypography.titleMedium.copyWith(
+                                        color: AppColors.accentDanger,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'To complete this quest, open the app, enable location services, and physically visit ${quest.locationName}.',
+                                style: AppTypography.caption.copyWith(
+                                  color: AppColors.textSecondary,
+                                  height: 1.3,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              CustomButton(
+                                text: 'ENABLE LOCATION / GPS',
+                                icon: Icons.my_location_rounded,
+                                customColor: AppColors.primary,
+                                width: double.infinity,
+                                onPressed: () {
+                                  ref
+                                      .read(locationPermissionNotifierProvider.notifier)
+                                      .requestAndAcquireLocation();
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+
                       // Requirements Breakdown Checklist
-                      _buildRequirementsChecklist(quest, userCoords),
+                      _buildRequirementsChecklist(quest, userCoords, verificationState),
                       const SizedBox(height: 16),
 
                       // Dedicated Verification Engine
@@ -130,23 +187,41 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
                         const SizedBox(height: 16),
                       ],
 
-                      // Error message banner if any
-                      if (verificationState.errorMessage != null && verificationState.validatorResults.isEmpty) ...[
+                      // Error / Rejection message banner if any
+                      if (verificationState.errorMessage != null) ...[
                         Container(
-                          padding: const EdgeInsets.all(12),
+                          padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
                             color: AppColors.accentDanger.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(14),
                             border: Border.all(color: AppColors.accentDanger),
                           ),
                           child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(Icons.warning_amber_rounded, color: AppColors.accentDanger),
-                              const SizedBox(width: 10),
+                              const Icon(Icons.cancel_rounded, color: AppColors.accentDanger, size: 22),
+                              const SizedBox(width: 12),
                               Expanded(
-                                child: Text(
-                                  verificationState.errorMessage!,
-                                  style: AppTypography.bodyMedium.copyWith(color: Colors.white),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'PROOF REJECTED ❌',
+                                      style: AppTypography.titleMedium.copyWith(
+                                        color: AppColors.accentDanger,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      verificationState.errorMessage!,
+                                      style: AppTypography.bodyMedium.copyWith(
+                                        color: Colors.white,
+                                        height: 1.3,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
@@ -169,36 +244,53 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
                   ),
                 ),
                 child: SafeArea(
-                  child: CustomButton(
-                    text: 'SUBMIT VERIFICATION PROOF',
-                    icon: Icons.verified_rounded,
-                    isLoading: verificationState.isVerifying,
-                    width: double.infinity,
-                    onPressed: () async {
-                      final result = await ref
-                          .read(verificationNotifierProvider.notifier)
-                          .submitVerification(
-                            quest: quest,
-                            userLat: userCoords?.latitude,
-                            userLon: userCoords?.longitude,
-                          );
+                  child: verificationState.uiState == QuestVerificationUIState.rejected
+                      ? Row(
+                          children: [
+                            Expanded(
+                              child: CustomButton(
+                                text: 'RETRY & CAPTURE FRESH PROOF',
+                                icon: Icons.refresh_rounded,
+                                customColor: AppColors.accentDanger,
+                                onPressed: () {
+                                  ref.read(verificationNotifierProvider.notifier).clearProof();
+                                },
+                              ),
+                            ),
+                          ],
+                        )
+                      : CustomButton(
+                          text: verificationState.isVerifying
+                              ? 'VERIFYING PROOF... ⏳'
+                              : 'SUBMIT PROOF FOR VERIFICATION',
+                          icon: Icons.verified_rounded,
+                          isLoading: verificationState.isVerifying,
+                          width: double.infinity,
+                          onPressed: () async {
+                            final result = await ref
+                                .read(verificationNotifierProvider.notifier)
+                                .submitVerification(
+                                  quest: quest,
+                                  userLat: userCoords?.latitude,
+                                  userLon: userCoords?.longitude,
+                                );
 
-                      if (result.isSuccessful && context.mounted) {
-                        RewardDialog.show(
-                          context,
-                          questTitle: quest.title,
-                          xpEarned: result.xpEarned,
-                          coinsEarned: result.coinsEarned,
-                          didLevelUp: result.didLevelUp,
-                          newLevel: result.newLevel,
-                          unlockedBadgeTitle: result.unlockedBadgeTitle,
-                          onClaim: () {
-                            context.go(RoutePaths.home);
+                            if (result.isSuccessful && context.mounted) {
+                              RewardDialog.show(
+                                context,
+                                questTitle: quest.title,
+                                xpEarned: result.xpEarned,
+                                coinsEarned: result.coinsEarned,
+                                didLevelUp: result.didLevelUp,
+                                newLevel: result.newLevel,
+                                unlockedBadgeTitle: result.unlockedBadgeTitle,
+                                onClaim: () {
+                                  context.go(RoutePaths.home);
+                                },
+                              );
+                            }
                           },
-                        );
-                      }
-                    },
-                  ),
+                        ),
                 ),
               ),
             ],
@@ -208,90 +300,151 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
     );
   }
 
-  Widget _buildQuestHeader(Quest quest) {
+  Widget _buildQuestHeader(Quest quest, VerificationState state) {
+    final hasActiveSession = state.activeSession != null && state.activeSession!.isActive;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(
+          color: hasActiveSession ? AppColors.primary.withValues(alpha: 0.5) : AppColors.border,
+        ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(_getCategoryIcon(quest.category), color: AppColors.primary),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  quest.title,
-                  style: AppTypography.titleMedium,
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                Text(
-                  quest.locationName,
-                  style: AppTypography.caption,
+                child: Icon(_getCategoryIcon(quest.category), color: AppColors.primary),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      quest.title,
+                      style: AppTypography.titleMedium,
+                    ),
+                    Text(
+                      quest.locationName,
+                      style: AppTypography.caption,
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              if (hasActiveSession)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentSuccess.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.accentSuccess.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.bolt_rounded, size: 12, color: AppColors.accentSuccess),
+                      const SizedBox(width: 3),
+                      Text(
+                        'Session Active',
+                        style: AppTypography.caption.copyWith(
+                          color: AppColors.accentSuccess,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildRequirementsChecklist(Quest quest, dynamic userCoords) {
+  Widget _buildRequirementsChecklist(
+    Quest quest,
+    dynamic userCoords,
+    VerificationState verificationState,
+  ) {
     final items = <Widget>[];
 
-    // GPS Geofence
+    // 1. Quest Session Status
+    final isSessionActive = verificationState.activeSession?.isActive ?? true;
+    items.add(_buildChecklistItem(
+      icon: Icons.shield_outlined,
+      title: 'Quest Session',
+      subtitle: isSessionActive ? 'Active quest session' : 'Session expired',
+      isMet: isSessionActive,
+    ));
+
+    // 2. GPS Geofence
     if (quest.hasGpsRequirement) {
+      final isGpsNearby = userCoords != null &&
+          DistanceCalculator.isWithinRadius(
+            userLat: userCoords.latitude,
+            userLon: userCoords.longitude,
+            targetLat: quest.latitude,
+            targetLon: quest.longitude,
+            radiusMeters: quest.radiusMeters,
+          );
+
       items.add(_buildChecklistItem(
         icon: Icons.my_location_rounded,
         title: 'GPS Geofence',
         subtitle: 'Within ${quest.radiusMeters.round()}m of waypoint',
-        isMet: userCoords != null &&
-            DistanceCalculator.isWithinRadius(
-              userLat: userCoords.latitude,
-              userLon: userCoords.longitude,
-              targetLat: quest.latitude,
-              targetLon: quest.longitude,
-              radiusMeters: quest.radiusMeters,
-            ),
+        isMet: userCoords != null ? isGpsNearby : null,
       ));
     }
 
-    // Walking Distance
+    // 3. Walking Distance
     if (quest.requiredDistanceMeters > 0 || quest.verificationType == QuestVerificationType.walkingGps) {
       items.add(_buildChecklistItem(
         icon: Icons.directions_walk_rounded,
         title: 'Walking Distance',
         subtitle: '${DistanceCalculator.formatDistance(quest.requiredDistanceMeters > 0 ? quest.requiredDistanceMeters : 1000)} live GPS tracking',
+        isMet: verificationState.distanceMeters >= (quest.requiredDistanceMeters > 0 ? quest.requiredDistanceMeters : 1000),
       ));
     }
 
-    // In-App Fresh Photo
+    // 4. In-App Fresh Photo
     if (quest.requiresFreshPhoto) {
       items.add(_buildChecklistItem(
         icon: Icons.camera_alt_rounded,
         title: 'Fresh In-App Photo',
-        subtitle: 'Live camera capture during this quest attempt',
+        subtitle: 'Live camera capture during this session',
+        isMet: verificationState.capturedPhotoPath != null && verificationState.isFreshCapture,
       ));
     } else if (quest.requiresPhoto || quest.verificationType == QuestVerificationType.photoProof) {
       items.add(_buildChecklistItem(
         icon: Icons.photo_camera_outlined,
         title: 'Photo Proof',
         subtitle: 'Capture or upload image proof',
+        isMet: verificationState.capturedPhotoPath != null,
       ));
     }
 
-    // Generic Target Object
+    // 5. Anti-Duplicate Proof Check
+    if (verificationState.mediaHash != null) {
+      items.add(_buildChecklistItem(
+        icon: Icons.fingerprint_rounded,
+        title: 'Anti-Duplicate Check',
+        subtitle: 'Unique SHA-256 fingerprint verified',
+        isMet: true,
+      ));
+    }
+
+    // 6. Generic Target Object
     if (quest.hasObjectDetection) {
       items.add(_buildChecklistItem(
         icon: Icons.search_rounded,
@@ -300,7 +453,17 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
       ));
     }
 
-    // Place Detection
+    // 7. Anti-Cheat Screen / Display Check
+    if (quest.requiresAntiScreenCheck) {
+      items.add(_buildChecklistItem(
+        icon: Icons.shield_outlined,
+        title: 'Anti-Screen & Display Check',
+        subtitle: 'Photos of screens, monitors, or posters rejected',
+        isMet: true,
+      ));
+    }
+
+    // 7. Place Detection
     if (quest.hasPlaceDetection) {
       items.add(_buildChecklistItem(
         icon: Icons.account_balance_outlined,
@@ -309,30 +472,33 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
       ));
     }
 
-    // Session Timer
+    // 8. Session Timer / Video
     if (quest.requiredDurationSeconds > 0) {
       items.add(_buildChecklistItem(
         icon: Icons.timer_outlined,
         title: 'Session Duration',
-        subtitle: '${(quest.requiredDurationSeconds ~/ 60)} minutes continuous activity',
+        subtitle: '${(quest.requiredDurationSeconds ~/ 60)} mins continuous session',
+        isMet: verificationState.durationSeconds >= quest.requiredDurationSeconds,
       ));
     }
 
-    // Word Count
+    // 9. Word Count & Anti-Cheat
     if (quest.requiredWords > 0) {
       items.add(_buildChecklistItem(
         icon: Icons.edit_note_outlined,
         title: 'Word Count',
-        subtitle: 'Minimum ${quest.requiredWords} words written in editor',
+        subtitle: 'Minimum ${quest.requiredWords} words (Anti-cheat typing enabled)',
+        isMet: verificationState.wordCount >= quest.requiredWords && !verificationState.isPasted,
       ));
     }
 
-    // Drawing Canvas
+    // 10. Drawing Canvas
     if (quest.requiresDrawing || quest.verificationType == QuestVerificationType.drawingCanvas) {
       items.add(_buildChecklistItem(
         icon: Icons.palette_outlined,
         title: 'Drawing Canvas',
         subtitle: 'Illustrate ${quest.requiredDrawingSubject ?? quest.requiredObject ?? 'artwork'} on canvas',
+        isMet: verificationState.drawingProofSummary != null,
       ));
     }
 
@@ -391,6 +557,7 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
                   style: AppTypography.caption.copyWith(
                     fontWeight: FontWeight.bold,
                     color: AppColors.textPrimary,
+                    fontSize: 11,
                   ),
                 ),
                 Expanded(
@@ -398,7 +565,10 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
                     subtitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppTypography.caption.copyWith(color: AppColors.textSecondary),
+                    style: AppTypography.caption.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 11,
+                    ),
                   ),
                 ),
               ],
@@ -410,16 +580,15 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
   }
 
   Widget _buildVerificationReportCard(List<ValidatorResult> results) {
-    final allPassed = results.every((r) => r.passed);
-
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: allPassed ? AppColors.accentSuccess : AppColors.accentDanger,
-          width: 1.5,
+          color: results.every((r) => r.passed)
+              ? AppColors.accentSuccess.withValues(alpha: 0.5)
+              : AppColors.accentDanger.withValues(alpha: 0.5),
         ),
       ),
       child: Column(
@@ -428,59 +597,54 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
           Row(
             children: [
               Icon(
-                allPassed ? Icons.verified_user_rounded : Icons.gpp_maybe_rounded,
-                color: allPassed ? AppColors.accentSuccess : AppColors.accentDanger,
-                size: 20,
+                results.every((r) => r.passed)
+                    ? Icons.check_circle_rounded
+                    : Icons.error_outline_rounded,
+                color: results.every((r) => r.passed)
+                    ? AppColors.accentSuccess
+                    : AppColors.accentDanger,
               ),
               const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  allPassed ? 'Verification Report: All Checks Passed ✅' : 'Verification Report: Requirements Incomplete',
-                  style: AppTypography.titleMedium.copyWith(
-                    color: allPassed ? AppColors.accentSuccess : AppColors.accentDanger,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
+              Text(
+                'Smart Proof Validation Breakdown',
+                style: AppTypography.titleMedium.copyWith(fontSize: 14, fontWeight: FontWeight.bold),
               ),
             ],
           ),
-          const Divider(height: 20, color: AppColors.divider),
-          ...results.map((r) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      r.passed ? Icons.check_circle : Icons.error_outline,
-                      size: 16,
-                      color: r.passed ? AppColors.accentSuccess : AppColors.accentDanger,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${r.validatorName}: ${r.actualValue ?? (r.passed ? 'Verified' : 'Failed')}',
-                            style: AppTypography.caption.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
-                            ),
+          const SizedBox(height: 12),
+          ...results.map((r) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    r.passed ? Icons.check_rounded : Icons.close_rounded,
+                    color: r.passed ? AppColors.accentSuccess : AppColors.accentDanger,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          r.validatorName,
+                          style: AppTypography.caption.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          r.message,
+                          style: AppTypography.caption.copyWith(
+                            color: r.passed ? AppColors.textSecondary : AppColors.accentDanger,
                           ),
-                          Text(
-                            r.message,
-                            style: AppTypography.caption.copyWith(
-                              color: r.passed ? AppColors.textSecondary : AppColors.accentDanger,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              )),
+                  ),
+                ],
+              ),
+            );
+          }),
         ],
       ),
     );
@@ -492,19 +656,47 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
     required Quest quest,
     required VerificationState verificationState,
     required dynamic cameraService,
-    dynamic userCoords,
+    required dynamic userCoords,
   }) {
     switch (quest.verificationType) {
-      case QuestVerificationType.drawingCanvas:
+      case QuestVerificationType.walkingGps:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Draw Artwork on Canvas', style: AppTypography.titleMedium),
+            Text('Walking Tracker Proof', style: AppTypography.titleMedium),
             const SizedBox(height: 8),
-            DrawingCanvasWidget(
-              title: quest.title,
-              onDrawingReady: (summary) {
-                ref.read(verificationNotifierProvider.notifier).updateDrawingProof(summary);
+            WalkingDistanceTrackerWidget(
+              requiredDistanceMeters: quest.requiredDistanceMeters > 0
+                  ? quest.requiredDistanceMeters
+                  : 1000.0,
+              onWalkingUpdated: (dist, isSatisfied) {
+                ref
+                    .read(verificationNotifierProvider.notifier)
+                    .updateWalkingDistance(dist, isSatisfied);
+              },
+            ),
+          ],
+        );
+
+      case QuestVerificationType.timedVideo:
+      case QuestVerificationType.videoProof:
+      case QuestVerificationType.timedActivity:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Continuous Activity Video Verification', style: AppTypography.titleMedium),
+            const SizedBox(height: 8),
+            VideoTimerRecorderWidget(
+              requiredDurationSeconds: quest.requiredDurationSeconds > 0
+                  ? quest.requiredDurationSeconds
+                  : 300,
+              requiresVideoProof: quest.requiresVideo ||
+                  quest.verificationType == QuestVerificationType.timedVideo,
+              cameraService: cameraService,
+              onSessionUpdated: (seconds, videoPath, isSatisfied) {
+                ref
+                    .read(verificationNotifierProvider.notifier)
+                    .updateSessionTimer(seconds, videoPath, isSatisfied);
               },
             ),
           ],
@@ -514,23 +706,22 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('In-App Writing Editor', style: AppTypography.titleMedium),
+            Text('Authentic Writing Challenge', style: AppTypography.titleMedium),
             const SizedBox(height: 8),
             WritingEditorWidget(
-              requiredWords: quest.requiredWords,
-              requiredLines: quest.requiredLines,
+              requiredWords: quest.requiredWords > 0 ? quest.requiredWords : 50,
               promptHint: quest.description,
-              onTextChanged: (text, words, isSatisfied) {
+              onTextChanged: (text, count, isSatisfied) {
                 ref.read(verificationNotifierProvider.notifier).updateTextProof(
                       text,
-                      words,
+                      count,
                       isSatisfied,
                     );
               },
-              onDetailedTextChanged: (text, words, isSatisfied, isAuthentic, pastedChars) {
+              onDetailedTextChanged: (text, count, isSatisfied, isAuthentic, pastedChars) {
                 ref.read(verificationNotifierProvider.notifier).updateTextProof(
                       text,
-                      words,
+                      count,
                       isSatisfied,
                       isPasted: !isAuthentic,
                       pastedChars: pastedChars,
@@ -541,57 +732,18 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
           ],
         );
 
-      case QuestVerificationType.timedActivity:
-      case QuestVerificationType.timedVideo:
-      case QuestVerificationType.videoProof:
+      case QuestVerificationType.drawingCanvas:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Activity Timer & Video Proof', style: AppTypography.titleMedium),
+            Text('Drawing Canvas Challenge', style: AppTypography.titleMedium),
             const SizedBox(height: 8),
-            VideoTimerRecorderWidget(
-              requiredDurationSeconds: quest.requiredDurationSeconds,
-              requiresVideoProof: quest.requiresVideo,
-              cameraService: cameraService,
-              onSessionUpdated: (seconds, videoPath, isSatisfied) {
-                ref.read(verificationNotifierProvider.notifier).updateSessionTimer(seconds, videoPath, isSatisfied);
+            DrawingCanvasWidget(
+              title: quest.requiredDrawingSubject ?? quest.requiredObject ?? 'Artwork',
+              onDrawingReady: (summary) {
+                ref.read(verificationNotifierProvider.notifier).updateDrawingProof(summary);
               },
             ),
-          ],
-        );
-
-      case QuestVerificationType.walkingGps:
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Live GPS Walking Tracker', style: AppTypography.titleMedium),
-            const SizedBox(height: 8),
-            WalkingDistanceTrackerWidget(
-              requiredDistanceMeters: quest.requiredDistanceMeters,
-              onWalkingUpdated: (dist, isSatisfied) {
-                ref.read(verificationNotifierProvider.notifier).updateWalkingDistance(dist, isSatisfied);
-              },
-            ),
-            if (quest.requiresFreshPhoto || quest.requiresPhoto) ...[
-              const SizedBox(height: 16),
-              Text('Step 2: Landmark Photo Proof', style: AppTypography.titleMedium),
-              const SizedBox(height: 8),
-              CameraProofViewfinder(
-                photoPath: verificationState.capturedPhotoPath,
-                requiresFreshPhoto: quest.requiresFreshPhoto,
-                requiredObject: quest.requiredObject,
-                requiredPlace: quest.requiredPlace,
-                onTakePhoto: () {
-                  ref.read(verificationNotifierProvider.notifier).captureCameraProof();
-                },
-                onPickGallery: () {
-                  ref.read(verificationNotifierProvider.notifier).pickProofFromGallery();
-                },
-                onClear: () {
-                  ref.read(verificationNotifierProvider.notifier).clearProof();
-                },
-              ),
-            ],
           ],
         );
 
@@ -630,7 +782,7 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
               const SizedBox(height: 20),
             ],
             Text(
-              quest.hasGpsRequirement ? 'Step 2: Photo Proof' : 'Photo Proof Submission',
+              quest.hasGpsRequirement ? 'Step 2: In-App Photo Proof' : 'Photo Proof Submission',
               style: AppTypography.titleMedium,
             ),
             const SizedBox(height: 8),

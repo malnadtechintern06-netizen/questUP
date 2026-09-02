@@ -1,9 +1,12 @@
+import 'dart:developer' as dev;
 import 'package:quest_up/features/quests/domain/entities/quest.dart';
 import 'package:quest_up/features/verification/domain/entities/quest_attempt.dart';
 import 'package:quest_up/features/verification/domain/entities/validator_result.dart';
+import 'duplicate_proof_service.dart';
 import 'validators/anti_cheat_writing_verifier.dart';
 import 'validators/distance_verifier.dart';
 import 'validators/drawing_verifier.dart';
+import 'validators/duplicate_proof_verifier.dart';
 import 'validators/fresh_photo_verifier.dart';
 import 'validators/gameplay_time_verifier.dart';
 import 'validators/gps_verifier.dart';
@@ -12,10 +15,13 @@ import 'validators/line_count_verifier.dart';
 import 'validators/object_detection_verifier.dart';
 import 'validators/place_detection_verifier.dart';
 import 'validators/repetition_verifier.dart';
+import 'validators/screen_detection_verifier.dart';
+import 'validators/session_verifier.dart';
 import 'validators/text_verifier.dart';
 import 'validators/timed_activity_verifier.dart';
 import 'validators/timed_video_verifier.dart';
 import 'validators/word_count_verifier.dart';
+import 'scene_authenticity_service.dart';
 
 class VerificationCheckOutcome {
   final bool isValid;
@@ -26,6 +32,18 @@ class VerificationCheckOutcome {
     required this.isValid,
     required this.message,
     this.validatorResults = const [],
+  });
+}
+
+class VerificationReport {
+  final bool isSuccessful;
+  final List<ValidatorResult> results;
+  final String overallMessage;
+
+  const VerificationReport({
+    required this.isSuccessful,
+    required this.results,
+    required this.overallMessage,
   });
 }
 
@@ -51,9 +69,11 @@ abstract class IQuestVerificationService {
 }
 
 class QuestVerificationService implements IQuestVerificationService {
+  final SessionVerifier _sessionVerifier = SessionVerifier();
   final GpsVerifier _gpsVerifier = GpsVerifier();
   final FreshPhotoVerifier _freshPhotoVerifier = FreshPhotoVerifier();
   final ObjectDetectionVerifier _objectDetectionVerifier = ObjectDetectionVerifier();
+  final ScreenDetectionVerifier _screenDetectionVerifier;
   final PlaceDetectionVerifier _placeDetectionVerifier = PlaceDetectionVerifier();
   final TimedVideoVerifier _timedVideoVerifier = TimedVideoVerifier();
   final TimedActivityVerifier _timedActivityVerifier = TimedActivityVerifier();
@@ -65,45 +85,67 @@ class QuestVerificationService implements IQuestVerificationService {
   final DistanceVerifier _distanceVerifier = DistanceVerifier();
   final GameplayTimeVerifier _gameplayTimeVerifier = GameplayTimeVerifier();
   final RepetitionVerifier _repetitionVerifier = RepetitionVerifier();
+  final DuplicateProofVerifier? _duplicateProofVerifier;
+
+  QuestVerificationService({
+    IDuplicateProofService? duplicateProofService,
+    ISceneAuthenticityService authenticityService = const SceneAuthenticityService(),
+  })  : _duplicateProofVerifier = duplicateProofService != null
+            ? DuplicateProofVerifier(duplicateProofService)
+            : null,
+        _screenDetectionVerifier = ScreenDetectionVerifier(authenticityService);
 
   /// Dynamically assembles the list of validators based on the quest's requirements.
   List<IQuestValidator> resolveValidatorsForQuest(Quest quest) {
     final validators = <IQuestValidator>[];
 
-    // 1. GPS Geofence (Location / Destination Quests with coordinates)
+    // 0. Quest Session Verification (Valid session, not expired)
+    validators.add(_sessionVerifier);
+
+    // 1. Anti-Duplicate Proof Check (if media hash available and verifier configured)
+    if (_duplicateProofVerifier != null) {
+      validators.add(_duplicateProofVerifier);
+    }
+
+    // 2. GPS Geofence (Location / Destination Quests with coordinates)
     if (quest.latitude != 0.0 && quest.longitude != 0.0 && quest.verificationType != QuestVerificationType.walkingGps) {
       validators.add(_gpsVerifier);
     }
 
-    // 2. Walking Distance
+    // 3. Walking Distance
     if (quest.verificationType == QuestVerificationType.walkingGps || quest.requiredDistanceMeters > 0) {
       validators.add(_distanceVerifier);
     }
 
-    // 3. In-App Camera Photo / Fresh Photo Proof
+    // 4. In-App Camera Photo / Fresh Photo Proof
     if (quest.requiresFreshPhoto || quest.requiresPhoto || quest.verificationType == QuestVerificationType.photoProof) {
       validators.add(_freshPhotoVerifier);
     }
 
-    // 4. Generic Object Detection (flower, cow, tree, apple, book, etc.)
+    // 5. Generic Object Detection (flower, cow, tree, apple, book, etc.)
     if (quest.hasObjectDetection) {
       validators.add(_objectDetectionVerifier);
     }
 
-    // 5. Place Category / Target Detection
+    // 6. Anti-Cheat Screen & Photo-of-Photo Detection (Phone/Monitor/Poster/Display checks)
+    if (quest.requiresAntiScreenCheck || quest.requiresFreshPhoto || quest.hasObjectDetection || quest.verificationType == QuestVerificationType.photoProof) {
+      validators.add(_screenDetectionVerifier);
+    }
+
+    // 7. Place Category / Target Detection
     if (quest.hasPlaceDetection) {
       validators.add(_placeDetectionVerifier);
     }
 
-    // 6. Timed Video (Reading, Exercise, etc.)
+    // 7. Timed Video (Reading, Exercise, etc.)
     if (quest.requiresVideo || quest.verificationType == QuestVerificationType.timedVideo || quest.verificationType == QuestVerificationType.videoProof) {
       validators.add(_timedVideoVerifier);
     } else if (quest.verificationType == QuestVerificationType.timedActivity || quest.requiredDurationSeconds > 0) {
-      // 7. Activity Timer (without mandatory video)
+      // 8. Activity Timer (without mandatory video)
       validators.add(_timedActivityVerifier);
     }
 
-    // 8. Text Content, Anti-Cheat, & Word Count
+    // 9. Text Content, Anti-Cheat, & Word Count
     if (quest.requiresText || quest.verificationType == QuestVerificationType.writingText) {
       validators.add(_textVerifier);
       validators.add(_antiCheatWritingVerifier);
@@ -115,54 +157,19 @@ class QuestVerificationService implements IQuestVerificationService {
       }
     }
 
-    // 9. Drawing Canvas
+    // 10. Drawing Canvas
     if (quest.requiresDrawing || quest.verificationType == QuestVerificationType.drawingCanvas) {
       validators.add(_drawingVerifier);
     }
 
-    // 10. Gameplay Timer
+    // 11. Gameplay Timer
     if (quest.requiresGameSession || quest.verificationType == QuestVerificationType.gameplayTime) {
       validators.add(_gameplayTimeVerifier);
     }
 
-    // 11. Repetitions
+    // 12. Repetitions
     if (quest.requiredRepetitions > 0) {
       validators.add(_repetitionVerifier);
-    }
-
-    // Fallback if no specific validator matched
-    if (validators.isEmpty) {
-      switch (quest.verificationType) {
-        case QuestVerificationType.locationGps:
-          validators.add(_gpsVerifier);
-          break;
-        case QuestVerificationType.photoProof:
-          validators.add(_freshPhotoVerifier);
-          break;
-        case QuestVerificationType.timedActivity:
-          validators.add(_timedActivityVerifier);
-          break;
-        case QuestVerificationType.timedVideo:
-        case QuestVerificationType.videoProof:
-          validators.add(_timedVideoVerifier);
-          break;
-        case QuestVerificationType.writingText:
-          validators.add(_textVerifier);
-          if (quest.requiredWords > 0) validators.add(_wordCountVerifier);
-          break;
-        case QuestVerificationType.drawingCanvas:
-          validators.add(_drawingVerifier);
-          break;
-        case QuestVerificationType.walkingGps:
-          validators.add(_distanceVerifier);
-          break;
-        case QuestVerificationType.gameplayTime:
-          validators.add(_gameplayTimeVerifier);
-          break;
-        case QuestVerificationType.compositeRules:
-        case QuestVerificationType.customConfig:
-          break;
-      }
     }
 
     return validators;
@@ -174,23 +181,13 @@ class QuestVerificationService implements IQuestVerificationService {
     required QuestAttempt attempt,
     required VerificationProofPayload payload,
   }) async {
+    dev.log('[PROOF] Verification started for quest: "${quest.title}" (ID: ${quest.id})', name: 'SmartProof');
+    if (payload.sessionId != null) {
+      dev.log('[PROOF] Quest session validated: sessionId=${payload.sessionId}', name: 'SmartProof');
+    }
+
     final validators = resolveValidatorsForQuest(quest);
     final results = <ValidatorResult>[];
-
-    if (validators.isEmpty) {
-      final defaultPass = ValidatorResult(
-        passed: true,
-        validatorName: 'Standard Verification',
-        actualValue: 'Complete',
-        requiredValue: 'Complete',
-        message: 'Quest verification complete.',
-      );
-      return VerificationReport(
-        isSuccessful: true,
-        results: [defaultPass],
-        overallMessage: 'All requirements verified successfully!',
-      );
-    }
 
     for (final validator in validators) {
       final res = await validator.validate(
@@ -199,6 +196,10 @@ class QuestVerificationService implements IQuestVerificationService {
         payload: payload,
       );
       results.add(res);
+      dev.log(
+        '[PROOF] Check [${validator.validatorName}]: ${res.passed ? "PASSED ✅" : "FAILED ❌"} (${res.actualValue} vs ${res.requiredValue})',
+        name: 'SmartProof',
+      );
     }
 
     final isSuccessful = results.every((r) => r.passed);
@@ -207,6 +208,11 @@ class QuestVerificationService implements IQuestVerificationService {
     final overallMessage = isSuccessful
         ? 'All ${results.length} verification requirements passed! Quest completed.'
         : (firstFailure?.message ?? 'Verification requirement check failed.');
+
+    dev.log(
+      '[PROOF] Verification completed: status=${isSuccessful ? "VERIFIED ✅" : "REJECTED ❌"}',
+      name: 'SmartProof',
+    );
 
     return VerificationReport(
       isSuccessful: isSuccessful,
@@ -230,7 +236,7 @@ class QuestVerificationService implements IQuestVerificationService {
   }) {
     final attempt = QuestAttempt(
       attemptId: 'quick_attempt_${DateTime.now().millisecondsSinceEpoch}',
-      userId: 'anonymous_user',
+      userId: 'player',
       questId: quest.id,
       startedAt: DateTime.now(),
     );
@@ -252,9 +258,7 @@ class QuestVerificationService implements IQuestVerificationService {
     final results = <ValidatorResult>[];
 
     for (final validator in validators) {
-      // Synchronous compatibility execution
       final future = validator.validate(quest: quest, attempt: attempt, payload: payload);
-      // Since our validators are pure math/logic computation, we extract the result
       future.then((res) => results.add(res));
     }
 

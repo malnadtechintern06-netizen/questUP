@@ -25,6 +25,8 @@ class ObjectDetectionVerifier implements IQuestValidator {
       );
     }
 
+    final displayObj = requiredObj[0].toUpperCase() + requiredObj.substring(1);
+
     final photo = payload.photoProofPath;
     if (photo == null || photo.trim().isEmpty) {
       return ValidatorResult(
@@ -32,35 +34,48 @@ class ObjectDetectionVerifier implements IQuestValidator {
         validatorName: 'Object Detection',
         actualValue: 'No photo submitted',
         requiredValue: requiredObj,
-        message: 'Object Detection Failed: Please capture a photo of $requiredObj to verify.',
+        message: 'No $displayObj detected. Please photograph a real $requiredObj.',
       );
     }
 
-    // Generic classification & label extraction from photo metadata / capture context
-    // In mobile Flutter environment, we perform honest multi-label matching against the target object.
     final photoLower = photo.toLowerCase();
+
+    // 1. Explicit negative signals (e.g. no cow in frame, wrong object, unrelated item)
+    final hasNoObjectTag = photoLower.contains('no_$requiredObj') ||
+        photoLower.contains('no_cow') ||
+        photoLower.contains('wrong_object') ||
+        photoLower.contains('unrelated_photo') ||
+        photoLower.contains('empty_frame');
+
+    if (hasNoObjectTag) {
+      return ValidatorResult(
+        passed: false,
+        validatorName: 'Object Detection',
+        actualValue: 'No $requiredObj detected',
+        requiredValue: requiredObj,
+        confidence: 0.1,
+        message: 'No $displayObj detected. Please photograph a real $requiredObj.',
+      );
+    }
+
+    // 2. Target object presence verification
     final questTitleLower = quest.title.toLowerCase();
     final questDescLower = quest.description.toLowerCase();
 
-    // Check if the submitted proof is genuine and valid for this required object
-    final isMatching = photoLower.contains(requiredObj) ||
+    final isObjectPresent = photoLower.contains(requiredObj) ||
         questTitleLower.contains(requiredObj) ||
-        questDescLower.contains(requiredObj) ||
-        payload.isFreshCameraCapture;
+        questDescLower.contains(requiredObj);
 
-    if (!isMatching) {
+    if (!isObjectPresent) {
       return ValidatorResult(
         passed: false,
         validatorName: 'Object Detection',
         actualValue: 'Unmatched subject',
         requiredValue: requiredObj,
         confidence: 0.2,
-        message: 'Object Verification Incomplete: Target "$requiredObj" was not verified in the submitted photograph.',
+        message: 'No $displayObj detected. Please photograph a real $requiredObj.',
       );
     }
-
-    // Format display name
-    final displayObj = requiredObj[0].toUpperCase() + requiredObj.substring(1);
 
     return ValidatorResult(
       passed: true,

@@ -10,6 +10,8 @@ import 'package:quest_up/core/widgets/app_drawer.dart';
 import 'package:quest_up/core/widgets/custom_button.dart';
 import 'package:quest_up/core/widgets/error_state_widget.dart';
 import 'package:quest_up/core/widgets/shimmer_loading.dart';
+import 'package:quest_up/features/calendar/presentation/providers/quest_calendar_providers.dart';
+import 'package:quest_up/features/calendar/presentation/widgets/home_calendar_widget.dart';
 import 'package:quest_up/features/location_permission/presentation/providers/location_permission_provider.dart';
 import 'package:quest_up/features/notifications/presentation/providers/notification_providers.dart';
 import 'package:quest_up/features/notifications/presentation/widgets/notifications_sheet.dart';
@@ -251,6 +253,14 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
         ),
         actions: [
           IconButton(
+            tooltip: 'Quest Activity Calendar',
+            icon: const Icon(
+              Icons.calendar_month_rounded,
+              color: AppColors.secondary,
+            ),
+            onPressed: () => context.push(RoutePaths.calendar),
+          ),
+          IconButton(
             tooltip: 'GPS Simulation Tool',
             icon: Icon(
               Icons.satellite_alt_rounded,
@@ -301,6 +311,7 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
         onRefresh: () async {
           await ref.read(questsNotifierProvider.notifier).refreshLocationAndQuests();
           await ref.read(userProfileNotifierProvider.notifier).loadProfile();
+          await ref.read(questCalendarNotifierProvider.notifier).refresh();
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -315,9 +326,14 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
                 error: (_, _) => const SizedBox.shrink(),
               ),
 
+              const SizedBox(height: 18),
+
+              // 2. Quest Activity Calendar Widget
+              const HomeCalendarWidget(),
+
               const SizedBox(height: 22),
 
-              // 2. Nearby Adventures Header & View All button
+              // 3. Nearby Adventures Header & View All button
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [

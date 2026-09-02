@@ -86,7 +86,7 @@ class AvatarSelectorSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
       decoration: const BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -100,9 +100,20 @@ class AvatarSelectorSheet extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Choose Your Persona Avatar', style: AppTypography.titleLarge),
+                  Expanded(
+                    child: Text(
+                      'Choose Your Persona Avatar',
+                      style: AppTypography.titleLarge.copyWith(fontSize: 17),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   IconButton(
                     icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -116,7 +127,7 @@ class AvatarSelectorSheet extends StatelessWidget {
                   crossAxisCount: 3,
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
-                  childAspectRatio: 0.9,
+                  childAspectRatio: 0.85,
                 ),
                 itemBuilder: (context, index) {
                   final avatar = availableAvatars[index];
@@ -129,6 +140,7 @@ class AvatarSelectorSheet extends StatelessWidget {
                     },
                     borderRadius: BorderRadius.circular(16),
                     child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       decoration: BoxDecoration(
                         color: isSelected
                             ? avatar.color.withValues(alpha: 0.15)
@@ -143,22 +155,26 @@ class AvatarSelectorSheet extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(12),
+                            padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: avatar.color.withValues(alpha: 0.2),
                             ),
-                            child: Icon(avatar.icon, color: avatar.color, size: 28),
+                            child: Icon(avatar.icon, color: avatar.color, size: 26),
                           ),
                           const SizedBox(height: 8),
-                          Text(
-                            avatar.title,
-                            textAlign: TextAlign.center,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTypography.caption.copyWith(
-                              color: isSelected ? AppColors.textPrimary : AppColors.textSecondary,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                            child: Text(
+                              avatar.title,
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.caption.copyWith(
+                                color: isSelected ? AppColors.textPrimary : AppColors.textSecondary,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                fontSize: 11,
+                              ),
                             ),
                           ),
                         ],

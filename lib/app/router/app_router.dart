@@ -14,6 +14,7 @@ import 'package:quest_up/features/profile/presentation/screens/profile_screen.da
 import 'package:quest_up/features/quests/presentation/screens/home_radar_screen.dart';
 import 'package:quest_up/features/quests/presentation/screens/quest_detail_screen.dart';
 import 'package:quest_up/features/quests/presentation/screens/quest_list_screen.dart';
+import 'package:quest_up/features/calendar/presentation/screens/quest_calendar_screen.dart';
 import 'package:quest_up/features/verification/presentation/screens/quest_verification_screen.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -150,6 +151,12 @@ final GoRouter appRouter = GoRouter(
         final questId = state.pathParameters['id'] ?? '';
         return QuestVerificationScreen(questId: questId);
       },
+    ),
+    GoRoute(
+      parentNavigatorKey: _rootNavigatorKey,
+      path: RoutePaths.calendar,
+      name: RouteNames.calendar,
+      builder: (context, state) => const QuestCalendarScreen(),
     ),
   ],
 );

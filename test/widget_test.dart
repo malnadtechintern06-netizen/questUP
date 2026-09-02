@@ -5,7 +5,16 @@ import 'package:quest_up/app/theme/app_theme.dart';
 import 'package:quest_up/features/auth/presentation/screens/login_screen.dart';
 import 'package:quest_up/features/auth/presentation/screens/register_screen.dart';
 import 'package:quest_up/features/auth/presentation/screens/welcome_screen.dart';
+import 'package:quest_up/features/calendar/presentation/screens/quest_calendar_screen.dart';
+import 'package:quest_up/features/calendar/presentation/widgets/home_calendar_widget.dart';
 import 'package:quest_up/features/location_permission/presentation/screens/location_permission_screen.dart';
+import 'package:quest_up/features/profile/domain/entities/user_profile.dart';
+import 'package:quest_up/features/profile/domain/repositories/user_repository.dart';
+import 'package:quest_up/features/profile/domain/usecases/get_user_profile_usecase.dart';
+import 'package:quest_up/features/profile/domain/usecases/update_user_profile_usecase.dart';
+import 'package:quest_up/features/profile/presentation/providers/user_providers.dart';
+import 'package:quest_up/features/profile/presentation/screens/profile_screen.dart';
+import 'package:quest_up/features/profile/presentation/widgets/avatar_selector_sheet.dart';
 import 'package:quest_up/features/quests/domain/entities/quest.dart';
 import 'package:quest_up/features/quests/presentation/widgets/google_maps_marker_card_widget.dart';
 import 'package:quest_up/features/verification/presentation/widgets/drawing_canvas_widget.dart';
@@ -173,4 +182,144 @@ void main() {
     expect(find.text('13.9182°, 75.0682°'), findsOneWidget);
     expect(find.byIcon(Icons.directions_bus_rounded), findsOneWidget);
   });
+
+  testWidgets('AvatarSelectorSheet renders without overflowing', (WidgetTester tester) async {
+    String selected = 'avatar_ranger';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: Scaffold(
+          body: AvatarSelectorSheet(
+            selectedKey: selected,
+            onSelect: (key) => selected = key,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Choose Your Persona Avatar'), findsOneWidget);
+    expect(find.text('Forest Ranger'), findsOneWidget);
+    expect(find.text('Cyber Knight'), findsOneWidget);
+    expect(find.text('Mystic Sage'), findsOneWidget);
+    expect(find.byIcon(Icons.close), findsOneWidget);
+  });
+
+  testWidgets('QuestCalendarScreen renders calendar grid, month switcher, and stats cards', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: const ProviderScope(
+          child: QuestCalendarScreen(),
+        ),
+      ),
+    );
+
+    expect(find.text('Quest Activity Calendar'), findsOneWidget);
+    expect(find.text('Activity Timeline'), findsOneWidget);
+    expect(find.byIcon(Icons.chevron_left_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.chevron_right_rounded), findsOneWidget);
+    expect(find.text('Completed'), findsWidgets);
+    expect(find.text('Incomplete'), findsWidgets);
+    expect(find.text('Failed'), findsWidgets);
+  });
+
+  testWidgets('HomeCalendarWidget renders on reader/home screen with week strip and stats pills', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: const Scaffold(
+          body: ProviderScope(
+            child: SingleChildScrollView(
+              child: HomeCalendarWidget(),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Quest Activity Calendar'), findsOneWidget);
+    expect(find.text('Daily tracking for quests'), findsOneWidget);
+    expect(find.text('Full View'), findsOneWidget);
+    expect(find.text('Mon'), findsOneWidget);
+    expect(find.text('Sun'), findsOneWidget);
+    expect(find.textContaining('Completed'), findsOneWidget);
+    expect(find.textContaining('Incomplete'), findsOneWidget);
+    expect(find.textContaining('Failed'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('ProfileScreen renders ABOUT & SUPPORT with Privacy Policy, Rate Us, and Share QuestUP', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final mockProfile = UserProfile(
+      id: 'test_user',
+      name: 'Test Explorer',
+      email: 'test@questup.com',
+      avatarKey: 'avatar_ranger',
+      level: 1,
+      currentXp: 100,
+      xpToNextLevel: 500,
+      coins: 50,
+      completedQuestIds: const [],
+      earnedBadgeIds: const [],
+      joinedAt: DateTime.now(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: ProviderScope(
+          overrides: [
+            userProfileNotifierProvider.overrideWith((ref) => FakeUserProfileNotifier(mockProfile)),
+          ],
+          child: const ProfileScreen(),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Explorer Profile'), findsOneWidget);
+    expect(find.text('ABOUT & SUPPORT'), findsOneWidget);
+    expect(find.text('Privacy Policy'), findsOneWidget);
+    expect(find.text('Learn how QuestUP handles your data'), findsOneWidget);
+    expect(find.text('Rate Us'), findsOneWidget);
+    expect(find.text('Enjoying QuestUP? Rate the app'), findsOneWidget);
+    expect(find.text('Share QuestUP'), findsOneWidget);
+    expect(find.text('Invite friends to join your quests'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+}
+
+class FakeUserProfileNotifier extends UserProfileNotifier {
+  FakeUserProfileNotifier(UserProfile profile)
+      : super(
+          GetUserProfileUseCase(_MockSimpleUserRepo(profile)),
+          UpdateUserProfileUseCase(_MockSimpleUserRepo(profile)),
+          _MockSimpleUserRepo(profile),
+        ) {
+    state = AsyncValue.data(profile);
+  }
+
+  @override
+  Future<void> loadProfile() async {}
+}
+
+class _MockSimpleUserRepo implements UserRepository {
+  final UserProfile profile;
+  _MockSimpleUserRepo(this.profile);
+  @override
+  Future<UserProfile> getUserProfile() async => profile;
+  @override
+  Future<void> saveUserProfile(UserProfile profile) async {}
+  @override
+  Future<UserProfile> addXpAndCoins({required int xp, required int coins, String? completedQuestId}) async => profile;
+  @override
+  Future<UserProfile> unlockBadge(String badgeId) async => profile;
 }

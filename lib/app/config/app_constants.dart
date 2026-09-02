@@ -11,6 +11,26 @@ class AppConstants {
   static const String keyInitialDataSeeded = 'questup_initial_seeded_v1';
   static const String keyLocationPermissionGranted = 'questup_location_permission_granted_v1';
   static const String keyAuthSession = 'questup_auth_session_v1';
+  static const String keyCalendarEntries = 'questup_calendar_entries_v1';
+  static const String keyQuestSessions = 'questup_quest_sessions_v1';
+  static const String keyQuestProofs = 'questup_quest_proofs_v1';
+
+  // Android Package & Store URLs
+  static const String androidApplicationId = 'com.questup.quest_up';
+  static const String playStoreMarketUri = 'market://details?id=$androidApplicationId';
+  static const String playStoreWebUrl = 'https://play.google.com/store/apps/details?id=$androidApplicationId';
+
+  // Privacy Policy URL (Centralized configuration placeholder - replace with your live public Privacy Policy URL)
+  static const String privacyPolicyUrl =
+      String.fromEnvironment('PRIVACY_POLICY_URL', defaultValue: 'https://questup.app/privacy-policy');
+
+  // Share Text
+  static const String shareSubject = 'Join me on QuestUP - Real World Quests & Adventures';
+  static const String shareMessage =
+      "🚀 I'm using QuestUP!\n\n"
+      "Turn the real world into a game with quests, challenges, XP, coins, badges and rankings.\n\n"
+      "Join me on QuestUP and start your adventure!\n"
+      "$playStoreWebUrl";
 
   // Game Progression Rules
   static const int baseLevelXp = 500;

@@ -353,6 +353,15 @@ class AppDrawer extends ConsumerWidget {
                     },
                   ),
                   _buildDrawerTile(
+                    icon: Icons.calendar_month_rounded,
+                    title: 'Quest Activity Calendar',
+                    iconColor: AppColors.secondary,
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      appRouter.push(RoutePaths.calendar);
+                    },
+                  ),
+                  _buildDrawerTile(
                     icon: Icons.person_rounded,
                     title: 'Explorer Profile',
                     onTap: () {

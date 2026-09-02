@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:quest_up/core/services/camera_service.dart';
 import 'package:quest_up/features/achievements/presentation/providers/achievement_providers.dart';
+import 'package:quest_up/features/calendar/presentation/providers/quest_calendar_providers.dart';
 import 'package:quest_up/features/profile/presentation/providers/user_providers.dart';
 import 'package:quest_up/features/quests/domain/entities/quest.dart';
 import 'package:quest_up/features/quests/presentation/providers/quest_providers.dart';
@@ -9,10 +10,14 @@ import 'package:quest_up/features/verification/data/datasources/verification_loc
 import 'package:quest_up/features/verification/data/repositories/verification_repository_impl.dart';
 import 'package:quest_up/features/verification/domain/entities/quest_attempt.dart';
 import 'package:quest_up/features/verification/domain/entities/quest_completion.dart';
+import 'package:quest_up/features/verification/domain/entities/quest_session.dart';
 import 'package:quest_up/features/verification/domain/entities/validator_result.dart';
 import 'package:quest_up/features/verification/domain/repositories/verification_repository.dart';
+import 'package:quest_up/features/verification/domain/services/duplicate_proof_service.dart';
 import 'package:quest_up/features/verification/domain/services/validators/i_validator.dart';
+import 'package:quest_up/features/verification/domain/usecases/get_active_quest_session_usecase.dart';
 import 'package:quest_up/features/verification/domain/usecases/get_user_completions_usecase.dart';
+import 'package:quest_up/features/verification/domain/usecases/start_quest_session_usecase.dart';
 import 'package:quest_up/features/verification/domain/usecases/verify_quest_usecase.dart';
 
 final cameraServiceProvider = Provider<ICameraService>((ref) {
@@ -24,17 +29,26 @@ final verificationLocalDataSourceProvider = Provider<IVerificationLocalDataSourc
   return VerificationLocalDataSource(storage);
 });
 
+final duplicateProofServiceProvider = Provider<IDuplicateProofService>((ref) {
+  final localData = ref.watch(verificationLocalDataSourceProvider);
+  return DuplicateProofService(localData);
+});
+
 final verificationRepositoryProvider = Provider<VerificationRepository>((ref) {
   final localData = ref.watch(verificationLocalDataSourceProvider);
   final questRepo = ref.watch(questRepositoryProvider);
   final userRepo = ref.watch(userRepositoryProvider);
   final achievementRepo = ref.watch(achievementRepositoryProvider);
+  final calendarRepo = ref.watch(questCalendarRepositoryProvider);
+  final duplicateService = ref.watch(duplicateProofServiceProvider);
 
   return VerificationRepositoryImpl(
     localDataSource: localData,
     questRepository: questRepo,
     userRepository: userRepo,
     achievementRepository: achievementRepo,
+    calendarRepository: calendarRepo,
+    duplicateProofService: duplicateService,
   );
 });
 
@@ -43,17 +57,40 @@ final verifyQuestUseCaseProvider = Provider<VerifyQuestUseCase>((ref) {
   return VerifyQuestUseCase(repo);
 });
 
+final startQuestSessionUseCaseProvider = Provider<StartQuestSessionUseCase>((ref) {
+  final repo = ref.watch(verificationRepositoryProvider);
+  return StartQuestSessionUseCase(repo);
+});
+
+final getActiveQuestSessionUseCaseProvider = Provider<GetActiveQuestSessionUseCase>((ref) {
+  final repo = ref.watch(verificationRepositoryProvider);
+  return GetActiveQuestSessionUseCase(repo);
+});
+
 final getUserCompletionsUseCaseProvider = Provider<GetUserCompletionsUseCase>((ref) {
   final repo = ref.watch(verificationRepositoryProvider);
   return GetUserCompletionsUseCase(repo);
 });
 
+enum QuestVerificationUIState {
+  notStarted,
+  inProgress,
+  submitting,
+  verifying,
+  verified,
+  rejected,
+  retryRequired,
+  error,
+}
+
 // Verification State
 class VerificationState {
-  final bool isVerifying;
+  final QuestVerificationUIState uiState;
+  final QuestSession? activeSession;
   final QuestAttempt? currentAttempt;
   final String? capturedPhotoPath;
   final bool isFreshCapture;
+  final String? mediaHash;
   final String? capturedVideoPath;
   final String? drawingProofSummary;
   final String? textContent;
@@ -70,10 +107,12 @@ class VerificationState {
   final String? errorMessage;
 
   const VerificationState({
-    this.isVerifying = false,
+    this.uiState = QuestVerificationUIState.notStarted,
+    this.activeSession,
     this.currentAttempt,
     this.capturedPhotoPath,
     this.isFreshCapture = false,
+    this.mediaHash,
     this.capturedVideoPath,
     this.drawingProofSummary,
     this.textContent,
@@ -90,11 +129,17 @@ class VerificationState {
     this.errorMessage,
   });
 
+  bool get isVerifying =>
+      uiState == QuestVerificationUIState.submitting ||
+      uiState == QuestVerificationUIState.verifying;
+
   VerificationState copyWith({
-    bool? isVerifying,
+    QuestVerificationUIState? uiState,
+    QuestSession? activeSession,
     QuestAttempt? currentAttempt,
     String? capturedPhotoPath,
     bool? isFreshCapture,
+    String? mediaHash,
     String? capturedVideoPath,
     String? drawingProofSummary,
     String? textContent,
@@ -111,10 +156,12 @@ class VerificationState {
     String? errorMessage,
   }) {
     return VerificationState(
-      isVerifying: isVerifying ?? this.isVerifying,
+      uiState: uiState ?? this.uiState,
+      activeSession: activeSession ?? this.activeSession,
       currentAttempt: currentAttempt ?? this.currentAttempt,
       capturedPhotoPath: capturedPhotoPath ?? this.capturedPhotoPath,
       isFreshCapture: isFreshCapture ?? this.isFreshCapture,
+      mediaHash: mediaHash ?? this.mediaHash,
       capturedVideoPath: capturedVideoPath ?? this.capturedVideoPath,
       drawingProofSummary: drawingProofSummary ?? this.drawingProofSummary,
       textContent: textContent ?? this.textContent,
@@ -135,20 +182,45 @@ class VerificationState {
 
 class VerificationNotifier extends StateNotifier<VerificationState> {
   final VerifyQuestUseCase _verifyQuestUseCase;
+  final StartQuestSessionUseCase _startSessionUseCase;
+  final GetActiveQuestSessionUseCase _getActiveSessionUseCase;
+  final IDuplicateProofService _duplicateProofService;
   final ICameraService _cameraService;
   final Ref _ref;
   final Uuid _uuid = const Uuid();
 
-  VerificationNotifier(
-    this._verifyQuestUseCase,
-    this._cameraService,
-    this._ref,
-  ) : super(const VerificationState());
+  VerificationNotifier({
+    required this._verifyQuestUseCase,
+    required this._startSessionUseCase,
+    required this._getActiveSessionUseCase,
+    required this._duplicateProofService,
+    required this._cameraService,
+    required this._ref,
+  }) : super(const VerificationState());
 
-  void initAttempt(String questId, String userId) {
-    if (state.currentAttempt == null || state.currentAttempt!.questId != questId) {
+  Future<void> initAttempt(String questId, String userId) async {
+    // Check if an active session already exists for this quest
+    final existingSession = await _getActiveSessionUseCase(
+      questId: questId,
+      userId: userId,
+    );
+
+    if (existingSession != null && existingSession.isActive) {
+      state = state.copyWith(
+        uiState: QuestVerificationUIState.inProgress,
+        activeSession: existingSession,
+        currentAttempt: QuestAttempt(
+          attemptId: existingSession.sessionId,
+          userId: userId,
+          questId: questId,
+          startedAt: existingSession.startedAt,
+          freshPhotoToken: 'token_${existingSession.sessionId.substring(0, 8)}',
+        ),
+      );
+    } else {
       final attemptId = _uuid.v4();
       state = state.copyWith(
+        uiState: QuestVerificationUIState.notStarted,
         currentAttempt: QuestAttempt(
           attemptId: attemptId,
           userId: userId,
@@ -160,12 +232,44 @@ class VerificationNotifier extends StateNotifier<VerificationState> {
     }
   }
 
+  Future<QuestSession> startQuestSession({
+    required String questId,
+    required String userId,
+    double? startingLat,
+    double? startingLon,
+    String? proofType,
+  }) async {
+    final session = await _startSessionUseCase(
+      questId: questId,
+      userId: userId,
+      startingLat: startingLat,
+      startingLon: startingLon,
+      requiredProofType: proofType,
+    );
+
+    state = state.copyWith(
+      uiState: QuestVerificationUIState.inProgress,
+      activeSession: session,
+      currentAttempt: QuestAttempt(
+        attemptId: session.sessionId,
+        userId: userId,
+        questId: questId,
+        startedAt: session.startedAt,
+        freshPhotoToken: 'token_${session.sessionId.substring(0, 8)}',
+      ),
+    );
+
+    return session;
+  }
+
   Future<void> captureCameraProof() async {
     final photo = await _cameraService.takePhoto();
     if (photo != null) {
+      final hash = await _duplicateProofService.computeFileHash(photo);
       state = state.copyWith(
         capturedPhotoPath: photo,
         isFreshCapture: true,
+        mediaHash: hash,
         isRequirementSatisfied: true,
       );
     }
@@ -174,9 +278,11 @@ class VerificationNotifier extends StateNotifier<VerificationState> {
   Future<void> pickProofFromGallery() async {
     final photo = await _cameraService.pickFromGallery();
     if (photo != null) {
+      final hash = await _duplicateProofService.computeFileHash(photo);
       state = state.copyWith(
         capturedPhotoPath: photo,
         isFreshCapture: false,
+        mediaHash: hash,
         isRequirementSatisfied: true,
       );
     }
@@ -185,12 +291,21 @@ class VerificationNotifier extends StateNotifier<VerificationState> {
   Future<void> recordVideoProof({Duration? maxDuration}) async {
     final video = await _cameraService.recordVideo(maxDuration: maxDuration);
     if (video != null) {
-      state = state.copyWith(capturedVideoPath: video);
+      final hash = await _duplicateProofService.computeFileHash(video);
+      state = state.copyWith(
+        capturedVideoPath: video,
+        mediaHash: hash,
+      );
     }
   }
 
   void updateDrawingProof(String summary) {
-    state = state.copyWith(drawingProofSummary: summary, isRequirementSatisfied: true);
+    final hash = _duplicateProofService.computeContentHash(summary);
+    state = state.copyWith(
+      drawingProofSummary: summary,
+      mediaHash: hash,
+      isRequirementSatisfied: true,
+    );
   }
 
   void updateTextProof(
@@ -202,8 +317,10 @@ class VerificationNotifier extends StateNotifier<VerificationState> {
     bool isAuthentic = true,
   }) {
     final lines = text.isEmpty ? 0 : text.split('\n').length;
+    final hash = _duplicateProofService.computeContentHash(text);
     state = state.copyWith(
       textContent: text,
+      mediaHash: hash,
       wordCount: words,
       lineCount: lines,
       isRequirementSatisfied: isSatisfied && !isPasted && isAuthentic,
@@ -236,7 +353,20 @@ class VerificationNotifier extends StateNotifier<VerificationState> {
   }
 
   void clearProof() {
-    state = const VerificationState();
+    state = state.copyWith(
+      capturedPhotoPath: null,
+      capturedVideoPath: null,
+      drawingProofSummary: null,
+      textContent: null,
+      mediaHash: null,
+      isFreshCapture: false,
+      isRequirementSatisfied: false,
+      validatorResults: const [],
+      errorMessage: null,
+      uiState: state.activeSession != null
+          ? QuestVerificationUIState.inProgress
+          : QuestVerificationUIState.notStarted,
+    );
   }
 
   Future<VerificationResult> submitVerification({
@@ -244,15 +374,18 @@ class VerificationNotifier extends StateNotifier<VerificationState> {
     double? userLat,
     double? userLon,
   }) async {
-    state = state.copyWith(isVerifying: true, errorMessage: null);
+    state = state.copyWith(
+      uiState: QuestVerificationUIState.verifying,
+      errorMessage: null,
+    );
 
     try {
       final attempt = state.currentAttempt ??
           QuestAttempt(
-            attemptId: _uuid.v4(),
+            attemptId: state.activeSession?.sessionId ?? _uuid.v4(),
             userId: 'player',
             questId: quest.id,
-            startedAt: DateTime.now(),
+            startedAt: state.activeSession?.startedAt ?? DateTime.now(),
           );
 
       final photoPath = state.capturedPhotoPath ??
@@ -260,12 +393,20 @@ class VerificationNotifier extends StateNotifier<VerificationState> {
               ? 'camera_capture_${quest.requiredObject ?? 'proof'}_${DateTime.now().millisecondsSinceEpoch}.jpg'
               : null);
 
+      String? effectiveHash = state.mediaHash;
+      if (effectiveHash == null && photoPath != null) {
+        effectiveHash = await _duplicateProofService.computeFileHash(photoPath);
+      }
+
       final payload = VerificationProofPayload(
         userLat: userLat,
         userLon: userLon,
         photoProofPath: photoPath,
         isFreshCameraCapture: state.isFreshCapture || (photoPath != null && photoPath.contains('camera_capture_')),
         photoAttemptId: attempt.attemptId,
+        sessionId: state.activeSession?.sessionId,
+        questSession: state.activeSession,
+        mediaHash: effectiveHash,
         videoProofPath: state.capturedVideoPath,
         durationSeconds: state.durationSeconds,
         textContent: state.textContent,
@@ -283,6 +424,7 @@ class VerificationNotifier extends StateNotifier<VerificationState> {
         quest: quest,
         attempt: attempt,
         payload: payload,
+        sessionId: state.activeSession?.sessionId,
         userLat: userLat,
         userLon: userLon,
         photoProofPath: photoPath,
@@ -292,10 +434,13 @@ class VerificationNotifier extends StateNotifier<VerificationState> {
         wordCount: state.wordCount,
         durationSeconds: state.durationSeconds,
         distanceMeters: state.distanceMeters,
+        mediaHash: effectiveHash,
       );
 
       state = state.copyWith(
-        isVerifying: false,
+        uiState: result.isSuccessful
+            ? QuestVerificationUIState.verified
+            : QuestVerificationUIState.rejected,
         result: result,
         validatorResults: result.validatorResults,
         errorMessage: result.isSuccessful ? null : result.message,
@@ -306,6 +451,7 @@ class VerificationNotifier extends StateNotifier<VerificationState> {
         await _ref.read(questsNotifierProvider.notifier).fetchQuests();
         await _ref.read(userProfileNotifierProvider.notifier).loadProfile();
         await _ref.read(achievementsNotifierProvider.notifier).loadAchievements();
+        await _ref.read(questCalendarNotifierProvider.notifier).refresh();
       }
 
       return result;
@@ -317,7 +463,7 @@ class VerificationNotifier extends StateNotifier<VerificationState> {
         isCameraValid: false,
       );
       state = state.copyWith(
-        isVerifying: false,
+        uiState: QuestVerificationUIState.error,
         errorMessage: e.toString(),
         result: failResult,
       );
@@ -329,6 +475,17 @@ class VerificationNotifier extends StateNotifier<VerificationState> {
 final verificationNotifierProvider =
     StateNotifierProvider.autoDispose<VerificationNotifier, VerificationState>((ref) {
   final verifyUseCase = ref.watch(verifyQuestUseCaseProvider);
+  final startSessionUseCase = ref.watch(startQuestSessionUseCaseProvider);
+  final getActiveSessionUseCase = ref.watch(getActiveQuestSessionUseCaseProvider);
+  final duplicateService = ref.watch(duplicateProofServiceProvider);
   final cameraService = ref.watch(cameraServiceProvider);
-  return VerificationNotifier(verifyUseCase, cameraService, ref);
+
+  return VerificationNotifier(
+    verifyQuestUseCase: verifyUseCase,
+    startSessionUseCase: startSessionUseCase,
+    getActiveSessionUseCase: getActiveSessionUseCase,
+    duplicateProofService: duplicateService,
+    cameraService: cameraService,
+    ref: ref,
+  );
 });

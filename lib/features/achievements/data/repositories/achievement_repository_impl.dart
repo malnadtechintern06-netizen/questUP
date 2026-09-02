@@ -13,6 +13,30 @@ class AchievementRepositoryImpl implements AchievementRepository {
     return await _localDataSource.getAchievements();
   }
 
+  int _getTierWeight(String tier) {
+    switch (tier.toUpperCase()) {
+      case 'MYTHIC':
+        return 4;
+      case 'HARDCORE':
+        return 3;
+      case 'MASTER':
+        return 2;
+      case 'ADEPT':
+        return 1;
+      default:
+        return 0;
+    }
+  }
+
+  bool _isMorePrestigious(Achievement a, Achievement b) {
+    final weightA = _getTierWeight(a.tier);
+    final weightB = _getTierWeight(b.tier);
+    if (weightA != weightB) return weightA > weightB;
+    if (a.requiredLevel != b.requiredLevel) return a.requiredLevel > b.requiredLevel;
+    if (a.requiredQuestCount != b.requiredQuestCount) return a.requiredQuestCount > b.requiredQuestCount;
+    return a.requiredCoins > b.requiredCoins;
+  }
+
   @override
   Future<Achievement?> evaluateAndUnlockAchievements({
     required int completedCount,
@@ -27,12 +51,18 @@ class AchievementRepositoryImpl implements AchievementRepository {
       if (!a.isUnlocked) {
         bool shouldUnlock = false;
 
-        if (a.requiredQuestCount > 0 && completedCount >= a.requiredQuestCount) {
-          shouldUnlock = true;
-        } else if (a.requiredLevel > 1 && currentLevel >= a.requiredLevel) {
-          shouldUnlock = true;
-        } else if (a.requiredCoins > 0 && totalCoins >= a.requiredCoins) {
-          shouldUnlock = true;
+        final hasQuestReq = a.requiredQuestCount > 0;
+        final hasLevelReq = a.requiredLevel > 1;
+        final hasCoinReq = a.requiredCoins > 0;
+
+        if (hasQuestReq || hasLevelReq || hasCoinReq) {
+          final meetsQuest = !hasQuestReq || completedCount >= a.requiredQuestCount;
+          final meetsLevel = !hasLevelReq || currentLevel >= a.requiredLevel;
+          final meetsCoins = !hasCoinReq || totalCoins >= a.requiredCoins;
+
+          if (meetsQuest && meetsLevel && meetsCoins) {
+            shouldUnlock = true;
+          }
         }
 
         if (shouldUnlock) {
@@ -40,7 +70,9 @@ class AchievementRepositoryImpl implements AchievementRepository {
             isUnlocked: true,
             unlockedAt: DateTime.now(),
           );
-          newlyUnlocked ??= unlocked;
+          if (newlyUnlocked == null || _isMorePrestigious(unlocked, newlyUnlocked)) {
+            newlyUnlocked = unlocked;
+          }
           updatedList.add(AchievementModel.fromEntity(unlocked));
           continue;
         }

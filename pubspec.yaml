@@ -43,6 +43,7 @@ dependencies:
   uuid: ^4.6.0
   google_fonts: ^8.2.1
   url_launcher: ^6.3.1
+  share_plus: ^13.3.0
   mysql_client: ^0.0.27
   crypto: ^3.0.7
 

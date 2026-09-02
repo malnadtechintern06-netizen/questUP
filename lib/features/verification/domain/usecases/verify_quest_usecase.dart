@@ -13,6 +13,7 @@ class VerifyQuestUseCase {
     required Quest quest,
     QuestAttempt? attempt,
     VerificationProofPayload? payload,
+    String? sessionId,
     double? userLat,
     double? userLon,
     String? photoProofPath,
@@ -22,11 +23,13 @@ class VerifyQuestUseCase {
     int? wordCount,
     int? durationSeconds,
     double? distanceMeters,
+    String? mediaHash,
   }) async {
     return await _repository.verifyAndCompleteQuest(
       quest: quest,
       attempt: attempt,
       payload: payload,
+      sessionId: sessionId,
       userLat: userLat,
       userLon: userLon,
       photoProofPath: photoProofPath,
@@ -36,6 +39,7 @@ class VerifyQuestUseCase {
       wordCount: wordCount,
       durationSeconds: durationSeconds,
       distanceMeters: distanceMeters,
+      mediaHash: mediaHash,
     );
   }
 }
