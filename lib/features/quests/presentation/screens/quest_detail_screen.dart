@@ -304,16 +304,20 @@ class QuestDetailScreen extends ConsumerWidget {
                   ),
                   child: Premium3DButton(
                     text: quest.isCompleted
-                        ? 'MISSION COMPLETED (RE-VERIFY)'
+                        ? 'MISSION ACCOMPLISHED'
                         : (isWithinRadius ? 'START VERIFICATION' : 'APPROACH LOCATION & VERIFY'),
                     icon: quest.isCompleted
-                        ? Icons.check_circle_rounded
+                        ? Icons.verified_rounded
                         : (isWithinRadius ? Icons.qr_code_scanner_rounded : Icons.near_me_rounded),
                     color: quest.isCompleted
                         ? AppColors.accentSuccess
                         : (isWithinRadius ? AppColors.primary : AppColors.secondary),
                     onPressed: () {
-                      context.push(RoutePaths.questVerifyPath(quest.id));
+                      if (quest.isCompleted) {
+                        _showAlreadyCompletedDialog(context, quest);
+                      } else {
+                        context.push(RoutePaths.questVerifyPath(quest.id));
+                      }
                     },
                   ),
                 ),
@@ -675,8 +679,108 @@ class QuestDetailScreen extends ConsumerWidget {
               ),
             ],
           ),
-
         ],
+      ),
+    );
+  }
+
+  void _showAlreadyCompletedDialog(BuildContext context, Quest quest) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: AppColors.accentSuccess.withValues(alpha: 0.8), width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.accentSuccess.withValues(alpha: 0.3),
+                blurRadius: 30,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.accentSuccess.withValues(alpha: 0.15),
+                  border: Border.all(color: AppColors.accentSuccess, width: 2),
+                ),
+                child: const Icon(
+                  Icons.verified_rounded,
+                  color: AppColors.accentSuccess,
+                  size: 44,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'MISSION ACCOMPLISHED',
+                style: AppTypography.titleLarge.copyWith(
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.2,
+                  color: AppColors.accentSuccess,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'You have already conquered "${quest.title}" and claimed all rewards. No further verification is needed.',
+                textAlign: TextAlign.center,
+                style: AppTypography.bodyMedium.copyWith(
+                  color: AppColors.textSecondary,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceElevated,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.borderBright),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.bolt_rounded, color: AppColors.primary, size: 20),
+                    const SizedBox(width: 4),
+                    Text(
+                      '+${quest.xpReward} XP',
+                      style: AppTypography.titleMedium.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 18),
+                    const Icon(Icons.monetization_on_rounded, color: AppColors.secondary, size: 20),
+                    const SizedBox(width: 4),
+                    Text(
+                      '+${quest.coinReward} Coins',
+                      style: AppTypography.titleMedium.copyWith(
+                        color: AppColors.secondary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              Premium3DButton(
+                text: 'RETURN TO QUESTS',
+                icon: Icons.arrow_back_rounded,
+                color: AppColors.primary,
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

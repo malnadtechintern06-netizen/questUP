@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app/app.dart';
 import 'core/services/mysql_database_service.dart';
+import 'features/sync/data/services/data_sync_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,19 +21,21 @@ void main() async {
     return true; // prevent app crash
   };
 
-  // Connect to MySQL Database (asynchronously, with resilient offline fallback)
+  // Connect to MySQL Database & Synchronize Local Data
   try {
     MySqlDatabaseService.instance.connect().then((connected) {
       if (connected) {
-        debugPrint('QuestUP connected to MySQL database.');
+        debugPrint('[MySQL] QuestUP connected to MySQL database.');
+        // Run automatic data migration & synchronization in background
+        DataSyncService.instance.synchronizeLocalDataToMySql();
       } else {
-        debugPrint('QuestUP operating with local fallback cache (MySQL offline).');
+        debugPrint('[MySQL] QuestUP operating with local cache (MySQL connection failed or offline).');
       }
     }).catchError((e) {
-      debugPrint('MySQL initialization notice: $e');
+      debugPrint('[MySQL] MySQL initialization notice: $e');
     });
   } catch (e) {
-    debugPrint('Database initialization notice: $e');
+    debugPrint('[MySQL] Database initialization notice: $e');
   }
 
   // Set system UI overlay style matching QuestUP dark theme

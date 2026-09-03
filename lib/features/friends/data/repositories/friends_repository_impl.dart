@@ -1,6 +1,7 @@
 import 'package:uuid/uuid.dart';
 import 'package:quest_up/core/errors/exceptions.dart';
 import 'package:quest_up/features/friends/data/datasources/friends_local_datasource.dart';
+import 'package:quest_up/features/friends/data/datasources/friends_remote_datasource.dart';
 import 'package:quest_up/features/friends/data/models/friend_profile_model.dart';
 import 'package:quest_up/features/friends/data/models/friend_request_model.dart';
 import 'package:quest_up/features/friends/domain/entities/friend_profile.dart';
@@ -10,12 +11,24 @@ import 'package:quest_up/features/profile/domain/repositories/user_repository.da
 
 class FriendsRepositoryImpl implements IFriendsRepository {
   final IFriendsLocalDataSource localDataSource;
+  final IFriendsRemoteDataSource? remoteDataSource;
   final UserRepository userRepository;
 
   FriendsRepositoryImpl({
     required this.localDataSource,
+    this.remoteDataSource,
     required this.userRepository,
   });
+
+  String _normalizeTag(String query) {
+    final trimmed = query.trim().toUpperCase();
+    final numericOnly = RegExp(r'^(?:QST[\s\-_]*)?(\d+)$', caseSensitive: false);
+    final match = numericOnly.firstMatch(trimmed);
+    if (match != null) {
+      return 'QST-${match.group(1)}';
+    }
+    return trimmed;
+  }
 
   @override
   Future<String> getMyPlayerTag() async {
@@ -25,7 +38,23 @@ class FriendsRepositoryImpl implements IFriendsRepository {
 
   @override
   Future<List<FriendProfile>> getFriends() async {
-    return await localDataSource.getFriends();
+    final localFriends = await localDataSource.getFriends();
+    if (remoteDataSource != null) {
+      try {
+        final profile = await userRepository.getUserProfile();
+        final remoteFriends = await remoteDataSource!.getFriends(profile.id);
+        if (remoteFriends.isNotEmpty) {
+          final existingIds = localFriends.map((f) => f.userId).toSet();
+          for (final rf in remoteFriends) {
+            if (!existingIds.contains(rf.userId)) {
+              localFriends.add(rf);
+            }
+          }
+          await localDataSource.saveFriends(localFriends);
+        }
+      } catch (_) {}
+    }
+    return localFriends;
   }
 
   @override
@@ -33,6 +62,19 @@ class FriendsRepositoryImpl implements IFriendsRepository {
     final allRequests = await localDataSource.getFriendRequests();
     final myTag = await getMyPlayerTag();
     final profile = await userRepository.getUserProfile();
+
+    if (remoteDataSource != null) {
+      try {
+        final remoteRequests = await remoteDataSource!.getIncomingRequests(profile.id);
+        final existingIds = allRequests.map((r) => r.id).toSet();
+        for (final rr in remoteRequests) {
+          if (!existingIds.contains(rr.id)) {
+            allRequests.add(rr);
+          }
+        }
+        await localDataSource.saveFriendRequests(allRequests);
+      } catch (_) {}
+    }
 
     return allRequests
         .where((r) =>
@@ -48,6 +90,19 @@ class FriendsRepositoryImpl implements IFriendsRepository {
     final allRequests = await localDataSource.getFriendRequests();
     final profile = await userRepository.getUserProfile();
 
+    if (remoteDataSource != null) {
+      try {
+        final remoteSent = await remoteDataSource!.getOutgoingRequests(profile.id);
+        final existingIds = allRequests.map((r) => r.id).toSet();
+        for (final rs in remoteSent) {
+          if (!existingIds.contains(rs.id)) {
+            allRequests.add(rs);
+          }
+        }
+        await localDataSource.saveFriendRequests(allRequests);
+      } catch (_) {}
+    }
+
     return allRequests
         .where((r) =>
             r.status == FriendRequestStatus.pending &&
@@ -57,57 +112,65 @@ class FriendsRepositoryImpl implements IFriendsRepository {
 
   @override
   Future<FriendRequest> sendFriendRequest({required String targetPlayerTagOrId}) async {
-    final cleanQuery = targetPlayerTagOrId.trim().toUpperCase();
+    final cleanQuery = targetPlayerTagOrId.trim();
     if (cleanQuery.isEmpty) {
-      throw const AppException('Please enter a valid Player ID or Tag (e.g. QST-1001).');
+      throw const AppException('Please enter a valid Player ID or Tag (e.g. QST-1108).');
     }
 
+    final normalizedTag = _normalizeTag(cleanQuery);
     final myProfile = await userRepository.getUserProfile();
     final myTag = await getMyPlayerTag();
 
     // Check if target matches self
-    if (cleanQuery == myTag.toUpperCase() ||
-        cleanQuery == myProfile.id.toUpperCase() ||
-        cleanQuery == myProfile.email.toUpperCase()) {
+    if (normalizedTag == myTag.toUpperCase() ||
+        cleanQuery.toUpperCase() == myTag.toUpperCase() ||
+        cleanQuery == myProfile.id ||
+        cleanQuery.toUpperCase() == myProfile.name.toUpperCase() ||
+        cleanQuery.toUpperCase() == myProfile.email.toUpperCase()) {
       throw const AppException('You cannot send a friend request to yourself.');
     }
 
-    // Find target player in registry
-    final registry = await localDataSource.getPlayerRegistry();
-    FriendProfileModel? targetPlayer;
-    for (final player in registry) {
-      if (player.playerTag.toUpperCase() == cleanQuery ||
-          player.userId.toUpperCase() == cleanQuery ||
-          player.name.toUpperCase() == cleanQuery) {
-        targetPlayer = player;
-        break;
-      }
-    }
+    // 1. Search player first (Remote MySQL / PHP REST API + Local fallback)
+    final targetPlayer = await searchPlayer(cleanQuery);
 
     if (targetPlayer == null) {
       throw AppException(
-        'Player "$targetPlayerTagOrId" not found. Please check the Player Tag (e.g. QST-1001) and try again.',
+        'Player "$targetPlayerTagOrId" not found. Please check the Player Tag (e.g. QST-1108) and try again.',
       );
     }
 
     // Check if already friends
     final currentFriends = await localDataSource.getFriends();
-    if (currentFriends.any((f) => f.userId == targetPlayer!.userId)) {
+    if (currentFriends.any((f) => f.userId == targetPlayer.userId)) {
       throw AppException('${targetPlayer.name} is already in your squad friends list.');
     }
 
-    // Check if duplicate pending request exists
+    // Check if duplicate pending request exists in local cache
     final requests = await localDataSource.getFriendRequests();
     final isAlreadySent = requests.any((r) =>
         r.status == FriendRequestStatus.pending &&
-        (r.receiverId == targetPlayer!.userId || r.receiverTag == targetPlayer.playerTag) &&
+        (r.receiverId == targetPlayer.userId || r.receiverTag == targetPlayer.playerTag) &&
         (r.senderId == myProfile.id || r.senderId == 'current_user'));
 
     if (isAlreadySent) {
       throw AppException('A friend request to ${targetPlayer.name} is already pending.');
     }
 
-    final newRequest = FriendRequestModel(
+    FriendRequestModel? newRequest;
+
+    // 2. Dispatch to remote backend/MySQL
+    if (remoteDataSource != null) {
+      try {
+        newRequest = await remoteDataSource!.sendFriendRequest(
+          senderId: myProfile.id,
+          targetTagOrId: targetPlayer.playerTag,
+        );
+      } catch (e) {
+        if (e is AppException) rethrow;
+      }
+    }
+
+    newRequest ??= FriendRequestModel(
       id: const Uuid().v4(),
       senderId: myProfile.id,
       senderName: myProfile.name,
@@ -137,6 +200,17 @@ class FriendsRepositoryImpl implements IFriendsRepository {
     requests[index] = req.copyWith(status: FriendRequestStatus.accepted) as FriendRequestModel;
     await localDataSource.saveFriendRequests(requests);
 
+    final myProfile = await userRepository.getUserProfile();
+    if (remoteDataSource != null) {
+      try {
+        await remoteDataSource!.respondToFriendRequest(
+          requestId: requestId,
+          action: 'accept',
+          currentUserId: myProfile.id,
+        );
+      } catch (_) {}
+    }
+
     // Add sender to friends list
     final registry = await localDataSource.getPlayerRegistry();
     FriendProfileModel? friendProfile =
@@ -154,8 +228,8 @@ class FriendsRepositoryImpl implements IFriendsRepository {
       rankTitle: 'Explorer Scout',
       completedQuestsCount: req.senderLevel * 2,
       gamesPlayedCount: req.senderLevel * 2 + 1,
-      completedQuests: [],
-      earnedBadges: [],
+      completedQuests: const [],
+      earnedBadges: const [],
       friendshipDate: DateTime.now(),
       isOnline: true,
       lastActiveText: 'Active on Radar',
@@ -177,6 +251,17 @@ class FriendsRepositoryImpl implements IFriendsRepository {
       requests[index] = req.copyWith(status: FriendRequestStatus.rejected) as FriendRequestModel;
       await localDataSource.saveFriendRequests(requests);
     }
+
+    final myProfile = await userRepository.getUserProfile();
+    if (remoteDataSource != null) {
+      try {
+        await remoteDataSource!.respondToFriendRequest(
+          requestId: requestId,
+          action: 'reject',
+          currentUserId: myProfile.id,
+        );
+      } catch (_) {}
+    }
   }
 
   @override
@@ -193,22 +278,73 @@ class FriendsRepositoryImpl implements IFriendsRepository {
     if (matchInFriends != null) return matchInFriends;
 
     final registry = await localDataSource.getPlayerRegistry();
-    return registry.where((p) => p.userId == friendUserId || p.playerTag == friendUserId).firstOrNull;
+    final matchInRegistry = registry.where((p) => p.userId == friendUserId || p.playerTag == friendUserId).firstOrNull;
+    if (matchInRegistry != null) return matchInRegistry;
+
+    // Search via remote
+    if (remoteDataSource != null) {
+      try {
+        final remoteMatch = await remoteDataSource!.searchPlayer(friendUserId);
+        if (remoteMatch != null) return remoteMatch;
+      } catch (_) {}
+    }
+
+    return null;
   }
 
   @override
   Future<FriendProfile?> searchPlayer(String query) async {
-    final cleanQuery = query.trim().toUpperCase();
+    final cleanQuery = query.trim();
     if (cleanQuery.isEmpty) return null;
 
+    final normalizedTag = _normalizeTag(cleanQuery);
+    final myProfile = await userRepository.getUserProfile();
+    final myTag = await getMyPlayerTag();
+
+    // Check if user is searching for themselves
+    if (normalizedTag == myTag.toUpperCase() ||
+        cleanQuery.toUpperCase() == myTag.toUpperCase() ||
+        cleanQuery == myProfile.id ||
+        cleanQuery.toUpperCase() == myProfile.name.toUpperCase() ||
+        cleanQuery.toUpperCase() == myProfile.email.toUpperCase()) {
+      throw const AppException('This is your own Player ID. You cannot add yourself as a friend.');
+    }
+
+    // 1. Try Remote MySQL / PHP REST search first
+    if (remoteDataSource != null) {
+      try {
+        final remotePlayer = await remoteDataSource!.searchPlayer(
+          cleanQuery,
+          currentUserId: myProfile.id,
+        );
+        if (remotePlayer != null) {
+          // Cache in local player registry
+          final registry = await localDataSource.getPlayerRegistry();
+          if (!registry.any((p) => p.userId == remotePlayer.userId)) {
+            registry.add(remotePlayer);
+            await localDataSource.savePlayerRegistry(registry);
+          }
+          return remotePlayer;
+        }
+      } catch (e) {
+        if (e is AppException) rethrow;
+      }
+    }
+
+    // 2. Search local player registry
     final registry = await localDataSource.getPlayerRegistry();
     for (final player in registry) {
-      if (player.playerTag.toUpperCase() == cleanQuery ||
-          player.userId.toUpperCase() == cleanQuery ||
-          player.name.toUpperCase().contains(cleanQuery)) {
+      if (player.playerTag.toUpperCase() == normalizedTag ||
+          player.playerTag.toUpperCase() == cleanQuery.toUpperCase() ||
+          player.userId.toUpperCase() == cleanQuery.toUpperCase() ||
+          player.name.toUpperCase() == cleanQuery.toUpperCase()) {
+        if (player.userId == myProfile.id) {
+          throw const AppException('This is your own Player ID. You cannot add yourself as a friend.');
+        }
         return player;
       }
     }
+
     return null;
   }
 

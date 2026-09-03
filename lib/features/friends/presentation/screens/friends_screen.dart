@@ -599,20 +599,82 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton(
-                    onPressed: () =>
-                        ref.read(friendsNotifierProvider.notifier).searchPlayer(_searchController.text),
+                    onPressed: state.isSearching
+                        ? null
+                        : () => ref.read(friendsNotifierProvider.notifier).searchPlayer(_searchController.text),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
-                    child: const Icon(Icons.search_rounded, color: Colors.black, size: 20),
+                    child: state.isSearching
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                          )
+                        : const Icon(Icons.search_rounded, color: Colors.black, size: 20),
                   ),
                 ],
               ),
             ],
           ),
         ),
+
+        // Searching Loading State
+        if (state.isSearching) ...[
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+            ),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                ),
+                SizedBox(width: 12),
+                Text(
+                  'Searching QuestUP player database...',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+        ],
+
+        // Error / Not Found Message
+        if (state.errorMessage != null && !state.isSearching) ...[
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.accentDanger.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.accentDanger.withValues(alpha: 0.5)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline_rounded, color: AppColors.accentDanger, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    state.errorMessage!,
+                    style: AppTypography.bodyMedium.copyWith(color: AppColors.accentDanger),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
 
         // Search Result Preview Card
         if (state.searchResult != null) ...[

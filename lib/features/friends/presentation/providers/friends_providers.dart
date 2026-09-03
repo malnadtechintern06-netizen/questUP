@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:quest_up/features/friends/data/datasources/friends_local_datasource.dart';
+import 'package:quest_up/features/friends/data/datasources/friends_remote_datasource.dart';
 import 'package:quest_up/features/friends/data/repositories/friends_repository_impl.dart';
 import 'package:quest_up/features/friends/domain/entities/friend_profile.dart';
 import 'package:quest_up/features/friends/domain/entities/friend_request.dart';
@@ -12,11 +13,17 @@ final friendsLocalDataSourceProvider = Provider<IFriendsLocalDataSource>((ref) {
   return FriendsLocalDataSource(storage);
 });
 
+final friendsRemoteDataSourceProvider = Provider<IFriendsRemoteDataSource>((ref) {
+  return FriendsRemoteDataSource();
+});
+
 final friendsRepositoryProvider = Provider<IFriendsRepository>((ref) {
-  final dataSource = ref.watch(friendsLocalDataSourceProvider);
+  final localDataSource = ref.watch(friendsLocalDataSourceProvider);
+  final remoteDataSource = ref.watch(friendsRemoteDataSourceProvider);
   final userRepo = ref.watch(userRepositoryProvider);
   return FriendsRepositoryImpl(
-    localDataSource: dataSource,
+    localDataSource: localDataSource,
+    remoteDataSource: remoteDataSource,
     userRepository: userRepo,
   );
 });

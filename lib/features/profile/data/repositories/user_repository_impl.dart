@@ -2,21 +2,56 @@ import '../../../../app/config/app_constants.dart';
 import '../../domain/entities/user_profile.dart';
 import '../../domain/repositories/user_repository.dart';
 import '../datasources/user_local_datasource.dart';
+import '../datasources/user_mysql_datasource.dart';
 import '../models/user_profile_model.dart';
 
 class UserRepositoryImpl implements UserRepository {
   final IUserLocalDataSource _localDataSource;
+  final IUserMySqlDataSource _mySqlDataSource;
 
-  UserRepositoryImpl(this._localDataSource);
+  UserRepositoryImpl(
+    this._localDataSource, [
+    IUserMySqlDataSource? mySqlDataSource,
+  ]) : _mySqlDataSource = mySqlDataSource ?? UserMySqlDataSource();
 
   @override
   Future<UserProfile> getUserProfile() async {
-    return await _localDataSource.getUserProfile();
+    final localProfile = await _localDataSource.getUserProfile();
+
+    // Check remote MySQL profile in the background or during sync
+    try {
+      final remoteProfile = await _mySqlDataSource.fetchProfileFromMySql(localProfile.id);
+      if (remoteProfile != null) {
+        // If remote has higher XP or level, merge remote progress
+        if (remoteProfile.currentXp > localProfile.currentXp || remoteProfile.level > localProfile.level) {
+          final merged = localProfile.copyWith(
+            level: remoteProfile.level,
+            currentXp: remoteProfile.currentXp,
+            xpToNextLevel: remoteProfile.xpToNextLevel,
+            coins: remoteProfile.coins,
+          );
+          await _localDataSource.saveUserProfile(UserProfileModel.fromEntity(merged));
+          return merged;
+        } else if (localProfile.currentXp > remoteProfile.currentXp || localProfile.level > remoteProfile.level) {
+          // Local is ahead; sync local forward to MySQL
+          await _mySqlDataSource.saveProfileToMySql(localProfile);
+        }
+      } else {
+        // User profile doesn't exist in MySQL yet; push local profile
+        await _mySqlDataSource.saveProfileToMySql(localProfile);
+      }
+    } catch (_) {}
+
+    return localProfile;
   }
 
   @override
   Future<void> saveUserProfile(UserProfile profile) async {
-    await _localDataSource.saveUserProfile(UserProfileModel.fromEntity(profile));
+    final model = UserProfileModel.fromEntity(profile);
+    await _localDataSource.saveUserProfile(model);
+    try {
+      await _mySqlDataSource.saveProfileToMySql(model);
+    } catch (_) {}
   }
 
   @override
@@ -51,7 +86,20 @@ class UserRepositoryImpl implements UserRepository {
       completedQuestIds: updatedCompletedQuests,
     );
 
-    await _localDataSource.saveUserProfile(UserProfileModel.fromEntity(updated));
+    final model = UserProfileModel.fromEntity(updated);
+    await _localDataSource.saveUserProfile(model);
+
+    // Synchronize to MySQL database
+    try {
+      await _mySqlDataSource.updateXpAndCoinsInMySql(
+        userId: updated.id,
+        level: currentLevel,
+        currentXp: newXp,
+        xpToNextLevel: xpRequired,
+        coins: updated.coins,
+      );
+    } catch (_) {}
+
     return updated;
   }
 
@@ -66,6 +114,11 @@ class UserRepositoryImpl implements UserRepository {
     final updated = current.copyWith(earnedBadgeIds: updatedBadges);
 
     await _localDataSource.saveUserProfile(UserProfileModel.fromEntity(updated));
+
+    try {
+      await _mySqlDataSource.saveUserBadgeInMySql(updated.id, badgeId);
+    } catch (_) {}
+
     return updated;
   }
 }

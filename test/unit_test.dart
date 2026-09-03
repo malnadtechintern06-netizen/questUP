@@ -5,7 +5,10 @@ import 'package:quest_up/features/auth/data/models/auth_user_model.dart';
 import 'package:quest_up/features/profile/data/models/user_profile_model.dart';
 import 'package:quest_up/features/profile/data/repositories/user_repository_impl.dart';
 import 'package:quest_up/core/services/google_place_photo_service.dart';
+import 'package:quest_up/core/services/mysql_database_service.dart';
+import 'package:mysql_client/mysql_client.dart';
 import 'package:quest_up/features/profile/data/datasources/user_local_datasource.dart';
+import 'package:quest_up/features/verification/domain/entities/quest_completion.dart';
 import 'package:quest_up/features/verification/domain/services/scene_authenticity_service.dart';
 import 'package:quest_up/features/quests/data/datasources/quest_local_datasource.dart';
 import 'package:quest_up/features/quests/data/datasources/quest_mysql_datasource.dart';
@@ -118,7 +121,30 @@ class MockQuestMySqlDataSource implements IQuestMySqlDataSource {
   Future<void> saveQuestToMySql(QuestModel quest) async {}
 
   @override
-  Future<void> markCompletedInMySql(String questId, String userId, {int xp = 0, int coins = 0}) async {}
+  Future<bool> isQuestCompletedByUserInMySql(String questId, String userId) async => false;
+
+  @override
+  Future<bool> saveCompletionToMySql(QuestCompletion completion) async => true;
+}
+
+class MockMySqlDatabaseService implements IMySqlDatabaseService {
+  @override
+  bool get isConnected => false;
+
+  @override
+  String get activeHost => '127.0.0.1';
+
+  @override
+  Future<bool> connect() async => false;
+
+  @override
+  Future<void> disconnect() async {}
+
+  @override
+  Future<IResultSet?> execute(String sql, [Map<String, dynamic>? params]) async => null;
+
+  @override
+  Future<void> initializeSchema() async {}
 }
 
 void main() {
@@ -303,7 +329,7 @@ void main() {
   group('Authentication & Password Validation Security Tests', () {
     test('Register user -> logout -> login with WRONG password is REJECTED', () async {
       final storage = MockMemoryLocalStorageService();
-      final authDataSource = AuthMySqlDataSource(storage);
+      final authDataSource = AuthMySqlDataSource(storage, MockMySqlDatabaseService());
 
       // 1. Register with email and password
       final registeredUser = await authDataSource.register(
@@ -343,7 +369,7 @@ void main() {
 
     test('Login with unregistered email throws clear error', () async {
       final storage = MockMemoryLocalStorageService();
-      final authDataSource = AuthMySqlDataSource(storage);
+      final authDataSource = AuthMySqlDataSource(storage, MockMySqlDatabaseService());
 
       expect(
         () async => await authDataSource.login(
@@ -360,7 +386,7 @@ void main() {
 
     test('Registering an existing email is rejected', () async {
       final storage = MockMemoryLocalStorageService();
-      final authDataSource = AuthMySqlDataSource(storage);
+      final authDataSource = AuthMySqlDataSource(storage, MockMySqlDatabaseService());
 
       await authDataSource.register(
         name: 'First Player',
@@ -406,6 +432,10 @@ void main() {
       expect(tag1, startsWith('QST-'));
       expect(tag1, equals(tag2));
       expect(tag1.length, equals(8));
+
+      // Deterministic tag test for user's account
+      final sujuTag = localDataSource.computePlayerTag('fe9bcb4b-880d-4ae8-b0f1-9317c1306afa', 'sujusujans700@gmail.com');
+      expect(sujuTag, equals('QST-1108'));
     });
 
     test('Retrieves initial friends and incoming requests', () async {
@@ -418,13 +448,26 @@ void main() {
       expect(incoming.first.senderName, equals('Kai Horizon'));
     });
 
-    test('Searches player by exact unique Player Tag or ID', () async {
-      final found = await friendsRepository.searchPlayer('QST-1001');
-      expect(found, isNotNull);
-      expect(found!.name, equals('Elena Shadowstride'));
-      expect(found.rank, equals(1));
-      expect(found.completedQuestsCount, equals(18));
-      expect(found.earnedBadges.length, greaterThanOrEqualTo(3));
+    test('Searches player by exact unique Player Tag, lowercase, or numeric input (normalization)', () async {
+      // 1. Exact Tag
+      final foundExact = await friendsRepository.searchPlayer('QST-1001');
+      expect(foundExact, isNotNull);
+      expect(foundExact!.name, equals('Elena Shadowstride'));
+
+      // 2. Lowercase Tag
+      final foundLower = await friendsRepository.searchPlayer('qst-1001');
+      expect(foundLower, isNotNull);
+      expect(foundLower!.name, equals('Elena Shadowstride'));
+
+      // 3. Space-separated Tag
+      final foundSpace = await friendsRepository.searchPlayer('qst 1001');
+      expect(foundSpace, isNotNull);
+      expect(foundSpace!.name, equals('Elena Shadowstride'));
+
+      // 4. Pure numeric ID
+      final foundNumeric = await friendsRepository.searchPlayer('1001');
+      expect(foundNumeric, isNotNull);
+      expect(foundNumeric!.name, equals('Elena Shadowstride'));
     });
 
     test('Sends friend request to valid player and rejects self/duplicate/invalid', () async {

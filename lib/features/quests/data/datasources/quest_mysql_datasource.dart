@@ -1,12 +1,14 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/services/mysql_database_service.dart';
+import '../../../verification/domain/entities/quest_completion.dart';
 import '../models/quest_model.dart';
 
 abstract class IQuestMySqlDataSource {
   Future<List<QuestModel>> fetchQuestsFromMySql();
   Future<void> saveQuestToMySql(QuestModel quest);
-  Future<void> markCompletedInMySql(String questId, String userId, {int xp = 0, int coins = 0});
+  Future<bool> saveCompletionToMySql(QuestCompletion completion);
+  Future<bool> isQuestCompletedByUserInMySql(String questId, String userId);
 }
 
 class QuestMySqlDataSource implements IQuestMySqlDataSource {
@@ -22,7 +24,7 @@ class QuestMySqlDataSource implements IQuestMySqlDataSource {
 
     try {
       final result = await _dbService.execute(
-        'SELECT * FROM quests WHERE is_active = 1',
+        'SELECT * FROM quests WHERE is_active = 1 ORDER BY created_at DESC',
       );
 
       if (result == null || result.rows.isEmpty) {
@@ -49,7 +51,6 @@ class QuestMySqlDataSource implements IQuestMySqlDataSource {
             'isActive': (map['is_active'] == '1' || map['is_active'] == 'true'),
           };
 
-          // If extra fields are in json
           if (map['image_asset_path'] != null && map['image_asset_path']!.isNotEmpty) {
             questMap['photoUrl'] = map['image_asset_path'];
             questMap['imageUrl'] = map['image_asset_path'];
@@ -61,6 +62,7 @@ class QuestMySqlDataSource implements IQuestMySqlDataSource {
           debugPrint('[MySQL] Quest row parse error: $e');
         }
       }
+      debugPrint('[MySQL] Fetched ${quests.length} active quests from MySQL');
       return quests;
     } catch (e) {
       debugPrint('[MySQL] fetchQuests error: $e');
@@ -76,8 +78,8 @@ class QuestMySqlDataSource implements IQuestMySqlDataSource {
     try {
       await _dbService.execute(
         '''
-        INSERT INTO quests (id, title, description, category, verification_type, latitude, longitude, radius_meters, xp_reward, coins_reward, location_name, difficulty, is_active)
-        VALUES (:id, :title, :description, :category, :verification_type, :latitude, :longitude, :radius_meters, :xp_reward, :coins_reward, :location_name, :difficulty, 1)
+        INSERT INTO quests (id, title, description, category, verification_type, latitude, longitude, radius_meters, xp_reward, coins_reward, location_name, place_type, image_asset_path, difficulty, is_active, created_at)
+        VALUES (:id, :title, :description, :category, :verification_type, :latitude, :longitude, :radius_meters, :xp_reward, :coins_reward, :location_name, :place_type, :image_asset_path, :difficulty, 1, NOW())
         ON DUPLICATE KEY UPDATE
           title = VALUES(title),
           description = VALUES(description),
@@ -96,35 +98,87 @@ class QuestMySqlDataSource implements IQuestMySqlDataSource {
           'xp_reward': quest.xpReward.toString(),
           'coins_reward': quest.coinReward.toString(),
           'location_name': quest.locationName,
+          'place_type': quest.placeCategory ?? 'landmark',
+          'image_asset_path': quest.imageUrl ?? quest.photoUrl ?? 'assets/images/hero_poster.jpg',
           'difficulty': quest.difficulty.name,
         },
       );
+      debugPrint('[MySQL] MYSQL QUEST INSERT/UPDATE SUCCESS: ${quest.title} (${quest.id})');
     } catch (e) {
-      debugPrint('[MySQL] saveQuest error: $e');
+      debugPrint('[MySQL] MYSQL QUEST INSERT FAILED: $e');
     }
   }
 
   @override
-  Future<void> markCompletedInMySql(String questId, String userId, {int xp = 0, int coins = 0}) async {
+  Future<bool> isQuestCompletedByUserInMySql(String questId, String userId) async {
     final isDbReady = await _dbService.connect();
-    if (!isDbReady) return;
+    if (!isDbReady) return false;
 
     try {
-      await _dbService.execute(
-        '''
-        INSERT INTO quest_completions (id, quest_id, user_id, xp_earned, coins_earned, completed_at)
-        VALUES (:id, :quest_id, :user_id, :xp_earned, :coins_earned, NOW())
-        ''',
+      final result = await _dbService.execute(
+        'SELECT id FROM quest_completions WHERE quest_id = :quest_id AND user_id = :user_id LIMIT 1',
         {
-          'id': const Uuid().v4(),
           'quest_id': questId,
           'user_id': userId,
-          'xp_earned': xp.toString(),
-          'coins_earned': coins.toString(),
         },
       );
+      return result != null && result.rows.isNotEmpty;
     } catch (e) {
-      debugPrint('[MySQL] markCompleted error: $e');
+      debugPrint('[MySQL] Check duplicate completion error: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> saveCompletionToMySql(QuestCompletion completion) async {
+    final isDbReady = await _dbService.connect();
+    if (!isDbReady) return false;
+
+    try {
+      // 1. Duplicate check
+      final alreadyExists = await isQuestCompletedByUserInMySql(completion.questId, completion.userId);
+      if (alreadyExists) {
+        debugPrint('[MySQL] Duplicate quest completion ignored: questId=${completion.questId}, userId=${completion.userId}');
+        return true;
+      }
+
+      // 2. Insert into quest_completions
+      final proofJson = completion.photoProofPath.isNotEmpty
+          ? '{"proof":"${completion.photoProofPath}","lat":${completion.userLatitude},"lng":${completion.userLongitude}}'
+          : null;
+
+      final res = await _dbService.execute(
+        '''
+        INSERT INTO quest_completions (
+          id, quest_id, user_id, verification_type, proof_data,
+          xp_earned, coins_earned, completed_at, status
+        ) VALUES (
+          :id, :quest_id, :user_id, :verification_type, :proof_data,
+          :xp_earned, :coins_earned, :completed_at, 'verified'
+        )
+        ''',
+        {
+          'id': completion.id.isNotEmpty ? completion.id : const Uuid().v4(),
+          'quest_id': completion.questId,
+          'user_id': completion.userId,
+          'verification_type': 'locationGps',
+          'proof_data': proofJson,
+          'xp_earned': completion.xpEarned.toString(),
+          'coins_earned': completion.coinsEarned.toString(),
+          'completed_at': completion.completedAt.toIso8601String().substring(0, 19).replaceFirst('T', ' '),
+        },
+      );
+
+      if (res != null) {
+        debugPrint('[MySQL] MYSQL QUEST COMPLETION INSERT SUCCESS: questId=${completion.questId}, userId=${completion.userId}, XP=+${completion.xpEarned}, Coins=+${completion.coinsEarned}');
+        return true;
+      } else {
+        debugPrint('[MySQL] MYSQL QUEST COMPLETION INSERT FAILED: Query returned null');
+        return false;
+      }
+    } catch (e) {
+      debugPrint('[MySQL] MYSQL QUEST COMPLETION INSERT FAILED: $e');
+      return false;
     }
   }
 }

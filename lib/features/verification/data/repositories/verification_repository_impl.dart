@@ -17,6 +17,8 @@ import 'package:quest_up/features/verification/domain/services/duplicate_proof_s
 import 'package:quest_up/features/verification/domain/services/quest_verification_service.dart';
 import 'package:quest_up/features/verification/domain/services/validators/i_validator.dart';
 
+import 'package:quest_up/features/quests/data/datasources/quest_mysql_datasource.dart';
+
 class VerificationRepositoryImpl implements VerificationRepository {
   final IVerificationLocalDataSource localDataSource;
   final QuestRepository questRepository;
@@ -25,6 +27,7 @@ class VerificationRepositoryImpl implements VerificationRepository {
   final QuestCalendarRepository? calendarRepository;
   final IQuestVerificationService verificationService;
   final IDuplicateProofService duplicateProofService;
+  final IQuestMySqlDataSource mySqlDataSource;
   final Uuid _uuid = const Uuid();
 
   VerificationRepositoryImpl({
@@ -35,7 +38,9 @@ class VerificationRepositoryImpl implements VerificationRepository {
     this.calendarRepository,
     IDuplicateProofService? duplicateProofService,
     IQuestVerificationService? verificationService,
+    IQuestMySqlDataSource? mySqlDataSource,
   })  : duplicateProofService = duplicateProofService ?? DuplicateProofService(localDataSource),
+        mySqlDataSource = mySqlDataSource ?? QuestMySqlDataSource(),
         verificationService = verificationService ??
             QuestVerificationService(
               duplicateProofService: duplicateProofService ?? DuplicateProofService(localDataSource),
@@ -286,6 +291,13 @@ class VerificationRepositoryImpl implements VerificationRepository {
       coinsEarned: quest.coinReward,
     );
     await localDataSource.saveCompletion(completion);
+
+    // Save completion to MySQL database
+    try {
+      await mySqlDataSource.saveCompletionToMySql(completion);
+    } catch (e) {
+      dev.log('[PROOF] MySQL completion save notice: $e', name: 'SmartProof');
+    }
 
     // 8. Record Success into Quest Calendar
     if (calendarRepository != null) {

@@ -9,17 +9,23 @@ abstract class IMySqlDatabaseService {
   bool get isConnected;
   Future<IResultSet?> execute(String sql, [Map<String, dynamic>? params]);
   Future<void> initializeSchema();
+  String get activeHost;
 }
 
 class MySqlDatabaseService implements IMySqlDatabaseService {
   static final MySqlDatabaseService instance = MySqlDatabaseService();
 
-  final MySqlConfig config;
+  MySqlConfig _config;
   MySQLConnection? _connection;
   bool _isConnecting = false;
+  String _workingHost = '';
 
   MySqlDatabaseService([MySqlConfig? config])
-      : config = config ?? MySqlConfig.defaults();
+      : _config = config ?? MySqlConfig.defaults(),
+        _workingHost = (config ?? MySqlConfig.defaults()).host;
+
+  @override
+  String get activeHost => _workingHost;
 
   @override
   bool get isConnected => _connection != null && _connection!.connected;
@@ -27,34 +33,53 @@ class MySqlDatabaseService implements IMySqlDatabaseService {
   @override
   Future<bool> connect() async {
     if (isConnected) return true;
-    if (_isConnecting) return false;
+    if (_isConnecting) {
+      // Wait for in-flight connection
+      int waits = 0;
+      while (_isConnecting && waits < 10) {
+        await Future.delayed(const Duration(milliseconds: 200));
+        waits++;
+      }
+      if (isConnected) return true;
+    }
 
     _isConnecting = true;
-    try {
-      debugPrint('[MySQL] Connecting to ${config.host}:${config.port}/${config.database} as ${config.userName}...');
-      final conn = await MySQLConnection.createConnection(
-        host: config.host,
-        port: config.port,
-        userName: config.userName,
-        password: config.password,
-        databaseName: config.database,
-        secure: config.secure,
-      );
+    final hostsToTry = <String>[
+      if (_workingHost.isNotEmpty) _workingHost,
+      ...MySqlConfig.candidateHosts.where((h) => h != _workingHost),
+    ];
 
-      await conn.connect().timeout(const Duration(milliseconds: 500));
-      _connection = conn;
-      debugPrint('[MySQL] Connected successfully to MySQL database "${config.database}"!');
+    for (final host in hostsToTry) {
+      try {
+        debugPrint('[MySQL] Connecting to $host:${_config.port}/${_config.database} as ${_config.userName}...');
+        final conn = await MySQLConnection.createConnection(
+          host: host,
+          port: _config.port,
+          userName: _config.userName,
+          password: _config.password,
+          databaseName: _config.database,
+          secure: _config.secure,
+        );
 
-      // Auto-initialize schema if needed
-      await initializeSchema();
-      return true;
-    } catch (e) {
-      debugPrint('[MySQL] Connection notice: Unable to connect to MySQL server ($e). Using local fallback data store.');
-      _connection = null;
-      return false;
-    } finally {
-      _isConnecting = false;
+        await conn.connect().timeout(const Duration(milliseconds: 3000));
+        _connection = conn;
+        _workingHost = host;
+        _config = _config.copyWith(host: host);
+        debugPrint('[MySQL] MYSQL CONNECTION SUCCESS on host "$host", database "${_config.database}"');
+
+        // Auto-initialize schema if needed
+        await initializeSchema();
+        _isConnecting = false;
+        return true;
+      } catch (e) {
+        debugPrint('[MySQL] MYSQL CONNECTION FAILED on host "$host": $e');
+        _connection = null;
+      }
     }
+
+    _isConnecting = false;
+    debugPrint('[MySQL] MYSQL CONNECTION FAILED: Unable to reach MySQL server on any candidate host (${hostsToTry.join(", ")}).');
+    return false;
   }
 
   @override
@@ -104,6 +129,7 @@ class MySqlDatabaseService implements IMySqlDatabaseService {
           `email` VARCHAR(191) NOT NULL UNIQUE,
           `password_hash` VARCHAR(255) NOT NULL,
           `salt` VARCHAR(64) DEFAULT NULL,
+          `status` VARCHAR(30) DEFAULT 'active',
           `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
           `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
           PRIMARY KEY (`id`)
@@ -116,7 +142,7 @@ class MySqlDatabaseService implements IMySqlDatabaseService {
           `user_id` VARCHAR(64) NOT NULL,
           `name` VARCHAR(120) NOT NULL,
           `email` VARCHAR(191) NOT NULL,
-          `avatar_key` VARCHAR(64) DEFAULT 'adventurer_default',
+          `avatar_key` VARCHAR(64) DEFAULT 'avatar_ranger',
           `level` INT DEFAULT 1,
           `current_xp` INT DEFAULT 0,
           `xp_to_next_level` INT DEFAULT 500,
@@ -155,18 +181,62 @@ class MySqlDatabaseService implements IMySqlDatabaseService {
           `id` VARCHAR(64) NOT NULL,
           `quest_id` VARCHAR(64) NOT NULL,
           `user_id` VARCHAR(64) NOT NULL,
-          `verification_type` VARCHAR(50) DEFAULT NULL,
+          `verification_type` VARCHAR(50) DEFAULT 'locationGps',
           `proof_data` TEXT DEFAULT NULL,
           `xp_earned` INT DEFAULT 0,
           `coins_earned` INT DEFAULT 0,
           `completed_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+          `status` VARCHAR(30) DEFAULT 'verified',
+          `review_notes` TEXT DEFAULT NULL,
+          `reviewed_by` VARCHAR(64) DEFAULT NULL,
+          PRIMARY KEY (`id`),
+          KEY `idx_user_quest` (`user_id`, `quest_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      ''');
+
+      // 5. Notifications Table
+      await _connection!.execute('''
+        CREATE TABLE IF NOT EXISTS `notifications` (
+          `id` VARCHAR(64) NOT NULL,
+          `user_id` VARCHAR(64) DEFAULT NULL,
+          `title` VARCHAR(191) NOT NULL,
+          `message` TEXT NOT NULL,
+          `type` VARCHAR(50) DEFAULT 'system',
+          `is_read` TINYINT(1) DEFAULT 0,
+          `route_target` VARCHAR(100) DEFAULT NULL,
+          `action_label` VARCHAR(100) DEFAULT NULL,
+          `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
           PRIMARY KEY (`id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
       ''');
 
-      debugPrint('[MySQL] Schema verification complete. Tables are ready.');
+      // 6. Badges & User Badges Table
+      await _connection!.execute('''
+        CREATE TABLE IF NOT EXISTS `badges` (
+          `id` VARCHAR(64) NOT NULL,
+          `name` VARCHAR(100) NOT NULL,
+          `description` VARCHAR(255) NOT NULL,
+          `icon` VARCHAR(100) DEFAULT 'badge_crown',
+          `category` VARCHAR(50) DEFAULT 'exploration',
+          `xp_bonus` INT DEFAULT 100,
+          `is_active` TINYINT(1) DEFAULT 1,
+          `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      ''');
+
+      await _connection!.execute('''
+        CREATE TABLE IF NOT EXISTS `user_badges` (
+          `id` VARCHAR(64) NOT NULL,
+          `user_id` VARCHAR(64) NOT NULL,
+          `badge_id` VARCHAR(64) NOT NULL,
+          `earned_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (`id`),
+          UNIQUE KEY `idx_user_badge_unique` (`user_id`, `badge_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      ''');
     } catch (e) {
-      debugPrint('[MySQL] Schema initialization notice: $e');
+      debugPrint('[MySQL] Schema verification notice: $e');
     }
   }
 }

@@ -7,21 +7,28 @@ import '../../domain/repositories/user_repository.dart';
 import '../../domain/usecases/get_user_profile_usecase.dart';
 import '../../domain/usecases/update_user_profile_usecase.dart';
 
+import '../../data/datasources/user_mysql_datasource.dart';
+
 // Storage Provider
 final localStorageServiceProvider = Provider<ILocalStorageService>((ref) {
   return LocalStorageService();
 });
 
-// Data Source Provider
+// Data Source Providers
 final userLocalDataSourceProvider = Provider<IUserLocalDataSource>((ref) {
   final storage = ref.watch(localStorageServiceProvider);
   return UserLocalDataSource(storage);
 });
 
+final userMySqlDataSourceProvider = Provider<IUserMySqlDataSource>((ref) {
+  return UserMySqlDataSource();
+});
+
 // Repository Provider
 final userRepositoryProvider = Provider<UserRepository>((ref) {
-  final dataSource = ref.watch(userLocalDataSourceProvider);
-  return UserRepositoryImpl(dataSource);
+  final localSource = ref.watch(userLocalDataSourceProvider);
+  final mySqlSource = ref.watch(userMySqlDataSourceProvider);
+  return UserRepositoryImpl(localSource, mySqlSource);
 });
 
 // Use Cases Providers
