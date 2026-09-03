@@ -14,6 +14,10 @@ class AppConstants {
   static const String keyCalendarEntries = 'questup_calendar_entries_v1';
   static const String keyQuestSessions = 'questup_quest_sessions_v1';
   static const String keyQuestProofs = 'questup_quest_proofs_v1';
+  static const String keyLocalUsers = 'questup_local_registered_users_v1';
+  static const String keyFriends = 'questup_friends_v1';
+  static const String keyFriendRequests = 'questup_friend_requests_v1';
+  static const String keyPlayerRegistry = 'questup_player_registry_v1';
 
   // Android Package & Store URLs
   static const String androidApplicationId = 'com.questup.quest_up';

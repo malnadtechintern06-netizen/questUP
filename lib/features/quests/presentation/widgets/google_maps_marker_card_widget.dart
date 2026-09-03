@@ -230,38 +230,9 @@ class _GoogleMapsMarkerCardWidgetState extends State<GoogleMapsMarkerCardWidget>
           ),
         ),
 
-        // Top Left: Map Mode Badge
-        Positioned(
-          top: 6,
-          left: 6,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.65),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.place_rounded, size: 10, color: Color(0xFFEA4335)),
-                const SizedBox(width: 3),
-                Text(
-                  'GOOGLE MAPS PIN',
-                  style: AppTypography.caption.copyWith(
-                    fontSize: 8.5,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.4,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
         // Bottom Left: GPS Coordinates Chip
         if (hasCoordinates)
+
           Positioned(
             bottom: 6,
             left: 6,

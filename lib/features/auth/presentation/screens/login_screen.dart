@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:quest_up/app/router/route_paths.dart';
 import 'package:quest_up/app/theme/app_colors.dart';
 import 'package:quest_up/app/theme/app_typography.dart';
-import 'package:quest_up/core/widgets/custom_button.dart';
+import 'package:quest_up/core/widgets/premium_3d_button.dart';
 import 'package:quest_up/features/auth/presentation/providers/auth_providers.dart';
 import 'package:quest_up/features/auth/presentation/widgets/auth_text_field.dart';
 import 'package:quest_up/features/auth/presentation/widgets/forgot_password_dialog.dart';
@@ -56,8 +56,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final authState = ref.watch(authNotifierProvider);
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Login'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: Text(
+          'Explorer Sign In',
+          style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.w800),
+        ),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -72,40 +78,44 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   child: Column(
                     children: [
                       Container(
-                        width: 72,
-                        height: 72,
+                        width: 76,
+                        height: 76,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: AppColors.surface,
                           border: Border.all(color: AppColors.primary, width: 2),
                           boxShadow: [
                             BoxShadow(
-                              color: AppColors.primary.withValues(alpha: 0.25),
-                              blurRadius: 20,
+                              color: AppColors.primary.withValues(alpha: 0.3),
+                              blurRadius: 24,
+                              spreadRadius: 2,
                             ),
                           ],
                         ),
                         child: const Icon(
                           Icons.shield_moon_rounded,
                           color: AppColors.primary,
-                          size: 38,
+                          size: 40,
                         ),
                       ),
                       const SizedBox(height: 16),
                       Text(
                         'Welcome Back, Explorer',
-                        style: AppTypography.displayMedium.copyWith(fontSize: 24),
+                        style: AppTypography.displayMedium.copyWith(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Sign in to continue your real-world quest journey',
-                        style: AppTypography.bodyMedium,
+                        'Sign in to access your radar and quest log',
+                        style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
                         textAlign: TextAlign.center,
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 28),
 
                 // Error Banner (if any)
                 if (authState.errorMessage != null) ...[
@@ -113,7 +123,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: AppColors.accentDanger.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: AppColors.accentDanger.withValues(alpha: 0.6)),
                     ),
                     child: Row(
@@ -166,7 +176,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 AuthTextField(
                   controller: _passwordController,
                   label: 'Password',
-                  hint: 'Enter your password',
+                  hint: 'Enter your security passcode',
                   prefixIcon: Icons.lock_outline_rounded,
                   isPassword: true,
                   textInputAction: TextInputAction.done,
@@ -202,10 +212,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
 
-                // Login Submit Button
-                CustomButton(
+                // 3D Login Submit Button
+                Premium3DButton(
                   text: 'LOGIN TO QUESTUP',
                   icon: Icons.login_rounded,
                   isLoading: authState.isLoading,
@@ -247,3 +257,4 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 }
+

@@ -46,6 +46,14 @@ class AuthMySqlDataSource implements IAuthRemoteDataSource {
     return sha256.convert(bytes).toString();
   }
 
+  Future<Map<String, dynamic>> _getLocalUsersMap() async {
+    final raw = await _storage.getJson(AppConstants.keyLocalUsers);
+    if (raw is Map<String, dynamic>) {
+      return Map<String, dynamic>.from(raw);
+    }
+    return <String, dynamic>{};
+  }
+
   @override
   Stream<AuthUserModel?> get authStateChanges {
     return _authStreamController.stream;
@@ -68,6 +76,9 @@ class AuthMySqlDataSource implements IAuthRemoteDataSource {
     required String password,
   }) async {
     final cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail.isEmpty || password.isEmpty) {
+      throw const AppException('Please enter both email and password.');
+    }
 
     // 1. Try MySQL Database authentication if connected
     final isDbReady = await _dbService.connect();
@@ -97,6 +108,18 @@ class AuthMySqlDataSource implements IAuthRemoteDataSource {
                 : DateTime.now(),
           );
 
+          // Synchronize local credentials registry
+          final localUsers = await _getLocalUsersMap();
+          localUsers[cleanEmail] = {
+            'id': user.id,
+            'name': user.displayName,
+            'email': cleanEmail,
+            'password_hash': storedHash,
+            'salt': salt,
+            'created_at': user.createdAt.toIso8601String(),
+          };
+          await _storage.saveJson(AppConstants.keyLocalUsers, localUsers);
+
           await _storage.saveJson(AppConstants.keyAuthSession, user.toJson());
           _authStreamController.add(user);
           debugPrint('[MySQL] User logged in successfully: ${user.email} (${user.id})');
@@ -112,16 +135,38 @@ class AuthMySqlDataSource implements IAuthRemoteDataSource {
     }
 
     // 2. Offline / Local Fallback Authentication
-    debugPrint('[Auth] Operating in local offline mode for: $cleanEmail');
+    debugPrint('[Auth] Operating in local secure authentication mode for: $cleanEmail');
+    final localUsers = await _getLocalUsersMap();
+    final userRecord = localUsers[cleanEmail];
+
+    if (userRecord == null || userRecord is! Map<String, dynamic>) {
+      throw const AppException('No account found with this email. Please register first.');
+    }
+
+    final storedHash = userRecord['password_hash'] as String?;
+    final salt = userRecord['salt'] as String?;
+
+    if (storedHash == null || salt == null) {
+      throw const AppException('Account credentials error. Please reset your password or register again.');
+    }
+
+    final computedHash = _hashPassword(password, salt);
+    if (computedHash != storedHash) {
+      throw const AppException('Invalid email or password. Please try again.');
+    }
+
     final user = AuthUserModel(
-      id: const Uuid().v4(),
+      id: userRecord['id'] as String? ?? const Uuid().v4(),
       email: cleanEmail,
-      displayName: cleanEmail.split('@').first,
-      createdAt: DateTime.now(),
+      displayName: (userRecord['name'] as String?) ?? cleanEmail.split('@').first,
+      createdAt: userRecord['created_at'] != null
+          ? (DateTime.tryParse(userRecord['created_at'] as String) ?? DateTime.now())
+          : DateTime.now(),
     );
 
     await _storage.saveJson(AppConstants.keyAuthSession, user.toJson());
     _authStreamController.add(user);
+    debugPrint('[Local Auth] User authenticated successfully: ${user.email}');
     return user;
   }
 
@@ -133,6 +178,13 @@ class AuthMySqlDataSource implements IAuthRemoteDataSource {
   }) async {
     final cleanName = name.trim();
     final cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail.isEmpty || password.isEmpty) {
+      throw const AppException('Please provide valid name, email, and password.');
+    }
+    if (password.length < 6) {
+      throw const AppException('Password must be at least 6 characters long.');
+    }
+
     final userId = const Uuid().v4();
     final salt = const Uuid().v4().substring(0, 16);
     final passwordHash = _hashPassword(password, salt);
@@ -186,6 +238,18 @@ class AuthMySqlDataSource implements IAuthRemoteDataSource {
           createdAt: DateTime.now(),
         );
 
+        // Save into local credentials store as well
+        final localUsers = await _getLocalUsersMap();
+        localUsers[cleanEmail] = {
+          'id': userId,
+          'name': cleanName,
+          'email': cleanEmail,
+          'password_hash': passwordHash,
+          'salt': salt,
+          'created_at': DateTime.now().toIso8601String(),
+        };
+        await _storage.saveJson(AppConstants.keyLocalUsers, localUsers);
+
         await _storage.saveJson(AppConstants.keyAuthSession, user.toJson());
         _authStreamController.add(user);
         debugPrint('[MySQL] User registered successfully: ${user.email} (${user.id})');
@@ -198,6 +262,21 @@ class AuthMySqlDataSource implements IAuthRemoteDataSource {
     }
 
     // 2. Offline / Local Fallback Registration
+    final localUsers = await _getLocalUsersMap();
+    if (localUsers.containsKey(cleanEmail)) {
+      throw const AppException('An account with this email already exists. Please sign in.');
+    }
+
+    localUsers[cleanEmail] = {
+      'id': userId,
+      'name': cleanName,
+      'email': cleanEmail,
+      'password_hash': passwordHash,
+      'salt': salt,
+      'created_at': DateTime.now().toIso8601String(),
+    };
+    await _storage.saveJson(AppConstants.keyLocalUsers, localUsers);
+
     final user = AuthUserModel(
       id: userId,
       email: cleanEmail,
@@ -207,6 +286,7 @@ class AuthMySqlDataSource implements IAuthRemoteDataSource {
 
     await _storage.saveJson(AppConstants.keyAuthSession, user.toJson());
     _authStreamController.add(user);
+    debugPrint('[Local Auth] User registered and credentials secured: ${user.email}');
     return user;
   }
 
@@ -218,19 +298,30 @@ class AuthMySqlDataSource implements IAuthRemoteDataSource {
 
   @override
   Future<void> sendPasswordReset(String email) async {
+    final cleanEmail = email.trim().toLowerCase();
     final isDbReady = await _dbService.connect();
     if (isDbReady) {
       try {
         final result = await _dbService.execute(
           'SELECT id FROM users WHERE email = :email LIMIT 1',
-          {'email': email.trim().toLowerCase()},
+          {'email': cleanEmail},
         );
         if (result == null || result.rows.isEmpty) {
           throw const AppException('No account found with that email address.');
         }
+        return;
+      } on AppException {
+        rethrow;
       } catch (e) {
         debugPrint('[MySQL] Password reset check: $e');
       }
     }
+
+    // Local check
+    final localUsers = await _getLocalUsersMap();
+    if (!localUsers.containsKey(cleanEmail)) {
+      throw const AppException('No account found with that email address.');
+    }
   }
 }
+

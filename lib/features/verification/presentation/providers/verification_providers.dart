@@ -374,6 +374,38 @@ class VerificationNotifier extends StateNotifier<VerificationState> {
     double? userLat,
     double? userLon,
   }) async {
+    final isPhotoRequired = quest.requiresPhoto ||
+        quest.requiresFreshPhoto ||
+        quest.verificationType == QuestVerificationType.photoProof;
+
+    if (isPhotoRequired &&
+        (state.capturedPhotoPath == null || state.capturedPhotoPath!.trim().isEmpty)) {
+      final failResult = VerificationResult(
+        isSuccessful: false,
+        message:
+            'Photo Proof Required: Please snap a photo using the QuestUP live camera before submitting verification.',
+        isGpsValid: userLat != null && userLon != null,
+        isCameraValid: false,
+        validatorResults: const [
+          ValidatorResult(
+            passed: false,
+            validatorName: 'Fresh In-App Photo Proof',
+            actualValue: 'No photo provided',
+            requiredValue: 'Live In-App Camera Capture',
+            message:
+                'Photo Proof Required: Please capture a live photo on-site using the in-app camera.',
+          ),
+        ],
+      );
+      state = state.copyWith(
+        uiState: QuestVerificationUIState.rejected,
+        errorMessage: failResult.message,
+        result: failResult,
+        validatorResults: failResult.validatorResults,
+      );
+      return failResult;
+    }
+
     state = state.copyWith(
       uiState: QuestVerificationUIState.verifying,
       errorMessage: null,
@@ -388,10 +420,7 @@ class VerificationNotifier extends StateNotifier<VerificationState> {
             startedAt: state.activeSession?.startedAt ?? DateTime.now(),
           );
 
-      final photoPath = state.capturedPhotoPath ??
-          (quest.requiresPhoto || quest.requiresFreshPhoto
-              ? 'camera_capture_${quest.requiredObject ?? 'proof'}_${DateTime.now().millisecondsSinceEpoch}.jpg'
-              : null);
+      final photoPath = state.capturedPhotoPath;
 
       String? effectiveHash = state.mediaHash;
       if (effectiveHash == null && photoPath != null) {
@@ -402,7 +431,9 @@ class VerificationNotifier extends StateNotifier<VerificationState> {
         userLat: userLat,
         userLon: userLon,
         photoProofPath: photoPath,
-        isFreshCameraCapture: state.isFreshCapture || (photoPath != null && photoPath.contains('camera_capture_')),
+        isFreshCameraCapture: state.isFreshCapture ||
+            (photoPath != null &&
+                (photoPath.contains('camera_capture_') || photoPath.contains('fresh_proof_'))),
         photoAttemptId: attempt.attemptId,
         sessionId: state.activeSession?.sessionId,
         questSession: state.activeSession,
@@ -419,6 +450,7 @@ class VerificationNotifier extends StateNotifier<VerificationState> {
         pastedCharactersCount: state.pastedCharactersCount,
         isAuthenticallyTyped: state.isAuthenticallyTyped,
       );
+
 
       final result = await _verifyQuestUseCase(
         quest: quest,

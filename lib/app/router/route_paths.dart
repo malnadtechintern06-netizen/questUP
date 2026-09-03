@@ -14,7 +14,11 @@ class RoutePaths {
   static const String calendar = '/calendar';
   static const String profile = '/profile';
   static const String rewards = '/rewards';
+  static const String friends = '/friends';
+  static const String friendDetail = '/friends/:id';
 
   static String questDetailPath(String id) => '/quests/$id';
   static String questVerifyPath(String id) => '/quests/$id/verify';
+  static String friendDetailPath(String id) => '/friends/$id';
 }
+

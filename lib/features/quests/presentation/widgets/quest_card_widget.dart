@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/utils/distance_calculator.dart';
+import '../../../../core/widgets/quest_rarity_badge.dart';
 import '../../domain/entities/quest.dart';
 
 class QuestCardWidget extends StatelessWidget {
@@ -14,16 +15,17 @@ class QuestCardWidget extends StatelessWidget {
     required this.onTap,
   });
 
-  Color _getDifficultyColor(QuestDifficulty diff) {
-    switch (diff) {
+  Color _getRarityColor(Quest quest) {
+    if (quest.isCompleted) return AppColors.accentSuccess;
+    switch (quest.difficulty) {
       case QuestDifficulty.easy:
-        return AppColors.difficultyEasy;
+        return AppColors.rarityUncommon;
       case QuestDifficulty.medium:
-        return AppColors.difficultyMedium;
+        return AppColors.rarityRare;
       case QuestDifficulty.hard:
-        return AppColors.difficultyHard;
+        return AppColors.rarityEpic;
       case QuestDifficulty.legendary:
-        return AppColors.difficultyLegendary;
+        return AppColors.rarityLegendary;
     }
   }
 
@@ -59,12 +61,12 @@ class QuestCardWidget extends StatelessWidget {
       case QuestCategory.custom:
         return Icons.tune_rounded;
       case QuestCategory.culture:
-        return Icons.theater_comedy_outlined;
+        return Icons.theater_comedy_rounded;
       case QuestCategory.mystery:
-        return Icons.psychology_alt_outlined;
+        return Icons.psychology_rounded;
       case QuestCategory.location:
       case QuestCategory.landmark:
-        return Icons.account_balance_outlined;
+        return Icons.account_balance_rounded;
     }
   }
 
@@ -113,7 +115,7 @@ class QuestCardWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final diffColor = _getDifficultyColor(quest.difficulty);
+    final rarityColor = _getRarityColor(quest);
     final catIcon = _getCategoryIcon(quest.category);
     final isNearby = quest.isWithinAllowedRadius;
     final verBadge = _getVerificationBadgeText(quest);
@@ -122,68 +124,59 @@ class QuestCardWidget extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: quest.isCompleted
               ? AppColors.primary.withValues(alpha: 0.6)
-              : isNearby
-                  ? AppColors.accentLocation
-                  : AppColors.border,
+              : (isNearby ? rarityColor : AppColors.borderBright),
           width: (quest.isCompleted || isNearby) ? 1.5 : 1.0,
         ),
         boxShadow: [
           BoxShadow(
-            color: isNearby
-                ? AppColors.primary.withValues(alpha: 0.12)
-                : Colors.black.withValues(alpha: 0.05),
-            blurRadius: isNearby ? 14 : 8,
-            offset: const Offset(0, 3),
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
           ),
+          if (isNearby || quest.difficulty == QuestDifficulty.legendary)
+            BoxShadow(
+              color: rarityColor.withValues(alpha: 0.18),
+              blurRadius: 16,
+              spreadRadius: 1,
+            ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(20),
           child: Padding(
-            padding: const EdgeInsets.all(14.0),
+            padding: const EdgeInsets.all(15.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header row: Category + Difficulty + Verification Tag + Distance / Status Badge
+                // Top Badges Wrap
                 Wrap(
                   spacing: 6,
-                  runSpacing: 6,
+                  runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
+                    // Category Icon Capsule
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
                         color: AppColors.surfaceElevated,
                         borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.border),
                       ),
-                      child: Icon(catIcon, size: 16, color: AppColors.textSecondary),
+                      child: Icon(catIcon, size: 15, color: AppColors.primary),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: diffColor.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: diffColor.withValues(alpha: 0.4)),
-                      ),
-                      child: Text(
-                        quest.difficulty.name.toUpperCase(),
-                        style: AppTypography.caption.copyWith(
-                          color: diffColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ),
+                    // Rarity Badge
+                    QuestRarityBadge.fromDifficulty(quest.difficulty),
                     // Verification Type Badge
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                       decoration: BoxDecoration(
                         color: AppColors.surfaceElevated,
                         borderRadius: BorderRadius.circular(6),
@@ -191,13 +184,16 @@ class QuestCardWidget extends StatelessWidget {
                       ),
                       child: Text(
                         verBadge,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: AppTypography.caption.copyWith(
                           color: AppColors.textPrimary,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w700,
                           fontSize: 10,
                         ),
                       ),
                     ),
+                    // Completed status or Distance
                     if (quest.isCompleted)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -210,14 +206,13 @@ class QuestCardWidget extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             const Icon(Icons.check_circle_rounded,
-                                size: 13, color: AppColors.primary),
+                                size: 12, color: AppColors.primary),
                             const SizedBox(width: 4),
                             Text(
-                              'COMPLETED',
-                              style: AppTypography.caption.copyWith(
+                              'DONE',
+                              style: AppTypography.badge.copyWith(
                                 color: AppColors.primary,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 10,
+                                fontSize: 9,
                               ),
                             ),
                           ],
@@ -225,33 +220,33 @@ class QuestCardWidget extends StatelessWidget {
                       )
                     else if (quest.distanceMeters != null)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                         decoration: BoxDecoration(
                           color: isNearby
-                              ? AppColors.accentLocation.withValues(alpha: 0.2)
+                              ? AppColors.primary.withValues(alpha: 0.2)
                               : AppColors.surfaceElevated,
                           borderRadius: BorderRadius.circular(8),
                           border: isNearby
-                              ? Border.all(color: AppColors.accentLocation, width: 1)
-                              : null,
+                              ? Border.all(color: AppColors.primary, width: 1)
+                              : Border.all(color: AppColors.border),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
                               isNearby ? Icons.my_location_rounded : Icons.near_me_outlined,
-                              size: 12,
-                              color: isNearby ? AppColors.accentLocation : AppColors.textSecondary,
+                              size: 11,
+                              color: isNearby ? AppColors.primary : AppColors.textSecondary,
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 3),
                             Text(
                               isNearby
-                                  ? '${DistanceCalculator.formatDistance(quest.distanceMeters!)} (IN RANGE)'
-                                  : '${DistanceCalculator.formatDistance(quest.distanceMeters!)} away',
+                                  ? '${DistanceCalculator.formatDistance(quest.distanceMeters!)} (NEAR)'
+                                  : DistanceCalculator.formatDistance(quest.distanceMeters!),
                               style: AppTypography.caption.copyWith(
-                                color: isNearby ? AppColors.accentLocation : AppColors.textPrimary,
+                                color: isNearby ? AppColors.primary : AppColors.textPrimary,
                                 fontWeight: FontWeight.w700,
-                                fontSize: 11,
+                                fontSize: 10.5,
                               ),
                             ),
                           ],
@@ -259,103 +254,92 @@ class QuestCardWidget extends StatelessWidget {
                       ),
                   ],
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
 
                 // Title
                 Text(
                   quest.title,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTypography.titleMedium.copyWith(fontSize: 16),
+                  style: AppTypography.titleMedium.copyWith(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const SizedBox(height: 6),
 
-                // Connected Origin -> Destination Route
-                if (quest.originLocationName != null) ...[
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceElevated,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: AppColors.border.withValues(alpha: 0.6)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.my_location, size: 11, color: AppColors.accentLocation),
-                        const SizedBox(width: 4),
-                        Flexible(
-                          child: Text(
-                            quest.originLocationName!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTypography.caption.copyWith(
-                              color: AppColors.textSecondary,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Icon(Icons.arrow_forward_rounded, size: 11, color: AppColors.primary),
-                        const SizedBox(width: 4),
-                        const Icon(Icons.location_on_rounded, size: 11, color: AppColors.primary),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            quest.locationName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTypography.caption.copyWith(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ] else ...[
-                  // Location subtitle
-                  Row(
-                    children: [
-                      const Icon(Icons.location_on_outlined, size: 14, color: AppColors.textMuted),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          quest.locationName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTypography.bodyMedium.copyWith(fontSize: 13),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                ],
-
-                // Reward badges
+                // Location line
                 Row(
                   children: [
-                    _buildRewardBadge(
-                      icon: Icons.star_rounded,
-                      color: AppColors.accentXp,
-                      text: '+${quest.xpReward} XP',
-                    ),
-                    const SizedBox(width: 8),
-                    _buildRewardBadge(
-                      icon: Icons.monetization_on_rounded,
-                      color: AppColors.secondary,
-                      text: '+${quest.coinReward} Coins',
-                    ),
-                    const Spacer(),
-                    const Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 13,
-                      color: AppColors.textMuted,
+                    const Icon(Icons.location_on_outlined, size: 14, color: AppColors.textMuted),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        quest.locationName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.bodyMedium.copyWith(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+
+                // Rewards Footer Row with Wrap
+                Row(
+                  children: [
+                    Expanded(
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          _buildRewardBadge(
+                            icon: Icons.bolt_rounded,
+                            color: AppColors.accentXp,
+                            text: '+${quest.xpReward} XP',
+                          ),
+                          _buildRewardBadge(
+                            icon: Icons.monetization_on_rounded,
+                            color: AppColors.secondary,
+                            text: '+${quest.coinReward} Coins',
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.4)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'VIEW',
+                            style: AppTypography.badge.copyWith(
+                              color: AppColors.primary,
+                              fontSize: 10,
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          const Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 12,
+                            color: AppColors.primary,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+
               ],
             ),
           ),
@@ -374,18 +358,23 @@ class QuestCardWidget extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 13, color: color),
           const SizedBox(width: 4),
-          Text(
-            text,
-            style: AppTypography.caption.copyWith(
-              color: color,
-              fontWeight: FontWeight.bold,
-              fontSize: 11,
+          Flexible(
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.caption.copyWith(
+                color: color,
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+              ),
             ),
           ),
         ],
@@ -393,3 +382,5 @@ class QuestCardWidget extends StatelessWidget {
     );
   }
 }
+
+

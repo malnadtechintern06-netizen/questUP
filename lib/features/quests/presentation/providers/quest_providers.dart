@@ -294,6 +294,7 @@ final filteredQuestsProvider = Provider<List<Quest>>((ref) {
   return questsAsync.when(
     data: (quests) {
       return quests.where((q) {
+        if (q.isCompleted) return false;
         final matchesCat = selectedCategory == null || q.category == selectedCategory;
         final matchesQuery = query.isEmpty ||
             q.title.toLowerCase().contains(query) ||
@@ -302,6 +303,7 @@ final filteredQuestsProvider = Provider<List<Quest>>((ref) {
         return matchesCat && matchesQuery;
       }).toList();
     },
+
     loading: () => [],
     error: (err, stack) => [],
   );

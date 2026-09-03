@@ -6,9 +6,13 @@ import 'package:quest_up/app/theme/app_colors.dart';
 import 'package:quest_up/app/theme/app_typography.dart';
 import 'package:quest_up/core/services/maps_launcher_service.dart';
 import 'package:quest_up/core/utils/distance_calculator.dart';
+import 'package:quest_up/core/widgets/animated_xp_bar.dart';
 import 'package:quest_up/core/widgets/app_drawer.dart';
+import 'package:quest_up/core/widgets/coin_counter_3d.dart';
 import 'package:quest_up/core/widgets/custom_button.dart';
 import 'package:quest_up/core/widgets/error_state_widget.dart';
+import 'package:quest_up/core/widgets/glassmorphic_card.dart';
+import 'package:quest_up/core/widgets/quest_rarity_badge.dart';
 import 'package:quest_up/core/widgets/shimmer_loading.dart';
 import 'package:quest_up/features/calendar/presentation/providers/quest_calendar_providers.dart';
 import 'package:quest_up/features/calendar/presentation/widgets/home_calendar_widget.dart';
@@ -126,7 +130,7 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               CustomButton(
                 text: 'SET COORDINATES',
                 width: double.infinity,
@@ -206,7 +210,7 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
         onOpenGpsSimulator: () => _showGpsSimulatorDialog(context, ref),
       ),
       appBar: AppBar(
-        backgroundColor: AppColors.background,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         leading: Builder(
           builder: (scaffoldContext) => IconButton(
@@ -230,7 +234,7 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AppTypography.titleMedium.copyWith(
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w800,
                       color: AppColors.textPrimary,
                     ),
                   ),
@@ -241,12 +245,12 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
             ),
             const SizedBox(height: 1),
             Text(
-              'Ready for your next adventure?',
+              'Your world is your adventure',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: AppTypography.caption.copyWith(
                 color: AppColors.textSecondary,
-                fontSize: 12,
+                fontSize: 11,
               ),
             ),
           ],
@@ -308,6 +312,7 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
         ],
       ),
       body: RefreshIndicator(
+        color: AppColors.primary,
         onRefresh: () async {
           await ref.read(questsNotifierProvider.notifier).refreshLocationAndQuests();
           await ref.read(userProfileNotifierProvider.notifier).loadProfile();
@@ -315,14 +320,14 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Hero Banner Card with Level, XP, and Coins Badges
+              // 1. Hero Gamer Banner Card with Level, XP, and 3D Coin Badge
               userProfileAsync.when(
-                data: (profile) => _buildHeroBannerCard(context, profile),
-                loading: () => const ShimmerBox(width: double.infinity, height: 210, borderRadius: 20),
+                data: (profile) => _buildHeroGamerCard(context, profile),
+                loading: () => const ShimmerBox(width: double.infinity, height: 210, borderRadius: 22),
                 error: (_, _) => const SizedBox.shrink(),
               ),
 
@@ -333,28 +338,42 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
 
               const SizedBox(height: 22),
 
-              // 3. Nearby Adventures Header & View All button
+              // 3. Nearby Adventures Section (Horizontal Floating 3D Cards)
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Nearby Adventures',
-                    style: AppTypography.titleLarge.copyWith(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
+                  Expanded(
+                    child: Row(
+                      children: [
+                        const Icon(Icons.explore_rounded, size: 20, color: AppColors.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Nearby Adventures',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.titleLarge.copyWith(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+                  const SizedBox(width: 8),
                   if (activeGps != null)
                     InkWell(
                       onTap: () => context.go(RoutePaths.quests),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                         child: Text(
-                          'View all',
+                          'View all →',
                           style: AppTypography.bodyMedium.copyWith(
                             color: AppColors.primary,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
                           ),
                         ),
                       ),
@@ -363,51 +382,60 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
               ),
               const SizedBox(height: 12),
 
-              // If GPS is not yet active/enabled, display the Location Required Card instead of quests
+
+              // If GPS is not active, display location prompt card
               if (activeGps == null)
                 _buildLocationRequiredCard(context, ref)
               else
-                // Horizontal Scrollable Cards for Nearby Discovered Landmarks
                 questsAsync.when(
                   data: (quests) {
-                    if (quests.isEmpty) {
-                      return Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: AppColors.border),
-                        ),
+                    final activeQuests = quests.where((q) => !q.isCompleted).toList();
+                    if (activeQuests.isEmpty) {
+                      return GlassmorphicCard(
+                        padding: const EdgeInsets.all(22),
                         child: Center(
-                          child: Text(
-                            'No nearby quests found. Move to another location to discover new quests.',
-                            textAlign: TextAlign.center,
-                            style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+                          child: Column(
+                            children: [
+                              const Icon(Icons.stars_rounded, size: 36, color: AppColors.secondary),
+                              const SizedBox(height: 10),
+                              Text(
+                                quests.isNotEmpty ? 'All Nearby Quests Completed! 🎉' : 'No adventures nearby',
+                                style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                quests.isNotEmpty
+                                    ? 'Great job! Check your Completed tab or move around to discover new quests.'
+                                    : 'Move around your neighborhood to discover new quests.',
+                                textAlign: TextAlign.center,
+                                style: AppTypography.bodyMedium,
+                              ),
+                            ],
                           ),
                         ),
                       );
                     }
                     return SizedBox(
-                      height: 235,
+                      height: 260,
                       child: ListView.builder(
                         scrollDirection: Axis.horizontal,
-                        itemCount: quests.length,
+                        itemCount: activeQuests.length,
                         itemBuilder: (context, index) {
-                          final quest = quests[index];
-                          return _buildAdventureCard(context, quest);
+                          final quest = activeQuests[index];
+                          return _buildAdventure3DCard(context, quest);
                         },
                       ),
                     );
                   },
+
                   loading: () => SizedBox(
-                    height: 235,
+                    height: 260,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
                       itemCount: 3,
                       itemBuilder: (context, index) => const Padding(
-                        padding: EdgeInsets.only(right: 12),
-                        child: ShimmerBox(width: 150, height: 235, borderRadius: 18),
+                        padding: EdgeInsets.only(right: 14),
+                        child: ShimmerBox(width: 175, height: 260, borderRadius: 20),
                       ),
                     ),
                   ),
@@ -420,23 +448,36 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
 
               const SizedBox(height: 24),
 
-              // 3. Daily Progress Section
+              // 4. Daily Progress Section
               _buildDailyProgressSection(context),
 
               const SizedBox(height: 24),
 
-              // 4. Live Tracked GPS Location Banner & Interactive Proximity Radar
+              // 5. Live Tactical GPS Proximity Radar
               if (activeGps != null) ...[
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Live GPS Proximity Radar',
-                      style: AppTypography.titleMedium.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
+                    Expanded(
+                      child: Row(
+                        children: [
+                          const Icon(Icons.satellite_alt_rounded, size: 18, color: AppColors.accentLocation),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Live GPS Proximity Radar',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.titleMedium.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
+                    const SizedBox(width: 8),
                     InkWell(
                       onTap: () =>
                           ref.read(questsNotifierProvider.notifier).refreshLocationAndQuests(),
@@ -456,23 +497,25 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+
+                const SizedBox(height: 10),
 
                 // Location Details Bar
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
                     color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: AppColors.border),
                   ),
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(6),
+                        padding: const EdgeInsets.all(7),
                         decoration: BoxDecoration(
                           color: AppColors.primaryLight,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
                         ),
                         child: const Icon(Icons.location_on_rounded,
                             size: 18, color: AppColors.primary),
@@ -515,7 +558,7 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
 
                 // Radar Display
                 questsAsync.when(
@@ -527,13 +570,13 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
                     },
                   ),
                   loading: () =>
-                      const ShimmerBox(width: double.infinity, height: 240, borderRadius: 24),
+                      const ShimmerBox(width: double.infinity, height: 250, borderRadius: 24),
                   error: (_, _) => const SizedBox.shrink(),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
               ],
 
-              // 5. Category Chips & Quests List
+              // 6. Category Chips & Quests List
               if (activeGps != null) ...[
                 CategoryFilterChips(
                   selectedCategory: selectedCategory,
@@ -551,7 +594,7 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
                     },
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 36),
               ],
             ],
           ),
@@ -560,37 +603,42 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
     );
   }
 
-  Widget _buildHeroBannerCard(BuildContext context, dynamic profile) {
+  Widget _buildHeroGamerCard(BuildContext context, dynamic profile) {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.borderBright, width: 1.2),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.45),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.1),
+            blurRadius: 20,
+            spreadRadius: 1,
           ),
         ],
       ),
       child: Column(
         children: [
-          // Banner Image with Overlay
+          // Banner Image with Cinematic Overlay
           Stack(
             children: [
               ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(21)),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(23)),
                 child: SizedBox(
-                  height: 150,
+                  height: 155,
                   width: double.infinity,
                   child: Image.asset(
                     'assets/images/hero_poster.jpg',
                     fit: BoxFit.cover,
                     alignment: Alignment.center,
                     errorBuilder: (context, error, stackTrace) => Container(
-                      color: AppColors.primary,
+                      color: AppColors.surfaceElevated,
                     ),
                   ),
                 ),
@@ -598,13 +646,13 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
               Positioned.fill(
                 child: Container(
                   decoration: BoxDecoration(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(21)),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(23)),
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        Colors.black.withValues(alpha: 0.15),
-                        Colors.black.withValues(alpha: 0.68),
+                        Colors.black.withValues(alpha: 0.2),
+                        AppColors.surface.withValues(alpha: 0.95),
                       ],
                     ),
                   ),
@@ -619,24 +667,24 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.9),
-                        borderRadius: BorderRadius.circular(6),
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Text(
-                        'DAILY MOTIVATION',
+                        'EXPLORER DASHBOARD',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: Colors.black,
                           fontSize: 9,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w900,
                           letterSpacing: 0.8,
                         ),
                       ),
                     ),
                     const SizedBox(height: 6),
                     const Text(
-                      'Keep Exploring.',
+                      'Turn the World Into Your Game.',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 20,
@@ -645,25 +693,8 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
                         height: 1.15,
                         shadows: [
                           Shadow(
-                            color: Colors.black54,
-                            blurRadius: 8,
-                            offset: Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Text(
-                      'Keep Growing.',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.2,
-                        height: 1.15,
-                        shadows: [
-                          Shadow(
-                            color: Colors.black54,
-                            blurRadius: 8,
+                            color: Colors.black,
+                            blurRadius: 10,
                             offset: Offset(0, 2),
                           ),
                         ],
@@ -672,60 +703,24 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
                   ],
                 ),
               ),
+              // Coins Pill at Top Right of Hero
               Positioned(
-                top: 12,
-                right: 12,
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.35),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.explore_rounded,
-                    color: Colors.white,
-                    size: 18,
-                  ),
+                top: 14,
+                right: 14,
+                child: CoinCounter3D(
+                  coins: profile.coins,
                 ),
               ),
             ],
           ),
 
-          // Stats Row: Level, XP, Coins
+          // XP Progress Bar and Rank Section
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _buildStatBadge(
-                    icon: Icons.navigation_rounded,
-                    iconColor: AppColors.primary,
-                    badgeBg: AppColors.primaryLight,
-                    label: 'Level',
-                    value: '${profile.level}',
-                  ),
-                ),
-                Container(height: 28, width: 1, color: AppColors.border),
-                Expanded(
-                  child: _buildStatBadge(
-                    icon: Icons.water_drop_rounded,
-                    iconColor: AppColors.accentXp,
-                    badgeBg: const Color(0xFFEFF6FF),
-                    label: 'XP',
-                    value: '${profile.currentXp}/${profile.xpToNextLevel}',
-                  ),
-                ),
-                Container(height: 28, width: 1, color: AppColors.border),
-                Expanded(
-                  child: _buildStatBadge(
-                    icon: Icons.monetization_on_rounded,
-                    iconColor: AppColors.secondary,
-                    badgeBg: const Color(0xFFFEF3C7),
-                    label: 'Coins',
-                    value: '${profile.coins}',
-                  ),
-                ),
-              ],
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: AnimatedXpBar(
+              currentXp: profile.currentXp,
+              requiredXp: profile.xpToNextLevel,
+              level: profile.level,
             ),
           ),
         ],
@@ -733,159 +728,153 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
     );
   }
 
-  Widget _buildStatBadge({
-    required IconData icon,
-    required Color iconColor,
-    required Color badgeBg,
-    required String label,
-    required String value,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4.0),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(7),
-            decoration: BoxDecoration(
-              color: badgeBg,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: iconColor, size: 16),
-          ),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.caption.copyWith(
-                    color: AppColors.textSecondary,
-                    fontSize: 10,
-                  ),
-                ),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodyMedium.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAdventureCard(BuildContext context, Quest quest) {
+  Widget _buildAdventure3DCard(BuildContext context, Quest quest) {
     final distStr = DistanceCalculator.formatDistance(quest.distanceMeters ?? 0);
 
     return Container(
-      width: 145,
-      margin: const EdgeInsets.only(right: 12),
+      width: 175,
+      margin: const EdgeInsets.only(right: 14),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.borderBright, width: 1.2),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 12,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
-      child: InkWell(
-        onTap: () => context.push(RoutePaths.questDetailPath(quest.id)),
-        borderRadius: BorderRadius.circular(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Google Maps Location Marker Preview with Bookmark button
-            Stack(
-              children: [
-                GoogleMapsMarkerCardWidget(
-                  quest: quest,
-                  height: 96,
-                  width: double.infinity,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
-                ),
-                Positioned(
-                  top: 6,
-                  right: 6,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.35),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.bookmark_outline_rounded,
-                      color: Colors.white,
-                      size: 16,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            // Info
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          onTap: () => context.push(RoutePaths.questDetailPath(quest.id)),
+          borderRadius: BorderRadius.circular(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Real Place Photo / Google Maps Location Marker Preview
+              Stack(
                 children: [
-                  Text(
-                    quest.locationName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.titleMedium.copyWith(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
+                  GoogleMapsMarkerCardWidget(
+                    quest: quest,
+                    height: 110,
+                    width: double.infinity,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(19)),
                   ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      const Icon(Icons.location_on_outlined,
-                          size: 12, color: AppColors.textSecondary),
-                      const SizedBox(width: 2),
-                      Expanded(
-                        child: Text(
-                          distStr,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTypography.caption.copyWith(
-                            fontSize: 11,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: QuestRarityBadge.fromDifficulty(quest.difficulty),
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        shape: BoxShape.circle,
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '+${quest.xpReward} XP',
-                    style: AppTypography.caption.copyWith(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
+                      child: const Icon(
+                        Icons.bookmark_outline_rounded,
+                        color: Colors.white,
+                        size: 15,
+                      ),
                     ),
                   ),
                 ],
               ),
-            ),
-          ],
+
+              // Info & Action
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      quest.locationName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.titleMedium.copyWith(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on_rounded, size: 12, color: AppColors.primary),
+                        const SizedBox(width: 3),
+                        Expanded(
+                          child: Text(
+                            distStr,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.caption.copyWith(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            '+${quest.xpReward} XP',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.caption.copyWith(
+                              color: AppColors.accentXp,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            '+${quest.coinReward} 🪙',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.caption.copyWith(
+                              color: AppColors.secondary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.4)),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        'START QUEST →',
+                        style: AppTypography.badge.copyWith(
+                          color: AppColors.primary,
+                          fontSize: 9,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -897,28 +886,28 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 14,
-            offset: const Offset(0, 3),
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
                 child: Text(
-                  'Daily Progress',
+                  'Daily Challenges',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTypography.titleLarge.copyWith(
-                    fontSize: 17,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
                     color: AppColors.textPrimary,
                   ),
@@ -928,44 +917,45 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
               Text(
                 '1 / 3 completed',
                 style: AppTypography.caption.copyWith(
-                  color: AppColors.textSecondary,
-                  fontWeight: FontWeight.w600,
+                  color: AppColors.secondary,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 10),
 
+
           // Progress Bar
           ClipRRect(
             borderRadius: BorderRadius.circular(6),
             child: const LinearProgressIndicator(
               value: 0.33,
-              minHeight: 7,
+              minHeight: 6,
               backgroundColor: AppColors.surfaceElevated,
               valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
 
           // Tasks List
           _buildDailyTaskItem(
             icon: Icons.location_on_rounded,
-            title: 'Visit a new place',
+            title: 'Explore a new landmark',
             xp: '+50 XP',
             isCompleted: true,
           ),
-          const Divider(height: 16, color: AppColors.divider),
+          const Divider(height: 14, color: AppColors.divider),
           _buildDailyTaskItem(
             icon: Icons.qr_code_scanner_rounded,
-            title: 'Scan 3 locations',
+            title: 'Scan 3 locations on radar',
             xp: '+30 XP',
             isCompleted: false,
           ),
-          const Divider(height: 16, color: AppColors.divider),
+          const Divider(height: 14, color: AppColors.divider),
           _buildDailyTaskItem(
             icon: Icons.camera_alt_rounded,
-            title: 'Upload a photo',
+            title: 'Capture verified photo proof',
             xp: '+20 XP',
             isCompleted: false,
           ),
@@ -983,14 +973,18 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
     return Row(
       children: [
         Container(
-          padding: const EdgeInsets.all(9),
+          padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: isCompleted ? AppColors.primaryLight : AppColors.surfaceElevated,
             shape: BoxShape.circle,
+            border: Border.all(
+              color: isCompleted ? AppColors.primary : AppColors.border,
+              width: 1,
+            ),
           ),
           child: Icon(
             icon,
-            size: 18,
+            size: 16,
             color: isCompleted ? AppColors.primary : AppColors.textSecondary,
           ),
         ),
@@ -1019,7 +1013,7 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
         Icon(
           isCompleted ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
           color: isCompleted ? AppColors.primary : AppColors.textMuted,
-          size: 24,
+          size: 22,
         ),
       ],
     );
@@ -1032,10 +1026,10 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.35), width: 1.5),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.4), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.08),
+            color: AppColors.primary.withValues(alpha: 0.1),
             blurRadius: 20,
             spreadRadius: 2,
           ),
@@ -1106,4 +1100,5 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
     );
   }
 }
+
 

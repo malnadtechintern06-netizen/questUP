@@ -19,6 +19,12 @@ import 'package:quest_up/features/quests/domain/entities/quest.dart';
 import 'package:quest_up/features/quests/presentation/widgets/google_maps_marker_card_widget.dart';
 import 'package:quest_up/features/verification/presentation/widgets/drawing_canvas_widget.dart';
 import 'package:quest_up/features/verification/presentation/widgets/writing_editor_widget.dart';
+import 'package:quest_up/features/friends/presentation/screens/friends_screen.dart';
+import 'package:quest_up/features/friends/presentation/screens/friend_detail_screen.dart';
+import 'package:quest_up/features/friends/presentation/providers/friends_providers.dart';
+import 'package:quest_up/features/friends/domain/entities/friend_profile.dart';
+import 'package:quest_up/features/friends/domain/entities/friend_request.dart';
+
 
 void main() {
   testWidgets('WelcomeScreen renders logo, tagline, and CTA buttons', (WidgetTester tester) async {
@@ -178,10 +184,11 @@ void main() {
       ),
     );
 
-    expect(find.text('GOOGLE MAPS PIN'), findsOneWidget);
     expect(find.text('13.9182°, 75.0682°'), findsOneWidget);
     expect(find.byIcon(Icons.directions_bus_rounded), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
+
 
   testWidgets('AvatarSelectorSheet renders without overflowing', (WidgetTester tester) async {
     String selected = 'avatar_ranger';
@@ -293,9 +300,203 @@ void main() {
     expect(find.text('Enjoying QuestUP? Rate the app'), findsOneWidget);
     expect(find.text('Share QuestUP'), findsOneWidget);
     expect(find.text('Invite friends to join your quests'), findsOneWidget);
+    expect(find.text('Sign Out'), findsOneWidget);
+    expect(find.text('Log out of your QuestUP account'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('FriendsScreen renders unique Player Tag, tabs, and friends cards', (WidgetTester tester) async {
+    final mockFriend = FriendProfile(
+      userId: 'comp_1',
+      playerTag: 'QST-1001',
+      name: 'Elena Shadowstride',
+      avatarKey: 'avatar_mystic_sage',
+      level: 6,
+      currentXp: 3850,
+      coins: 1950,
+      rank: 1,
+      rankTitle: 'Apex Mythic Explorer',
+      completedQuestsCount: 18,
+      gamesPlayedCount: 19,
+      completedQuests: [
+        FriendCompletedQuestSummary(
+          questId: 'quest_fortress_1',
+          title: 'Fortress Citadel Bastion Ascent',
+          category: 'Historical Landmark',
+          xpEarned: 350,
+          coinsEarned: 180,
+          completedAt: DateTime.now(),
+          locationName: 'Ancient Hilltop Citadel',
+        ),
+      ],
+
+      earnedBadges: const [
+        FriendBadgeSummary(
+          badgeId: 'badge_immortal_mythic',
+          title: 'Immortal Mythic Legend',
+          tier: 'Mythic',
+          iconKey: 'badge_immortal_mythic',
+          isHardcore: true,
+        ),
+      ],
+      friendshipDate: DateTime.now(),
+      isOnline: true,
+      lastActiveText: 'Exploring Live Radar',
+    );
+
+    final mockRequest = FriendRequest(
+      id: 'req_1',
+      senderId: 'comp_2',
+      senderName: 'Kai Horizon',
+      senderTag: 'QST-1002',
+      senderAvatarKey: 'avatar_sky_pilot',
+      senderLevel: 5,
+      receiverId: 'user_1',
+      receiverTag: 'QST-7842',
+      status: FriendRequestStatus.pending,
+      createdAt: DateTime.now(),
+    );
+
+    final mockProfile = UserProfile(
+      id: 'user_1',
+      name: 'Alex Explorer',
+      email: 'alex@questup.com',
+      avatarKey: 'avatar_cyber_knight',
+      level: 3,
+      currentXp: 200,
+      xpToNextLevel: 500,
+      coins: 50,
+      completedQuestIds: const [],
+      earnedBadgeIds: const [],
+      joinedAt: DateTime.now(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: ProviderScope(
+          overrides: [
+            userProfileNotifierProvider.overrideWith((ref) => FakeUserProfileNotifier(mockProfile)),
+            friendsNotifierProvider.overrideWith(
+              (ref) => FakeFriendsNotifier(
+                FriendsState(
+                  myPlayerTag: 'QST-7842',
+                  friends: [mockFriend],
+                  pendingRequests: [mockRequest],
+                  suggestedPlayers: const [],
+                ),
+              ),
+            ),
+          ],
+          child: const FriendsScreen(),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Squad & Explorer Friends'), findsOneWidget);
+    expect(find.text('QST-7842'), findsOneWidget);
+    expect(find.text('COPY'), findsOneWidget);
+    expect(find.text('Elena Shadowstride'), findsOneWidget);
+    expect(find.text('RANK #1'), findsOneWidget);
+    expect(find.text('Add Friend'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('FriendDetailScreen renders metrics, quest history, and earned badges', (WidgetTester tester) async {
+    final mockFriend = FriendProfile(
+      userId: 'comp_1',
+      playerTag: 'QST-1001',
+      name: 'Elena Shadowstride',
+      avatarKey: 'avatar_mystic_sage',
+      level: 6,
+      currentXp: 3850,
+      coins: 1950,
+      rank: 1,
+      rankTitle: 'Apex Mythic Explorer',
+      completedQuestsCount: 18,
+      gamesPlayedCount: 19,
+      completedQuests: [
+        FriendCompletedQuestSummary(
+          questId: 'quest_fortress_1',
+          title: 'Fortress Citadel Bastion Ascent',
+          category: 'Historical Landmark',
+          xpEarned: 350,
+          coinsEarned: 180,
+          completedAt: DateTime.now(),
+          locationName: 'Ancient Hilltop Citadel',
+        ),
+      ],
+      earnedBadges: const [
+        FriendBadgeSummary(
+          badgeId: 'badge_immortal_mythic',
+          title: 'Immortal Mythic Legend',
+          tier: 'Mythic',
+          iconKey: 'badge_immortal_mythic',
+          isHardcore: true,
+        ),
+      ],
+      friendshipDate: DateTime.now(),
+      isOnline: true,
+      lastActiveText: 'Active on Radar',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: ProviderScope(
+          overrides: [
+            friendsNotifierProvider.overrideWith(
+              (ref) => FakeFriendsNotifier(
+                FriendsState(selectedFriend: mockFriend),
+                friendToReturn: mockFriend,
+              ),
+            ),
+          ],
+          child: const FriendDetailScreen(friendUserId: 'comp_1'),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.text('Friend Game Profile'), findsOneWidget);
+    expect(find.text('Elena Shadowstride'), findsOneWidget);
+    expect(find.text('Unique ID: QST-1001'), findsOneWidget);
+    expect(find.text('Quests Cleared'), findsOneWidget);
+    expect(find.text('Current Rank'), findsOneWidget);
+    expect(find.text('Total XP Score'), findsOneWidget);
+    expect(find.text('Badges Earned'), findsOneWidget);
+    expect(find.text('Fortress Citadel Bastion Ascent'), findsOneWidget);
+    expect(find.text('Immortal Mythic Legend'), findsOneWidget);
+    expect(find.text('CHALLENGE FRIEND ON RADAR'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
+
+class FakeFriendsNotifier extends StateNotifier<FriendsState> implements FriendsNotifier {
+  final FriendProfile? friendToReturn;
+  FakeFriendsNotifier(super.state, {this.friendToReturn});
+
+  @override
+  Future<void> loadFriendsData() async {}
+  @override
+  Future<void> searchPlayer(String query) async {}
+  @override
+  Future<bool> sendFriendRequest(String targetPlayerTagOrId) async => true;
+  @override
+  Future<void> acceptFriendRequest(String requestId) async {}
+  @override
+  Future<void> rejectFriendRequest(String requestId) async {}
+  @override
+  Future<void> removeFriend(String friendUserId) async {}
+  @override
+  Future<FriendProfile?> loadFriendDetail(String friendUserId) async {
+    return friendToReturn ?? state.selectedFriend;
+  }
+  @override
+  void clearMessages() {}
+}
+
 
 class FakeUserProfileNotifier extends UserProfileNotifier {
   FakeUserProfileNotifier(UserProfile profile)

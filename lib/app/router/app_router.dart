@@ -16,6 +16,9 @@ import 'package:quest_up/features/quests/presentation/screens/quest_detail_scree
 import 'package:quest_up/features/quests/presentation/screens/quest_list_screen.dart';
 import 'package:quest_up/features/calendar/presentation/screens/quest_calendar_screen.dart';
 import 'package:quest_up/features/verification/presentation/screens/quest_verification_screen.dart';
+import 'package:quest_up/features/friends/presentation/screens/friends_screen.dart';
+import 'package:quest_up/features/friends/presentation/screens/friend_detail_screen.dart';
+
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -158,5 +161,21 @@ final GoRouter appRouter = GoRouter(
       name: RouteNames.calendar,
       builder: (context, state) => const QuestCalendarScreen(),
     ),
+    GoRoute(
+      parentNavigatorKey: _rootNavigatorKey,
+      path: RoutePaths.friends,
+      name: RouteNames.friends,
+      builder: (context, state) => const FriendsScreen(),
+    ),
+    GoRoute(
+      parentNavigatorKey: _rootNavigatorKey,
+      path: RoutePaths.friendDetail,
+      name: RouteNames.friendDetail,
+      builder: (context, state) {
+        final friendId = state.pathParameters['id'] ?? '';
+        return FriendDetailScreen(friendUserId: friendId);
+      },
+    ),
   ],
 );
+

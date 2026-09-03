@@ -5,8 +5,8 @@ import 'package:quest_up/app/router/route_paths.dart';
 import 'package:quest_up/app/theme/app_colors.dart';
 import 'package:quest_up/app/theme/app_typography.dart';
 import 'package:quest_up/core/utils/distance_calculator.dart';
-import 'package:quest_up/core/widgets/custom_button.dart';
 import 'package:quest_up/core/widgets/error_state_widget.dart';
+import 'package:quest_up/core/widgets/premium_3d_button.dart';
 import 'package:quest_up/core/widgets/reward_dialog.dart';
 import 'package:quest_up/core/widgets/shimmer_loading.dart';
 import 'package:quest_up/features/location_permission/presentation/providers/location_permission_provider.dart';
@@ -56,8 +56,14 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
     final cameraService = ref.watch(cameraServiceProvider);
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Smart Proof Verification'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: Text(
+          'Smart Proof Scanner',
+          style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.w800),
+        ),
       ),
       body: questAsync.when(
         loading: () => const Padding(
@@ -92,7 +98,7 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
                 children: [
                   CircularProgressIndicator(color: AppColors.primary),
                   SizedBox(height: 16),
-                  Text('Acquiring GPS Satellite Signal...'),
+                  Text('Acquiring High-Precision GPS Lock...'),
                 ],
               ),
             );
@@ -102,22 +108,25 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
             children: [
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Quest Header Card
+                      // High-Tech Mission Header
                       _buildQuestHeader(quest, verificationState),
                       const SizedBox(height: 14),
 
-                      // Location Services & Proximity Check Prompt
+                      // Two-Step On-Site Verification Stepper HUD
+                      _buildTwoStepVerificationHUD(quest, userCoords, verificationState),
+
+                      // Location Services Prompt if needed
                       if (isLocationRequired && userCoords == null) ...[
                         Container(
                           margin: const EdgeInsets.only(bottom: 16),
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
                             color: AppColors.surface,
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(18),
                             border: Border.all(
                               color: AppColors.accentDanger.withValues(alpha: 0.6),
                               width: 1.5,
@@ -136,6 +145,7 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
                                       style: AppTypography.titleMedium.copyWith(
                                         color: AppColors.accentDanger,
                                         fontSize: 15,
+                                        fontWeight: FontWeight.bold,
                                       ),
                                     ),
                                   ),
@@ -143,17 +153,17 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                'To complete this quest, open the app, enable location services, and physically visit ${quest.locationName}.',
+                                'To verify this quest, enable location services and physically visit ${quest.locationName}.',
                                 style: AppTypography.caption.copyWith(
                                   color: AppColors.textSecondary,
-                                  height: 1.3,
+                                  height: 1.35,
                                 ),
                               ),
                               const SizedBox(height: 12),
-                              CustomButton(
-                                text: 'ENABLE LOCATION / GPS',
+                              Premium3DButton(
+                                text: 'ENABLE GPS LOCATION',
                                 icon: Icons.my_location_rounded,
-                                customColor: AppColors.primary,
+                                color: AppColors.primary,
                                 width: double.infinity,
                                 onPressed: () {
                                   ref
@@ -166,11 +176,11 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
                         ),
                       ],
 
-                      // Requirements Breakdown Checklist
+                      // Anti-Cheat & Requirements Breakdown Checklist
                       _buildRequirementsChecklist(quest, userCoords, verificationState),
                       const SizedBox(height: 16),
 
-                      // Dedicated Verification Engine
+                      // Dedicated Verification Engine (Viewfinder, Canvas, Writing, Video, Minigame)
                       _buildVerificationEngine(
                         context,
                         ref,
@@ -181,36 +191,42 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
                       ),
                       const SizedBox(height: 16),
 
-                      // Verification Results / Report Card
+                      // Verification Results / Validation Breakdown
                       if (verificationState.validatorResults.isNotEmpty) ...[
                         _buildVerificationReportCard(verificationState.validatorResults),
                         const SizedBox(height: 16),
                       ],
 
-                      // Error / Rejection message banner if any
+                      // Rejection Alert Banner if any
                       if (verificationState.errorMessage != null) ...[
                         Container(
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: AppColors.accentDanger.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: AppColors.accentDanger),
+                            color: AppColors.surface,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: AppColors.accentDanger, width: 1.5),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.accentDanger.withValues(alpha: 0.2),
+                                blurRadius: 14,
+                              ),
+                            ],
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(Icons.cancel_rounded, color: AppColors.accentDanger, size: 22),
+                              const Icon(Icons.cancel_rounded, color: AppColors.accentDanger, size: 24),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'PROOF REJECTED ❌',
+                                      'VERIFICATION REJECTED ❌',
                                       style: AppTypography.titleMedium.copyWith(
                                         color: AppColors.accentDanger,
                                         fontSize: 14,
-                                        fontWeight: FontWeight.bold,
+                                        fontWeight: FontWeight.w900,
                                       ),
                                     ),
                                     const SizedBox(height: 4),
@@ -218,7 +234,7 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
                                       verificationState.errorMessage!,
                                       style: AppTypography.bodyMedium.copyWith(
                                         color: Colors.white,
-                                        height: 1.3,
+                                        height: 1.35,
                                       ),
                                     ),
                                   ],
@@ -234,24 +250,29 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
                 ),
               ),
 
-              // Bottom Action CTA
+              // Bottom Action Launchpad
               Container(
-                padding: const EdgeInsets.all(16),
-                decoration: const BoxDecoration(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                decoration: BoxDecoration(
                   color: AppColors.surface,
-                  border: Border(
-                    top: BorderSide(color: AppColors.border),
-                  ),
+                  border: const Border(top: BorderSide(color: AppColors.borderBright)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      blurRadius: 16,
+                      offset: const Offset(0, -4),
+                    ),
+                  ],
                 ),
                 child: SafeArea(
                   child: verificationState.uiState == QuestVerificationUIState.rejected
                       ? Row(
                           children: [
                             Expanded(
-                              child: CustomButton(
+                              child: Premium3DButton(
                                 text: 'RETRY & CAPTURE FRESH PROOF',
                                 icon: Icons.refresh_rounded,
-                                customColor: AppColors.accentDanger,
+                                color: AppColors.accentDanger,
                                 onPressed: () {
                                   ref.read(verificationNotifierProvider.notifier).clearProof();
                                 },
@@ -259,14 +280,36 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
                             ),
                           ],
                         )
-                      : CustomButton(
+                      : Premium3DButton(
                           text: verificationState.isVerifying
-                              ? 'VERIFYING PROOF... ⏳'
-                              : 'SUBMIT PROOF FOR VERIFICATION',
-                          icon: Icons.verified_rounded,
+                              ? 'VALIDATING TELEMETRY...'
+                              : ((quest.requiresPhoto || quest.requiresFreshPhoto || quest.verificationType == QuestVerificationType.photoProof) &&
+                                      verificationState.capturedPhotoPath == null
+                                  ? 'CAPTURE LIVE PHOTO TO VERIFY'
+                                  : 'SUBMIT PROOF FOR VERIFICATION'),
+                          icon: (quest.requiresPhoto || quest.requiresFreshPhoto || quest.verificationType == QuestVerificationType.photoProof) &&
+                                  verificationState.capturedPhotoPath == null
+                              ? Icons.camera_alt_rounded
+                              : Icons.verified_rounded,
                           isLoading: verificationState.isVerifying,
+                          color: (quest.requiresPhoto || quest.requiresFreshPhoto || quest.verificationType == QuestVerificationType.photoProof) &&
+                                  verificationState.capturedPhotoPath == null
+                              ? AppColors.secondary
+                              : AppColors.primary,
                           width: double.infinity,
                           onPressed: () async {
+                            final isPhotoReq = quest.requiresPhoto ||
+                                quest.requiresFreshPhoto ||
+                                quest.verificationType == QuestVerificationType.photoProof;
+
+                            if (isPhotoReq &&
+                                (verificationState.capturedPhotoPath == null ||
+                                    verificationState.capturedPhotoPath!.isEmpty)) {
+                              // Direct user to live camera capture
+                              ref.read(verificationNotifierProvider.notifier).captureCameraProof();
+                              return;
+                            }
+
                             final result = await ref
                                 .read(verificationNotifierProvider.notifier)
                                 .submitVerification(
@@ -300,6 +343,7 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
     );
   }
 
+
   Widget _buildQuestHeader(Quest quest, VerificationState state) {
     final hasActiveSession = state.activeSession != null && state.activeSession!.isActive;
 
@@ -307,68 +351,252 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: hasActiveSession ? AppColors.primary.withValues(alpha: 0.5) : AppColors.border,
+          color: hasActiveSession ? AppColors.primary.withValues(alpha: 0.5) : AppColors.borderBright,
+          width: 1.2,
         ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+            ),
+            child: Icon(_getCategoryIcon(quest.category), color: AppColors.primary, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  quest.title,
+                  style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  quest.locationName,
+                  style: AppTypography.caption.copyWith(color: AppColors.textSecondary),
+                ),
+              ],
+            ),
+          ),
+          if (hasActiveSession)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.accentSuccess.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.accentSuccess.withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.bolt_rounded, size: 12, color: AppColors.accentSuccess),
+                  const SizedBox(width: 3),
+                  Text(
+                    'Active',
+                    style: AppTypography.badge.copyWith(
+                      color: AppColors.accentSuccess,
+                      fontSize: 9,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTwoStepVerificationHUD(
+    Quest quest,
+    dynamic userCoords,
+    VerificationState verificationState,
+  ) {
+    final hasGps = quest.hasGpsRequirement && quest.latitude != 0.0 && quest.longitude != 0.0;
+    final isGpsNearby = !hasGps ||
+        (userCoords != null &&
+            DistanceCalculator.isWithinRadius(
+              userLat: userCoords.latitude,
+              userLon: userCoords.longitude,
+              targetLat: quest.latitude,
+              targetLon: quest.longitude,
+              radiusMeters: quest.radiusMeters,
+            ));
+
+    final dist = (hasGps && userCoords != null)
+        ? DistanceCalculator.calculateDistanceMeters(
+            lat1: userCoords.latitude,
+            lon1: userCoords.longitude,
+            lat2: quest.latitude,
+            lon2: quest.longitude,
+          )
+        : null;
+
+    final isPhotoReq = quest.requiresPhoto ||
+        quest.requiresFreshPhoto ||
+        quest.verificationType == QuestVerificationType.photoProof;
+
+    final hasPhoto = verificationState.capturedPhotoPath != null &&
+        verificationState.capturedPhotoPath!.isNotEmpty;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.borderBright, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(_getCategoryIcon(quest.category), color: AppColors.primary),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      quest.title,
-                      style: AppTypography.titleMedium,
-                    ),
-                    Text(
-                      quest.locationName,
-                      style: AppTypography.caption,
-                    ),
-                  ],
+              const Icon(Icons.verified_user_rounded, color: AppColors.primary, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'TWO-STEP ON-SITE VERIFICATION PIPELINE',
+                style: AppTypography.badge.copyWith(
+                  color: AppColors.primary,
+                  fontSize: 10,
+                  letterSpacing: 0.8,
                 ),
               ),
-              if (hasActiveSession)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.accentSuccess.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.accentSuccess.withValues(alpha: 0.4)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.bolt_rounded, size: 12, color: AppColors.accentSuccess),
-                      const SizedBox(width: 3),
-                      Text(
-                        'Session Active',
-                        style: AppTypography.caption.copyWith(
-                          color: AppColors.accentSuccess,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
             ],
+          ),
+          const SizedBox(height: 14),
+
+          // Step 1: On-Site Geofence Lock
+          _buildPipelineStepTile(
+            stepNumber: '1',
+            title: 'On-Site GPS Geofence Lock',
+            subtitle: hasGps
+                ? (userCoords == null
+                    ? 'Acquiring high-precision GPS position...'
+                    : (isGpsNearby
+                        ? 'On-Site position confirmed (${dist?.round()}m from landmark)'
+                        : 'Out of Range (${dist?.round()}m away • Need < ${quest.radiusMeters.round()}m)'))
+                : 'GPS Geofence not required for this mission',
+            isComplete: isGpsNearby && (hasGps ? userCoords != null : true),
+            isAlert: hasGps && userCoords != null && !isGpsNearby,
+            activeColor: AppColors.primary,
+          ),
+
+          const Padding(
+            padding: EdgeInsets.only(left: 17),
+            child: SizedBox(
+              height: 14,
+              child: VerticalDivider(
+                color: AppColors.borderBright,
+                thickness: 1.5,
+              ),
+            ),
+          ),
+
+          // Step 2: Live On-Site Photo Proof & AI Anti-Cheat Assessment
+          _buildPipelineStepTile(
+            stepNumber: '2',
+            title: 'Live On-Site Proof & Anti-Cheat Scan',
+            subtitle: !isGpsNearby
+                ? 'Locked: Approach ${quest.locationName} to unlock camera'
+                : (hasPhoto
+                    ? 'Photo captured (${verificationState.isFreshCapture ? 'Live In-App' : 'Image Attached'}) • Multi-signal anti-cheat active'
+                    : (isPhotoReq
+                        ? 'Live camera capture required on-site'
+                        : 'Input activity telemetry below')),
+            isComplete: hasPhoto || (!isPhotoReq && verificationState.isRequirementSatisfied),
+            isAlert: isGpsNearby && isPhotoReq && !hasPhoto,
+            activeColor: AppColors.secondary,
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildPipelineStepTile({
+    required String stepNumber,
+    required String title,
+    required String subtitle,
+    required bool isComplete,
+    required bool isAlert,
+    required Color activeColor,
+  }) {
+    final statusColor = isComplete
+        ? AppColors.accentSuccess
+        : (isAlert ? AppColors.accentDanger : AppColors.textMuted);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isComplete
+                ? AppColors.accentSuccess.withValues(alpha: 0.2)
+                : (isAlert
+                    ? AppColors.accentDanger.withValues(alpha: 0.2)
+                    : AppColors.surfaceElevated),
+            border: Border.all(
+              color: statusColor,
+              width: 1.8,
+            ),
+          ),
+          child: Center(
+            child: isComplete
+                ? const Icon(Icons.check_rounded, color: AppColors.accentSuccess, size: 18)
+                : (isAlert
+                    ? const Icon(Icons.close_rounded, color: AppColors.accentDanger, size: 18)
+                    : Text(
+                        stepNumber,
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 13,
+                        ),
+                      )),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: AppTypography.titleMedium.copyWith(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: isComplete ? AppColors.textPrimary : AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: AppTypography.caption.copyWith(
+                  color: isAlert ? AppColors.accentDanger : AppColors.textMuted,
+                  fontSize: 11,
+                  height: 1.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -377,6 +605,7 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
     dynamic userCoords,
     VerificationState verificationState,
   ) {
+
     final items = <Widget>[];
 
     // 1. Quest Session Status
@@ -384,7 +613,7 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
     items.add(_buildChecklistItem(
       icon: Icons.shield_outlined,
       title: 'Quest Session',
-      subtitle: isSessionActive ? 'Active quest session' : 'Session expired',
+      subtitle: isSessionActive ? 'Active telemetry session' : 'Session expired',
       isMet: isSessionActive,
     ));
 
@@ -402,7 +631,7 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
       items.add(_buildChecklistItem(
         icon: Icons.my_location_rounded,
         title: 'GPS Geofence',
-        subtitle: 'Within ${quest.radiusMeters.round()}m of waypoint',
+        subtitle: 'Within ${quest.radiusMeters.round()}m of landmark',
         isMet: userCoords != null ? isGpsNearby : null,
       ));
     }
@@ -421,15 +650,15 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
     if (quest.requiresFreshPhoto) {
       items.add(_buildChecklistItem(
         icon: Icons.camera_alt_rounded,
-        title: 'Fresh In-App Photo',
-        subtitle: 'Live camera capture during this session',
+        title: 'Live Camera Capture',
+        subtitle: 'Hardware sensor capture required',
         isMet: verificationState.capturedPhotoPath != null && verificationState.isFreshCapture,
       ));
     } else if (quest.requiresPhoto || quest.verificationType == QuestVerificationType.photoProof) {
       items.add(_buildChecklistItem(
         icon: Icons.photo_camera_outlined,
         title: 'Photo Proof',
-        subtitle: 'Capture or upload image proof',
+        subtitle: 'Capture or select verified image',
         isMet: verificationState.capturedPhotoPath != null,
       ));
     }
@@ -438,18 +667,18 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
     if (verificationState.mediaHash != null) {
       items.add(_buildChecklistItem(
         icon: Icons.fingerprint_rounded,
-        title: 'Anti-Duplicate Check',
-        subtitle: 'Unique SHA-256 fingerprint verified',
+        title: 'Anti-Duplicate Hash',
+        subtitle: 'SHA-256 fingerprint verified unique',
         isMet: true,
       ));
     }
 
-    // 6. Generic Target Object
+    // 6. Target Object Detection
     if (quest.hasObjectDetection) {
       items.add(_buildChecklistItem(
-        icon: Icons.search_rounded,
+        icon: Icons.view_in_ar_rounded,
         title: 'Target Object',
-        subtitle: 'Verify subject contains "${quest.requiredObject}"',
+        subtitle: 'Must detect "${quest.requiredObject}"',
       ));
     }
 
@@ -457,18 +686,9 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
     if (quest.requiresAntiScreenCheck) {
       items.add(_buildChecklistItem(
         icon: Icons.shield_outlined,
-        title: 'Anti-Screen & Display Check',
-        subtitle: 'Photos of screens, monitors, or posters rejected',
+        title: 'Screen Rejection Check',
+        subtitle: 'Photos of displays or paper rejected',
         isMet: true,
-      ));
-    }
-
-    // 7. Place Detection
-    if (quest.hasPlaceDetection) {
-      items.add(_buildChecklistItem(
-        icon: Icons.account_balance_outlined,
-        title: 'Place / Site',
-        subtitle: '${quest.requiredPlace ?? ''} ${quest.requiredTarget ?? ''}'.trim(),
       ));
     }
 
@@ -487,7 +707,7 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
       items.add(_buildChecklistItem(
         icon: Icons.edit_note_outlined,
         title: 'Word Count',
-        subtitle: 'Minimum ${quest.requiredWords} words (Anti-cheat typing enabled)',
+        subtitle: 'Minimum ${quest.requiredWords} words (Anti-paste active)',
         isMet: verificationState.wordCount >= quest.requiredWords && !verificationState.isPasted,
       ));
     }
@@ -503,10 +723,10 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
     }
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surfaceElevated,
-        borderRadius: BorderRadius.circular(16),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
@@ -514,15 +734,19 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
         children: [
           Row(
             children: [
-              const Icon(Icons.rule_rounded, color: AppColors.primary, size: 18),
+              const Icon(Icons.security_rounded, color: AppColors.primary, size: 18),
               const SizedBox(width: 8),
               Text(
-                'Verification Requirements Checklist',
-                style: AppTypography.titleMedium.copyWith(fontSize: 13, fontWeight: FontWeight.bold),
+                'VERIFICATION CHECKLIST & ANTI-CHEAT',
+                style: AppTypography.badge.copyWith(
+                  color: AppColors.primary,
+                  fontSize: 10,
+                  letterSpacing: 1.0,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           ...items,
         ],
       ),
@@ -550,28 +774,28 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Row(
-              children: [
-                Text(
-                  '$title: ',
-                  style: AppTypography.caption.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                    fontSize: 11,
+            child: RichText(
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              text: TextSpan(
+                children: [
+                  TextSpan(
+                    text: '$title: ',
+                    style: AppTypography.caption.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                      fontSize: 11,
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  TextSpan(
+                    text: subtitle,
                     style: AppTypography.caption.copyWith(
                       color: AppColors.textSecondary,
                       fontSize: 11,
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -579,16 +803,18 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
     );
   }
 
+
   Widget _buildVerificationReportCard(List<ValidatorResult> results) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: results.every((r) => r.passed)
-              ? AppColors.accentSuccess.withValues(alpha: 0.5)
-              : AppColors.accentDanger.withValues(alpha: 0.5),
+              ? AppColors.accentSuccess.withValues(alpha: 0.6)
+              : AppColors.accentDanger.withValues(alpha: 0.6),
+          width: 1.2,
         ),
       ),
       child: Column(
@@ -606,7 +832,7 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
               ),
               const SizedBox(width: 8),
               Text(
-                'Smart Proof Validation Breakdown',
+                'Validation Telemetry Breakdown',
                 style: AppTypography.titleMedium.copyWith(fontSize: 14, fontWeight: FontWeight.bold),
               ),
             ],
@@ -782,7 +1008,7 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
               const SizedBox(height: 20),
             ],
             Text(
-              quest.hasGpsRequirement ? 'Step 2: In-App Photo Proof' : 'Photo Proof Submission',
+              quest.hasGpsRequirement ? 'Step 2: Live In-App Camera Scanner' : 'Photo Proof Submission',
               style: AppTypography.titleMedium,
             ),
             const SizedBox(height: 8),
@@ -838,9 +1064,9 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
       case QuestCategory.custom:
         return Icons.tune_rounded;
       case QuestCategory.culture:
-        return Icons.theater_comedy_outlined;
+        return Icons.theater_comedy_rounded;
       case QuestCategory.mystery:
-        return Icons.psychology_alt_outlined;
+        return Icons.psychology_rounded;
       case QuestCategory.location:
       case QuestCategory.landmark:
         return Icons.account_balance_rounded;

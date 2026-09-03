@@ -23,11 +23,18 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen> {
     final achievementsAsync = ref.watch(achievementsNotifierProvider);
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Achievements & Badges'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: Text(
+          'Trophy Vault',
+          style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.w800),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Refresh Vault',
+            icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
             onPressed: () => ref.read(achievementsNotifierProvider.notifier).loadAchievements(),
           ),
         ],
@@ -38,7 +45,7 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen> {
           children: const [
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
-              child: ShimmerBox(width: double.infinity, height: 100, borderRadius: 20),
+              child: ShimmerBox(width: double.infinity, height: 120, borderRadius: 22),
             ),
             SizedBox(height: 16),
             QuestCardShimmer(),
@@ -69,122 +76,126 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen> {
               ? hardcoreBadges
               : (_selectedFilterIndex == 2 ? standardBadges : achievements);
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.only(bottom: 32),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Summary Progress Card
-                Container(
-                  margin: const EdgeInsets.all(16),
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.border),
-                    gradient: const LinearGradient(
-                      colors: [
-                        Color(0xFF231B38),
-                        Color(0xFF141221),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: AppColors.accentXp.withValues(alpha: 0.18),
-                              border: Border.all(color: AppColors.accentXp.withValues(alpha: 0.5)),
-                            ),
-                            child: const Icon(Icons.military_tech_rounded, color: AppColors.accentXp, size: 36),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Trophy Vault', style: AppTypography.titleLarge),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '$unlockedCount of $totalCount Badges Unlocked',
-                                  style: AppTypography.bodyMedium.copyWith(color: AppColors.secondary),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '🔥 $hardcoreUnlocked / ${hardcoreBadges.length} Hardcore Trials Mastered',
-                                  style: AppTypography.caption.copyWith(
-                                    color: const Color(0xFFF97316),
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+          return RefreshIndicator(
+            color: AppColors.primary,
+            onRefresh: () => ref.read(achievementsNotifierProvider.notifier).loadAchievements(),
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.only(bottom: 36),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 3D Summary Trophy Vault Card
+                  Container(
+                    margin: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: AppColors.borderBright, width: 1.2),
+                      gradient: const RadialGradient(
+                        center: Alignment(-0.6, -0.6),
+                        radius: 1.2,
+                        colors: [
+                          Color(0xFF271C40),
+                          Color(0xFF0F1523),
                         ],
                       ),
-                      const SizedBox(height: 14),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: LinearProgressIndicator(
-                          value: progress,
-                          minHeight: 8,
-                          backgroundColor: AppColors.surfaceLight,
-                          valueColor: const AlwaysStoppedAnimation<Color>(AppColors.secondary),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Category Filter Tabs
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: Row(
-                    children: [
-                      _buildFilterTab(0, 'All ($totalCount)'),
-                      const SizedBox(width: 8),
-                      _buildFilterTab(1, '🔥 Hardcore (${hardcoreBadges.length})'),
-                      const SizedBox(width: 8),
-                      _buildFilterTab(2, '🛡️ Standard (${standardBadges.length})'),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Section Title
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        _selectedFilterIndex == 1
-                            ? 'Hardcore & Mythic Trials'
-                            : (_selectedFilterIndex == 2
-                                ? 'Pioneer Badges'
-                                : 'All Available Badges'),
-                        style: AppTypography.titleMedium,
-                      ),
-                      Text(
-                        '${displayedBadges.where((b) => b.isUnlocked).length} / ${displayedBadges.length}',
-                        style: AppTypography.caption.copyWith(
-                          color: AppColors.textMuted,
-                          fontWeight: FontWeight.bold,
+                        BoxShadow(
+                          color: AppColors.accentPurple.withValues(alpha: 0.15),
+                          blurRadius: 20,
+                          spreadRadius: 1,
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: AppColors.secondary.withValues(alpha: 0.15),
+                                border: Border.all(color: AppColors.secondary.withValues(alpha: 0.6), width: 2),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.secondary.withValues(alpha: 0.3),
+                                    blurRadius: 12,
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(Icons.military_tech_rounded, color: AppColors.secondary, size: 36),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Explorer Hall of Badges',
+                                    style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.w800),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '$unlockedCount of $totalCount Trophies Unlocked',
+                                    style: AppTypography.bodyMedium.copyWith(
+                                      color: AppColors.secondary,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '🔥 $hardcoreUnlocked / ${hardcoreBadges.length} Hardcore Trials Mastered',
+                                    style: AppTypography.caption.copyWith(
+                                      color: AppColors.accentDanger,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: LinearProgressIndicator(
+                            value: progress,
+                            minHeight: 8,
+                            backgroundColor: AppColors.surfaceElevated,
+                            valueColor: const AlwaysStoppedAnimation<Color>(AppColors.secondary),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
 
-                // Badges List
-                ...displayedBadges.map((achievement) => AchievementBadgeCard(achievement: achievement)),
-              ],
+                  // Category Filter Tabs (3D Pill Tabs)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: Row(
+                      children: [
+                        _buildFilterTab(0, 'All ($totalCount)'),
+                        const SizedBox(width: 8),
+                        _buildFilterTab(1, 'Hardcore (${hardcoreBadges.length})'),
+                        const SizedBox(width: 8),
+                        _buildFilterTab(2, 'Standard (${standardBadges.length})'),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Badges List
+                  ...displayedBadges.map((badge) => AchievementBadgeCard(achievement: badge)),
+                ],
+              ),
             ),
           );
         },
@@ -195,41 +206,46 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen> {
   Widget _buildFilterTab(int index, String label) {
     final isSelected = _selectedFilterIndex == index;
     return Expanded(
-      child: InkWell(
-        onTap: () {
-          setState(() {
-            _selectedFilterIndex = index;
-          });
-        },
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 9),
+      child: GestureDetector(
+        onTap: () => setState(() => _selectedFilterIndex = index),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: isSelected
-                ? (index == 1
-                    ? const Color(0xFFEF4444).withValues(alpha: 0.18)
-                    : AppColors.primary.withValues(alpha: 0.18))
-                : AppColors.surface,
+            color: isSelected ? AppColors.primaryLight : AppColors.surface,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isSelected
-                  ? (index == 1 ? const Color(0xFFEF4444) : AppColors.primary)
-                  : AppColors.border,
+              color: isSelected ? AppColors.primary : AppColors.border,
+              width: isSelected ? 1.5 : 1.0,
+            ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.2),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  style: AppTypography.caption.copyWith(
+                    color: isSelected ? AppColors.primary : AppColors.textSecondary,
+                    fontWeight: isSelected ? FontWeight.w900 : FontWeight.w500,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
             ),
           ),
-          alignment: Alignment.center,
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppTypography.caption.copyWith(
-              color: isSelected
-                  ? (index == 1 ? const Color(0xFFEF4444) : AppColors.primary)
-                  : AppColors.textSecondary,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              fontSize: 11,
-            ),
-          ),
+
         ),
       ),
     );

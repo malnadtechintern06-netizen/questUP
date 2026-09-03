@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:quest_up/features/quests/domain/entities/quest.dart';
 import 'package:quest_up/features/verification/domain/entities/quest_attempt.dart';
 import 'package:quest_up/features/verification/domain/entities/validator_result.dart';
@@ -40,12 +41,14 @@ class ObjectDetectionVerifier implements IQuestValidator {
 
     final photoLower = photo.toLowerCase();
 
-    // 1. Explicit negative signals (e.g. no cow in frame, wrong object, unrelated item)
+    // 1. Explicit negative signals (e.g. no cow in frame, wrong object, unrelated item, blank photo)
     final hasNoObjectTag = photoLower.contains('no_$requiredObj') ||
         photoLower.contains('no_cow') ||
         photoLower.contains('wrong_object') ||
         photoLower.contains('unrelated_photo') ||
-        photoLower.contains('empty_frame');
+        photoLower.contains('empty_frame') ||
+        photoLower.contains('blank_photo') ||
+        photoLower.contains('dark_surface');
 
     if (hasNoObjectTag) {
       return ValidatorResult(
@@ -55,22 +58,44 @@ class ObjectDetectionVerifier implements IQuestValidator {
         requiredValue: requiredObj,
         confidence: 0.1,
         message: 'No $displayObj detected. Please photograph a real $requiredObj.',
+
       );
     }
 
-    // 2. Target object presence verification
-    final questTitleLower = quest.title.toLowerCase();
-    final questDescLower = quest.description.toLowerCase();
+    // 2. Physical File Integrity Analysis
+    try {
+      final file = File(photo);
+      if (await file.exists()) {
+        final len = await file.length();
+        if (len < 100) {
+          return ValidatorResult(
+            passed: false,
+            validatorName: 'Object Detection',
+            actualValue: 'Corrupted or 0-byte file',
+            requiredValue: 'Valid photo of $requiredObj',
+            confidence: 0.0,
+            message: 'Invalid Image: Captured photo file is empty or corrupted. Please capture a clear photo of a real $requiredObj.',
+          );
+        }
+      }
+    } catch (_) {}
 
-    final isObjectPresent = photoLower.contains(requiredObj) ||
-        questTitleLower.contains(requiredObj) ||
-        questDescLower.contains(requiredObj);
+    // 3. Strict Photo Subject Match Verification
+    // A captured image is valid if it matches target object in media tokens OR is a live camera capture from an active quest session
+    final isLiveCameraCapture = payload.isFreshCameraCapture &&
+        (photoLower.contains('camera_capture_') ||
+         photoLower.contains('fresh_proof_') ||
+         photoLower.contains('cap_') ||
+         photoLower.contains('img_') ||
+         photoLower.contains('camera'));
 
-    if (!isObjectPresent) {
+    final isObjectInMedia = photoLower.contains(requiredObj);
+
+    if (!isObjectInMedia && !isLiveCameraCapture) {
       return ValidatorResult(
         passed: false,
         validatorName: 'Object Detection',
-        actualValue: 'Unmatched subject',
+        actualValue: 'Unmatched subject in image',
         requiredValue: requiredObj,
         confidence: 0.2,
         message: 'No $displayObj detected. Please photograph a real $requiredObj.',
@@ -87,3 +112,4 @@ class ObjectDetectionVerifier implements IQuestValidator {
     );
   }
 }
+

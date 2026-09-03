@@ -30,17 +30,23 @@ class QuestListScreen extends ConsumerWidget {
     final unreadNotifsCount = ref.watch(unreadNotificationsCountProvider);
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Nearby Quests'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: Text(
+          'Quest Log',
+          style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.w800),
+        ),
         actions: [
           IconButton(
             tooltip: 'Quest Activity Calendar',
-            icon: const Icon(Icons.calendar_month_rounded),
+            icon: const Icon(Icons.calendar_month_rounded, color: AppColors.secondary),
             onPressed: () => context.push(RoutePaths.calendar),
           ),
           IconButton(
             tooltip: 'Refresh Quests',
-            icon: const Icon(Icons.refresh_rounded),
+            icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
             onPressed: () =>
                 ref.read(questsNotifierProvider.notifier).refreshLocationAndQuests(),
           ),
@@ -49,7 +55,7 @@ class QuestListScreen extends ConsumerWidget {
             children: [
               IconButton(
                 tooltip: 'Notifications',
-                icon: const Icon(Icons.notifications_outlined),
+                icon: const Icon(Icons.notifications_outlined, color: AppColors.textPrimary),
                 onPressed: () => NotificationsSheet.show(context),
               ),
               if (unreadNotifsCount > 0)
@@ -89,19 +95,19 @@ class QuestListScreen extends ConsumerWidget {
           if (activeGps != null)
             Container(
               margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: AppColors.surface,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppColors.border),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.my_location_rounded, size: 14, color: AppColors.accentLocation),
-                  const SizedBox(width: 6),
+                  const Icon(Icons.satellite_alt_rounded, size: 14, color: AppColors.primary),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'GPS: Lat ${activeGps.latitude.toStringAsFixed(4)}, Lon ${activeGps.longitude.toStringAsFixed(4)}',
+                      'GPS: ${activeGps.latitude.toStringAsFixed(4)}, ${activeGps.longitude.toStringAsFixed(4)}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.caption.copyWith(
@@ -112,12 +118,19 @@ class QuestListScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    '${(maxRadius / 1000).toStringAsFixed(0)}km radius',
-                    style: AppTypography.caption.copyWith(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 11,
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryLight,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '${(maxRadius / 1000).toStringAsFixed(0)}km Scan',
+                      style: AppTypography.caption.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 10,
+                      ),
                     ),
                   ),
                 ],
@@ -132,11 +145,11 @@ class QuestListScreen extends ConsumerWidget {
               style: AppTypography.bodyLarge,
               decoration: InputDecoration(
                 hintText: 'Search quests by title or landmark...',
-                hintStyle: AppTypography.bodyMedium,
-                prefixIcon: const Icon(Icons.search, color: AppColors.textMuted),
+                hintStyle: AppTypography.bodyMedium.copyWith(color: AppColors.textMuted),
+                prefixIcon: const Icon(Icons.search_rounded, color: AppColors.textMuted),
                 suffixIcon: query.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(Icons.clear, color: AppColors.textMuted),
+                        icon: const Icon(Icons.clear_rounded, color: AppColors.textMuted),
                         onPressed: () => ref.read(searchQueryProvider.notifier).state = '',
                       )
                     : null,
@@ -144,16 +157,16 @@ class QuestListScreen extends ConsumerWidget {
                 fillColor: AppColors.surface,
                 contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(16),
                   borderSide: const BorderSide(color: AppColors.border),
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(16),
                   borderSide: const BorderSide(color: AppColors.border),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: AppColors.primary),
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
                 ),
               ),
             ),
@@ -164,23 +177,21 @@ class QuestListScreen extends ConsumerWidget {
             selectedCategory: selectedCategory,
             onSelected: (cat) => ref.read(selectedCategoryProvider.notifier).state = cat,
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
 
-          // Status segmented buttons
+          // Status segmented buttons (3D Pill Tabs)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
                 _buildStatusTab(
-                  context,
                   ref,
-                  label: 'All',
+                  label: 'All Quests',
                   value: 'all',
                   isSelected: statusFilter == 'all',
                 ),
                 const SizedBox(width: 8),
                 _buildStatusTab(
-                  context,
                   ref,
                   label: 'Available',
                   value: 'available',
@@ -188,7 +199,6 @@ class QuestListScreen extends ConsumerWidget {
                 ),
                 const SizedBox(width: 8),
                 _buildStatusTab(
-                  context,
                   ref,
                   label: 'Completed',
                   value: 'completed',
@@ -202,6 +212,7 @@ class QuestListScreen extends ConsumerWidget {
           // List of quests (Closest first)
           Expanded(
             child: RefreshIndicator(
+              color: AppColors.primary,
               onRefresh: () async {
                 await ref
                     .read(questsNotifierProvider.notifier)
@@ -260,21 +271,23 @@ class QuestListScreen extends ConsumerWidget {
                           final matchesQuery = query.isEmpty ||
                               q.title.toLowerCase().contains(query.toLowerCase()) ||
                               q.locationName.toLowerCase().contains(query.toLowerCase());
-                          final matchesStatus = statusFilter == 'all' ||
-                              (statusFilter == 'completed' && q.isCompleted) ||
-                              (statusFilter == 'available' && !q.isCompleted);
+                          final matchesStatus = statusFilter == 'completed'
+                              ? q.isCompleted
+                              : !q.isCompleted;
                           return matchesCat && matchesQuery && matchesStatus;
                         }).toList();
+
+
 
                         if (filtered.isEmpty) {
                           return ListView(
                             children: [
                               const SizedBox(height: 60),
                               EmptyStateWidget(
-                                title: 'No Quests Nearby',
+                                title: 'No Quests Found',
                                 description:
-                                    'No nearby quests found. Move to another location to discover new quests.',
-                                actionText: 'Refresh Nearby Quests',
+                                    'No quests matching your filters. Try resetting search or moving to another location.',
+                                actionText: 'Reset Filters',
                                 onAction: () {
                                   ref.read(selectedCategoryProvider.notifier).state = null;
                                   ref.read(searchQueryProvider.notifier).state = '';
@@ -289,7 +302,7 @@ class QuestListScreen extends ConsumerWidget {
                         }
 
                         return ListView.builder(
-                          padding: const EdgeInsets.only(bottom: 24),
+                          padding: const EdgeInsets.only(bottom: 32),
                           itemCount: filtered.length,
                           itemBuilder: (context, index) {
                             final quest = filtered[index];
@@ -311,24 +324,33 @@ class QuestListScreen extends ConsumerWidget {
   }
 
   Widget _buildStatusTab(
-    BuildContext context,
     WidgetRef ref, {
     required String label,
     required String value,
     required bool isSelected,
   }) {
     return Expanded(
-      child: InkWell(
+      child: GestureDetector(
         onTap: () => ref.read(statusFilterProvider.notifier).state = value,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 7),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
             color: isSelected ? AppColors.primaryLight : AppColors.surface,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: isSelected ? AppColors.primary : AppColors.border,
+              width: isSelected ? 1.5 : 1.0,
             ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.2),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
           ),
           child: Center(
             child: Text(
@@ -337,8 +359,8 @@ class QuestListScreen extends ConsumerWidget {
               overflow: TextOverflow.ellipsis,
               style: AppTypography.caption.copyWith(
                 color: isSelected ? AppColors.primary : AppColors.textSecondary,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w900 : FontWeight.w500,
+                fontSize: 11,
               ),
             ),
           ),
@@ -347,3 +369,4 @@ class QuestListScreen extends ConsumerWidget {
     );
   }
 }
+

@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:quest_up/app/router/app_router.dart';
+import 'package:quest_up/app/router/route_paths.dart';
+
 import 'package:quest_up/app/theme/app_colors.dart';
 import 'package:quest_up/app/theme/app_typography.dart';
-import 'package:quest_up/core/widgets/empty_state_widget.dart';
+
 import 'package:quest_up/core/widgets/error_state_widget.dart';
 import 'package:quest_up/core/widgets/shimmer_loading.dart';
+import 'package:quest_up/features/leaderboard/domain/entities/leaderboard_entry.dart';
 import 'package:quest_up/features/leaderboard/presentation/providers/leaderboard_providers.dart';
 import 'package:quest_up/features/leaderboard/presentation/widgets/leaderboard_podium_widget.dart';
-import 'package:quest_up/features/leaderboard/presentation/widgets/leaderboard_row_widget.dart';
+import 'package:quest_up/features/profile/presentation/widgets/avatar_selector_sheet.dart';
 
 class LeaderboardScreen extends ConsumerWidget {
   const LeaderboardScreen({super.key});
@@ -18,42 +23,65 @@ class LeaderboardScreen extends ConsumerWidget {
     final currentFilter = ref.watch(leaderboardFilterProvider);
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Champions Hall'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: Text(
+          'Champions Hall',
+          style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.w800),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Refresh Rankings',
+            icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
             onPressed: () => ref.refresh(leaderboardEntriesProvider),
           ),
         ],
       ),
       body: Column(
         children: [
-          // Filter Tabs
+          // Timeframe Filter Tabs (3D Pill Tabs)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             child: Row(
               children: [
-                _buildFilterTab(ref, 'All-Time Global', 'all_time', currentFilter == 'all_time'),
+                _buildTimeframeTab(
+                  ref,
+                  label: 'All Time',
+                  value: 'all_time',
+                  isSelected: currentFilter == 'all_time',
+                ),
                 const SizedBox(width: 8),
-                _buildFilterTab(ref, 'Weekly League', 'weekly', currentFilter == 'weekly'),
+                _buildTimeframeTab(
+                  ref,
+                  label: 'Weekly',
+                  value: 'weekly',
+                  isSelected: currentFilter == 'weekly',
+                ),
                 const SizedBox(width: 8),
-                _buildFilterTab(ref, 'Friends', 'friends', currentFilter == 'friends'),
+                _buildTimeframeTab(
+                  ref,
+                  label: 'Friends',
+                  value: 'friends',
+                  isSelected: currentFilter == 'friends',
+                ),
               ],
             ),
           ),
+          const SizedBox(height: 6),
 
-          // Content
+          // Main Rankings List
           Expanded(
             child: entriesAsync.when(
               loading: () => ListView(
+                padding: const EdgeInsets.all(16),
                 children: const [
-                  Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: ShimmerBox(width: double.infinity, height: 200, borderRadius: 24),
-                  ),
-                  QuestCardShimmer(),
-                  QuestCardShimmer(),
+                  ShimmerBox(width: double.infinity, height: 180, borderRadius: 24),
+                  SizedBox(height: 16),
+                  ShimmerBox(width: double.infinity, height: 72, borderRadius: 16),
+                  SizedBox(height: 12),
+                  ShimmerBox(width: double.infinity, height: 72, borderRadius: 16),
                 ],
               ),
               error: (err, _) => ErrorStateWidget(
@@ -62,34 +90,49 @@ class LeaderboardScreen extends ConsumerWidget {
               ),
               data: (entries) {
                 if (entries.isEmpty) {
-                  return const EmptyStateWidget(
-                    title: 'No Rankings Available',
-                    description: 'Leaderboards will populate as players complete quests.',
+                  return Center(
+                    child: Text(
+                      'No champions ranked yet. Be the first!',
+                      style: AppTypography.bodyMedium,
+                    ),
                   );
                 }
 
                 final topThree = entries.take(3).toList();
-                final rest = entries.skip(3).toList();
+                final remaining = entries.length > 3 ? entries.sublist(3) : <LeaderboardEntry>[];
+                final currentUserEntry = entries.where((e) => e.isCurrentUser).firstOrNull;
 
-                return ListView(
-                  padding: const EdgeInsets.only(bottom: 24),
-                  children: [
-                    // Top 3 Podium
-                    LeaderboardPodiumWidget(topThree: topThree),
-                    const SizedBox(height: 8),
+                return RefreshIndicator(
+                  color: AppColors.primary,
+                  onRefresh: () async => ref.refresh(leaderboardEntriesProvider),
+                  child: Stack(
+                    children: [
+                      ListView(
+                        padding: EdgeInsets.only(
+                          bottom: currentUserEntry != null ? 100 : 24,
+                        ),
+                        children: [
+                          // 3D Top 3 Podium
+                          if (topThree.isNotEmpty)
+                            LeaderboardPodiumWidget(topThree: topThree),
 
-                    // Section Title
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                      child: Text(
-                        'Full Rankings',
-                        style: AppTypography.titleMedium,
+                          const SizedBox(height: 10),
+
+                          // Rank 4+ List
+                          ...remaining.map((entry) => _buildRankCard(entry)),
+                        ],
                       ),
-                    ),
 
-                    // Rest of Leaderboard
-                    ...rest.map((entry) => LeaderboardRowWidget(entry: entry)),
-                  ],
+                      // Sticky Bottom Current User Card
+                      if (currentUserEntry != null)
+                        Positioned(
+                          left: 16,
+                          right: 16,
+                          bottom: 12,
+                          child: _buildStickyUserCard(currentUserEntry),
+                        ),
+                    ],
+                  ),
                 );
               },
             ),
@@ -99,32 +142,270 @@ class LeaderboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildFilterTab(WidgetRef ref, String label, String value, bool isSelected) {
+  Widget _buildTimeframeTab(
+    WidgetRef ref, {
+    required String label,
+    required String value,
+    required bool isSelected,
+  }) {
     return Expanded(
-      child: InkWell(
-        onTap: () {
-          ref.read(leaderboardFilterProvider.notifier).state = value;
-        },
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
+      child: GestureDetector(
+        onTap: () => ref.read(leaderboardFilterProvider.notifier).state = value,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: isSelected ? AppColors.surfaceElevated : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
+            color: isSelected ? AppColors.primaryLight : AppColors.surface,
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isSelected ? AppColors.secondary : AppColors.border,
+              color: isSelected ? AppColors.primary : AppColors.border,
+              width: isSelected ? 1.5 : 1.0,
             ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.2),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
           ),
           child: Center(
             child: Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: AppTypography.caption.copyWith(
-                color: isSelected ? AppColors.secondary : AppColors.textSecondary,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                color: isSelected ? AppColors.primary : AppColors.textSecondary,
+                fontWeight: isSelected ? FontWeight.w900 : FontWeight.w500,
+                fontSize: 11,
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildRankCard(LeaderboardEntry entry) {
+    final avatarColor = AvatarSelectorSheet.getColorForAvatar(entry.avatarKey);
+    final avatarIcon = AvatarSelectorSheet.getIconForAvatar(entry.avatarKey);
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+      decoration: BoxDecoration(
+        color: entry.isCurrentUser
+            ? AppColors.primaryLight
+            : AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: entry.isCurrentUser
+              ? AppColors.primary
+              : AppColors.border,
+          width: entry.isCurrentUser ? 1.5 : 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: entry.isCurrentUser
+              ? null
+              : () => appRouter.push(RoutePaths.friendDetailPath(entry.userId)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                // Rank Badge
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceElevated,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '#${entry.rank}',
+                      style: AppTypography.caption.copyWith(
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.textPrimary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // Avatar Icon
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: avatarColor.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: avatarColor, width: 1.2),
+                  ),
+                  child: Icon(avatarIcon, color: avatarColor, size: 22),
+                ),
+                const SizedBox(width: 12),
+
+                // Name and Level
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              entry.userName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.titleMedium.copyWith(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                                color: entry.isCurrentUser ? AppColors.primary : AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                          if (entry.isCurrentUser) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'YOU',
+                                style: TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      Text(
+                        'Level ${entry.level} Explorer',
+                        style: AppTypography.caption.copyWith(
+                          color: AppColors.textSecondary,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // XP Score
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceElevated,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.accentXp.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.bolt_rounded, size: 14, color: AppColors.accentXp),
+                      const SizedBox(width: 3),
+                      Text(
+                        '${entry.xp}',
+                        style: AppTypography.gameNumber.copyWith(
+                          color: AppColors.accentXp,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+
+  Widget _buildStickyUserCard(LeaderboardEntry entry) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.primary, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.6),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.25),
+            blurRadius: 18,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              '#${entry.rank}',
+              style: const TextStyle(
+                color: Colors.black,
+                fontWeight: FontWeight.w900,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Your Hall of Fame Standing',
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.textSecondary,
+                    fontSize: 10,
+                  ),
+                ),
+                Text(
+                  'Level ${entry.level} • ${entry.xp} Total XP',
+                  style: AppTypography.titleMedium.copyWith(
+                    color: AppColors.primary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.shield_rounded, color: AppColors.primary, size: 24),
+        ],
       ),
     );
   }

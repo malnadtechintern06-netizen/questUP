@@ -19,19 +19,32 @@ class ProfileStatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.borderBright, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+          BoxShadow(
+            color: color.withValues(alpha: 0.1),
+            blurRadius: 12,
+            spreadRadius: 1,
+          ),
+        ],
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
+              color: color.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: color.withValues(alpha: 0.4)),
             ),
             child: Icon(icon, color: color, size: 20),
           ),
@@ -45,9 +58,10 @@ class ProfileStatCard extends StatelessWidget {
                   value,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTypography.titleMedium.copyWith(
+                  style: AppTypography.gameNumber.copyWith(
                     color: AppColors.textPrimary,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -58,6 +72,7 @@ class ProfileStatCard extends StatelessWidget {
                   style: AppTypography.caption.copyWith(
                     color: AppColors.textSecondary,
                     fontSize: 11,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
@@ -68,3 +83,4 @@ class ProfileStatCard extends StatelessWidget {
     );
   }
 }
+

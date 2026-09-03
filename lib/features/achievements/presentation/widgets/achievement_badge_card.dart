@@ -47,15 +47,15 @@ class AchievementBadgeCard extends StatelessWidget {
   Color _getTierColor(String tier) {
     switch (tier.toUpperCase()) {
       case 'MYTHIC':
-        return const Color(0xFFA855F7); // Amethyst Purple
+        return AppColors.accentPurple;
       case 'HARDCORE':
-        return const Color(0xFFEF4444); // Crimson Flame
+        return AppColors.accentDanger;
       case 'MASTER':
-        return const Color(0xFFF59E0B); // Amber Gold
+        return AppColors.secondary;
       case 'ADEPT':
-        return const Color(0xFF06B6D4); // Cyan Blue
+        return AppColors.primary;
       default:
-        return AppColors.secondary; // Emerald
+        return AppColors.accentSuccess;
     }
   }
 
@@ -78,70 +78,88 @@ class AchievementBadgeCard extends StatelessWidget {
     final isUnlocked = achievement.isUnlocked;
     final icon = _getIcon(achievement.iconKey);
     final tierColor = _getTierColor(achievement.tier);
-    final accentColor = isUnlocked ? tierColor : AppColors.textMuted;
     final isHardcore = achievement.isHardcore;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isUnlocked
             ? AppColors.surface
-            : AppColors.surfaceElevated.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(18),
+            : AppColors.surfaceElevated.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isUnlocked
-              ? (isHardcore ? tierColor.withValues(alpha: 0.7) : tierColor.withValues(alpha: 0.4))
+              ? (isHardcore ? tierColor.withValues(alpha: 0.8) : tierColor.withValues(alpha: 0.45))
               : AppColors.border,
           width: isUnlocked ? (isHardcore ? 2.0 : 1.5) : 1.0,
         ),
         boxShadow: isUnlocked
             ? [
                 BoxShadow(
-                  color: tierColor.withValues(alpha: isHardcore ? 0.25 : 0.12),
-                  blurRadius: isHardcore ? 16 : 12,
-                  spreadRadius: isHardcore ? 1 : 0,
+                  color: Colors.black.withValues(alpha: 0.35),
+                  blurRadius: 12,
                   offset: const Offset(0, 4),
                 ),
+                BoxShadow(
+                  color: tierColor.withValues(alpha: 0.18),
+                  blurRadius: 16,
+                  spreadRadius: 1,
+                ),
               ]
-            : null,
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 6,
+                ),
+              ],
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Glowing Emblem Box
+          // 3D Metallic Badge Emblem
           Container(
-            width: 60,
-            height: 60,
+            width: 58,
+            height: 58,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: isUnlocked
-                  ? tierColor.withValues(alpha: isHardcore ? 0.22 : 0.15)
-                  : AppColors.surfaceLight,
+              gradient: isUnlocked
+                  ? RadialGradient(
+                      colors: [
+                        Color.lerp(tierColor, Colors.white, 0.4)!,
+                        tierColor,
+                        Color.lerp(tierColor, Colors.black, 0.4)!,
+                      ],
+                    )
+                  : null,
+              color: isUnlocked ? null : AppColors.surfaceElevated,
               border: Border.all(
-                color: isUnlocked ? tierColor : AppColors.border,
-                width: isHardcore && isUnlocked ? 2.0 : 1.5,
+                color: isUnlocked ? Colors.white.withValues(alpha: 0.8) : AppColors.border,
+                width: 1.8,
               ),
-              boxShadow: isUnlocked && isHardcore
+              boxShadow: isUnlocked
                   ? [
                       BoxShadow(
-                        color: tierColor.withValues(alpha: 0.35),
-                        blurRadius: 10,
+                        color: tierColor.withValues(alpha: 0.5),
+                        blurRadius: 14,
+                        spreadRadius: 2,
                       ),
                     ]
                   : null,
             ),
             child: Icon(
               isUnlocked ? icon : Icons.lock_outline_rounded,
-              color: accentColor,
-              size: 30,
+              color: isUnlocked ? Colors.black : AppColors.textMuted,
+              size: 28,
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
 
-          // Details Column
+          // Details
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Row(
                   children: [

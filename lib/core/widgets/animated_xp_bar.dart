@@ -7,6 +7,7 @@ class AnimatedXpBar extends StatelessWidget {
   final int requiredXp;
   final int level;
   final bool showLevelBadge;
+  final double height;
 
   const AnimatedXpBar({
     super.key,
@@ -14,6 +15,7 @@ class AnimatedXpBar extends StatelessWidget {
     required this.requiredXp,
     required this.level,
     this.showLevelBadge = true,
+    this.height = 10,
   });
 
   @override
@@ -31,16 +33,19 @@ class AnimatedXpBar extends StatelessWidget {
           children: [
             if (showLevelBadge)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [AppColors.accentXp, Color(0xFF9C27B0)],
+                    colors: [
+                      Color(0xFF00E5FF),
+                      Color(0xFF8B5CF6),
+                    ],
                   ),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(10),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.accentXp.withValues(alpha: 0.3),
-                      blurRadius: 6,
+                      color: AppColors.primary.withValues(alpha: 0.4),
+                      blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
                   ],
@@ -48,57 +53,81 @@ class AnimatedXpBar extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.shield_outlined, size: 12, color: Colors.white),
+                    const Icon(Icons.shield_rounded, size: 13, color: Colors.black),
                     const SizedBox(width: 4),
                     Text(
                       'LVL $level',
-                      style: AppTypography.badge.copyWith(color: Colors.white, fontSize: 10),
+                      style: AppTypography.badge.copyWith(
+                        color: Colors.black,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ],
                 ),
               ),
             const SizedBox(width: 8),
             Flexible(
-              child: Text(
-                '$currentXp / $requiredXp XP',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
-                style: AppTypography.caption.copyWith(
-                  color: AppColors.textSecondary,
-                  fontWeight: FontWeight.bold,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.bolt_rounded, size: 14, color: AppColors.accentXp),
+                  const SizedBox(width: 2),
+                  Text(
+                    '$currentXp / $requiredXp XP',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                    style: AppTypography.caption.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Container(
-          height: 8,
+          height: height,
           width: double.infinity,
           decoration: BoxDecoration(
             color: AppColors.surfaceLight,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(height),
+            border: Border.all(color: AppColors.border, width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Stack(
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
                   return AnimatedContainer(
-                    duration: const Duration(milliseconds: 600),
+                    duration: const Duration(milliseconds: 700),
                     curve: Curves.easeOutCubic,
                     width: constraints.maxWidth * progress,
-                    height: 8,
+                    height: height,
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [AppColors.primary, AppColors.accentXp],
+                        colors: [
+                          AppColors.primary,
+                          AppColors.accentXp,
+                          AppColors.accentPurple,
+                        ],
                       ),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(height),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.primary.withValues(alpha: 0.5),
-                          blurRadius: 6,
-                          offset: const Offset(0, 0),
+                          color: AppColors.primary.withValues(alpha: 0.6),
+                          blurRadius: 8,
+                          spreadRadius: 1,
                         ),
                       ],
                     ),
@@ -112,3 +141,4 @@ class AnimatedXpBar extends StatelessWidget {
     );
   }
 }
+

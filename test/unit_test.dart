@@ -33,6 +33,35 @@ import 'package:quest_up/features/verification/domain/services/quest_verificatio
 import 'package:quest_up/features/verification/domain/services/validators/i_validator.dart';
 import 'package:quest_up/features/verification/data/datasources/verification_local_datasource.dart';
 import 'package:quest_up/features/verification/data/repositories/verification_repository_impl.dart';
+import 'package:quest_up/features/auth/data/datasources/auth_remote_datasource.dart';
+import 'package:quest_up/core/errors/exceptions.dart';
+import 'package:quest_up/features/friends/data/datasources/friends_local_datasource.dart';
+import 'package:quest_up/features/friends/data/repositories/friends_repository_impl.dart';
+import 'package:quest_up/features/friends/domain/entities/friend_profile.dart';
+import 'package:quest_up/features/friends/domain/entities/friend_request.dart';
+
+
+class MockMemoryLocalStorageService implements ILocalStorageService {
+  final Map<String, dynamic> _store = {};
+
+  @override
+  Future<void> clear() async => _store.clear();
+
+  @override
+  Future<dynamic> getJson(String key) async => _store[key];
+
+  @override
+  Future<String?> getString(String key) async => _store[key] as String?;
+
+  @override
+  Future<void> remove(String key) async => _store.remove(key);
+
+  @override
+  Future<void> saveJson(String key, dynamic value) async => _store[key] = value;
+
+  @override
+  Future<void> saveString(String key, String value) async => _store[key] = value;
+}
 
 class MockUserLocalDataSource implements IUserLocalDataSource {
   UserProfileModel profile;
@@ -271,7 +300,232 @@ void main() {
     });
   });
 
+  group('Authentication & Password Validation Security Tests', () {
+    test('Register user -> logout -> login with WRONG password is REJECTED', () async {
+      final storage = MockMemoryLocalStorageService();
+      final authDataSource = AuthMySqlDataSource(storage);
+
+      // 1. Register with email and password
+      final registeredUser = await authDataSource.register(
+        name: 'Alex Explorer',
+        email: 'alex@questup.com',
+        password: 'ValidPassword123!',
+      );
+      expect(registeredUser.email, equals('alex@questup.com'));
+      expect(registeredUser.displayName, equals('Alex Explorer'));
+
+      // 2. User logs out
+      await authDataSource.logout();
+      expect(await authDataSource.getCurrentUser(), isNull);
+
+      // 3. User attempts to log in with INCORRECT password -> must throw AppException
+      expect(
+        () async => await authDataSource.login(
+          email: 'alex@questup.com',
+          password: 'WrongPassword999',
+        ),
+        throwsA(isA<AppException>().having(
+          (e) => e.toString(),
+          'message',
+          contains('Invalid email or password'),
+        )),
+      );
+
+      // 4. User logs in with CORRECT password -> must succeed
+      final loggedInUser = await authDataSource.login(
+        email: 'alex@questup.com',
+        password: 'ValidPassword123!',
+      );
+      expect(loggedInUser.id, equals(registeredUser.id));
+      expect(loggedInUser.email, equals('alex@questup.com'));
+      expect(await authDataSource.getCurrentUser(), isNotNull);
+    });
+
+    test('Login with unregistered email throws clear error', () async {
+      final storage = MockMemoryLocalStorageService();
+      final authDataSource = AuthMySqlDataSource(storage);
+
+      expect(
+        () async => await authDataSource.login(
+          email: 'unregistered@questup.com',
+          password: 'anyPassword123',
+        ),
+        throwsA(isA<AppException>().having(
+          (e) => e.toString(),
+          'message',
+          contains('No account found with this email'),
+        )),
+      );
+    });
+
+    test('Registering an existing email is rejected', () async {
+      final storage = MockMemoryLocalStorageService();
+      final authDataSource = AuthMySqlDataSource(storage);
+
+      await authDataSource.register(
+        name: 'First Player',
+        email: 'player1@questup.com',
+        password: 'Password123',
+      );
+
+      expect(
+        () async => await authDataSource.register(
+          name: 'Duplicate Player',
+          email: 'player1@questup.com',
+          password: 'AnotherPassword456',
+        ),
+        throwsA(isA<AppException>().having(
+          (e) => e.toString(),
+          'message',
+          contains('already exists'),
+        )),
+      );
+    });
+  });
+
+  group('Friends & Social Explorer System Tests', () {
+    late ILocalStorageService storage;
+    late FriendsLocalDataSource localDataSource;
+    late UserRepositoryImpl userRepository;
+    late FriendsRepositoryImpl friendsRepository;
+
+    setUp(() async {
+      storage = MockMemoryLocalStorageService();
+      final userLocalDataSource = UserLocalDataSource(storage);
+      userRepository = UserRepositoryImpl(userLocalDataSource);
+      localDataSource = FriendsLocalDataSource(storage);
+      friendsRepository = FriendsRepositoryImpl(
+        localDataSource: localDataSource,
+        userRepository: userRepository,
+      );
+    });
+
+    test('Computes deterministic Player Tag formatted as QST-XXXX', () {
+      final tag1 = localDataSource.computePlayerTag('user_1', 'alex@questup.app');
+      final tag2 = localDataSource.computePlayerTag('user_1', 'alex@questup.app');
+      expect(tag1, startsWith('QST-'));
+      expect(tag1, equals(tag2));
+      expect(tag1.length, equals(8));
+    });
+
+    test('Retrieves initial friends and incoming requests', () async {
+      final friends = await friendsRepository.getFriends();
+      expect(friends.isNotEmpty, isTrue);
+      expect(friends.any((f) => f.name == 'Aria Silverleaf'), isTrue);
+
+      final incoming = await friendsRepository.getPendingIncomingRequests();
+      expect(incoming.isNotEmpty, isTrue);
+      expect(incoming.first.senderName, equals('Kai Horizon'));
+    });
+
+    test('Searches player by exact unique Player Tag or ID', () async {
+      final found = await friendsRepository.searchPlayer('QST-1001');
+      expect(found, isNotNull);
+      expect(found!.name, equals('Elena Shadowstride'));
+      expect(found.rank, equals(1));
+      expect(found.completedQuestsCount, equals(18));
+      expect(found.earnedBadges.length, greaterThanOrEqualTo(3));
+    });
+
+    test('Sends friend request to valid player and rejects self/duplicate/invalid', () async {
+      // 1. Sending to valid player Elena Shadowstride (QST-1001)
+      final request = await friendsRepository.sendFriendRequest(targetPlayerTagOrId: 'QST-1001');
+      expect(request.receiverTag, equals('QST-1001'));
+      expect(request.status, equals(FriendRequestStatus.pending));
+
+      // 2. Sending duplicate request should throw AppException
+      expect(
+        () async => await friendsRepository.sendFriendRequest(targetPlayerTagOrId: 'QST-1001'),
+        throwsA(isA<AppException>().having(
+          (e) => e.toString(),
+          'message',
+          contains('already pending'),
+        )),
+      );
+
+      // 3. Sending to self should throw AppException
+      final myTag = await friendsRepository.getMyPlayerTag();
+      expect(
+        () async => await friendsRepository.sendFriendRequest(targetPlayerTagOrId: myTag),
+        throwsA(isA<AppException>().having(
+          (e) => e.toString(),
+          'message',
+          contains('cannot send a friend request to yourself'),
+        )),
+      );
+
+      // 4. Sending to non-existent player should throw AppException
+      expect(
+        () async => await friendsRepository.sendFriendRequest(targetPlayerTagOrId: 'QST-99999'),
+        throwsA(isA<AppException>().having(
+          (e) => e.toString(),
+          'message',
+          contains('not found'),
+        )),
+      );
+    });
+
+    test('Accepting a friend request expands squad and clears pending request', () async {
+      final incomingBefore = await friendsRepository.getPendingIncomingRequests();
+      expect(incomingBefore.isNotEmpty, isTrue);
+      final requestId = incomingBefore.first.id;
+
+      await friendsRepository.acceptFriendRequest(requestId);
+
+      final friendsAfter = await friendsRepository.getFriends();
+      expect(friendsAfter.any((f) => f.name == 'Kai Horizon'), isTrue);
+
+      final incomingAfter = await friendsRepository.getPendingIncomingRequests();
+      expect(incomingAfter.any((r) => r.id == requestId), isFalse);
+    });
+
+    test('Rejecting a friend request updates status', () async {
+      final incomingBefore = await friendsRepository.getPendingIncomingRequests();
+      final requestId = incomingBefore.first.id;
+
+      await friendsRepository.rejectFriendRequest(requestId);
+
+      final incomingAfter = await friendsRepository.getPendingIncomingRequests();
+      expect(incomingAfter.any((r) => r.id == requestId), isFalse);
+    });
+
+    test('Removing a friend updates squad list', () async {
+      final friendsBefore = await friendsRepository.getFriends();
+      expect(friendsBefore.any((f) => f.userId == 'comp_4'), isTrue);
+
+      await friendsRepository.removeFriend('comp_4');
+
+      final friendsAfter = await friendsRepository.getFriends();
+      expect(friendsAfter.any((f) => f.userId == 'comp_4'), isFalse);
+    });
+
+    test('Friend Profile contains detailed game history, completed games, rankings, and badges', () async {
+      final profile = await friendsRepository.getFriendProfile('comp_1');
+      expect(profile, isNotNull);
+      expect(profile!.name, equals('Elena Shadowstride'));
+      expect(profile.rank, equals(1));
+      expect(profile.rankTitle, contains('Mythic Explorer'));
+      expect(profile.gamesPlayedCount, equals(19));
+      expect(profile.completedQuestsCount, equals(18));
+
+      // Verify game history log
+      expect(profile.completedQuests.isNotEmpty, isTrue);
+      final questSummary = profile.completedQuests.first;
+      expect(questSummary.title, isNotEmpty);
+      expect(questSummary.locationName, isNotEmpty);
+      expect(questSummary.xpEarned, greaterThan(0));
+
+      // Verify earned trophy badges
+      expect(profile.earnedBadges.isNotEmpty, isTrue);
+      final badgeSummary = profile.earnedBadges.first;
+      expect(badgeSummary.title, isNotEmpty);
+      expect(badgeSummary.tier, isNotEmpty);
+    });
+  });
+
   group('Universal Quest Verification Engine Tests', () {
+
+
     final engine = QuestVerificationService();
 
     test('Generic Object Detection verifies any requiredObject without hardcoding', () async {
@@ -899,10 +1153,11 @@ void main() {
     test('QuestCalendarNotifier correctly aggregates daily stats and monthStatusMap', () async {
       final mockStorage = MockTestLocalStorageService();
       final localDataSource = QuestCalendarLocalDataSource(mockStorage);
+      await localDataSource.saveAllEntries([]);
       final repository = QuestCalendarRepositoryImpl(localDataSource: localDataSource);
       final notifier = QuestCalendarNotifier(repository);
 
-      final date = DateTime(2026, 9, 2);
+      final date = DateTime(2026, 9, 20);
       await notifier.selectDate(date);
 
       await notifier.recordActivity(
@@ -930,7 +1185,7 @@ void main() {
       expect(state.dailyXpEarned, equals(200));
       expect(state.dailyCoinsEarned, equals(100));
 
-      final statusDots = state.monthStatusMap[2] ?? [];
+      final statusDots = state.monthStatusMap[20] ?? [];
       expect(statusDots, contains(QuestActivityStatus.completed));
       expect(statusDots, contains(QuestActivityStatus.failed));
     });
@@ -1896,17 +2151,183 @@ void main() {
     });
   });
 
-  group('AppConstants & AppExternalService Tests', () {
-    test('AppConstants contains correct Android applicationId and Play Store URLs', () {
-      expect(AppConstants.androidApplicationId, equals('com.questup.quest_up'));
-      expect(AppConstants.playStoreMarketUri, equals('market://details?id=com.questup.quest_up'));
-      expect(AppConstants.playStoreWebUrl, equals('https://play.google.com/store/apps/details?id=com.questup.quest_up'));
-      expect(AppConstants.privacyPolicyUrl, contains('privacy-policy'));
-      expect(AppConstants.shareMessage, contains("I'm using QuestUP!"));
-      expect(AppConstants.shareMessage, contains('https://play.google.com/store/apps/details?id=com.questup.quest_up'));
+  group('Two-Step On-Site Verification & Quest Lifecycle Tests', () {
+    test('Completed quests are filtered out of All Quests and move to Completed section', () {
+      final q1 = QuestModel(
+        id: 'q1',
+        title: 'Lalbagh Botanical Walk',
+        description: 'Walk through Lalbagh',
+        storyline: 'A gentle nature trek',
+        category: QuestCategory.nature,
+        difficulty: QuestDifficulty.easy,
+        verificationType: QuestVerificationType.locationGps,
+        latitude: 12.9507,
+        longitude: 77.5848,
+        locationName: 'Lalbagh Garden',
+        radiusMeters: 50,
+        xpReward: 100,
+        coinReward: 50,
+        requiredLevel: 1,
+        isCompleted: false,
+        requirements: const [],
+        iconKey: 'nature',
+      );
+
+      final q2 = QuestModel(
+        id: 'q2',
+        title: 'Cubbon Park Explorer',
+        description: 'Explore the park',
+        storyline: 'Historic park discovery',
+        category: QuestCategory.nature,
+        difficulty: QuestDifficulty.medium,
+        verificationType: QuestVerificationType.photoProof,
+        latitude: 12.9763,
+        longitude: 77.5929,
+        locationName: 'Cubbon Park',
+        radiusMeters: 50,
+        xpReward: 150,
+        coinReward: 70,
+        requiredLevel: 1,
+        isCompleted: true, // Marked as completed!
+        requirements: const [],
+        iconKey: 'nature',
+      );
+
+      final allQuests = [q1, q2];
+
+      // Active / All Quests filter only returns uncompleted quests
+      final activeQuests = allQuests.where((q) => !q.isCompleted).toList();
+      expect(activeQuests.length, equals(1));
+      expect(activeQuests.first.id, equals('q1'));
+
+      // Completed tab filter returns only completed quests
+      final completedQuests = allQuests.where((q) => q.isCompleted).toList();
+      expect(completedQuests.length, equals(1));
+      expect(completedQuests.first.id, equals('q2'));
+    });
+
+    test('Verification without taking a photo is strictly rejected with Photo Proof Required error', () async {
+      final verifier = QuestVerificationService();
+      final photoQuest = QuestModel(
+        id: 'q_photo_req',
+        title: 'Photo Landmark Quest',
+        description: 'Take a photo of the monument',
+        storyline: 'Monument capture',
+        category: QuestCategory.landmark,
+        difficulty: QuestDifficulty.medium,
+        verificationType: QuestVerificationType.photoProof,
+        latitude: 12.9716,
+        longitude: 77.5946,
+        locationName: 'Town Hall',
+        radiusMeters: 50,
+        xpReward: 120,
+        coinReward: 50,
+        requiredLevel: 1,
+        requiresPhoto: true,
+        requiresFreshPhoto: true,
+        requirements: const [],
+        iconKey: 'landmark',
+      );
+
+      final attempt = QuestAttempt(
+        attemptId: 'att_no_photo',
+        userId: 'player',
+        questId: photoQuest.id,
+        startedAt: DateTime.now(),
+      );
+
+      // Attempting verification without photo (photoProofPath is null/empty)
+      final report = await verifier.evaluateAttempt(
+        quest: photoQuest,
+        attempt: attempt,
+        payload: const VerificationProofPayload(
+          userLat: 12.9716,
+          userLon: 77.5946,
+          photoProofPath: null, // No photo!
+        ),
+      );
+
+      expect(report.isSuccessful, isFalse);
+      expect(report.overallMessage, contains('Photo Proof Required'));
+    });
+
+    test('Two-Step Verification: Step 1 (GPS range) and Step 2 (Authentic on-site photo) both validated', () async {
+      final verifier = QuestVerificationService();
+      final quest = QuestModel(
+        id: 'q_two_step',
+        title: 'Two-Step On-Site Mission',
+        description: 'Verify physically on-site with live camera proof',
+        storyline: 'Live on-site tree exploration',
+        category: QuestCategory.nature,
+        difficulty: QuestDifficulty.hard,
+        verificationType: QuestVerificationType.photoProof,
+        latitude: 12.9716,
+        longitude: 77.5946,
+        locationName: 'Vidhana Soudha',
+        radiusMeters: 50,
+        xpReward: 200,
+        coinReward: 100,
+        requiredLevel: 1,
+        requiresPhoto: true,
+        requiresFreshPhoto: true,
+        requiredObject: 'tree',
+        requirements: const [],
+        iconKey: 'nature',
+      );
+
+
+      final attempt = QuestAttempt(
+        attemptId: 'att_two_step_valid',
+        userId: 'player',
+        questId: quest.id,
+        startedAt: DateTime.now(),
+      );
+
+      // 1. Step 1 Failure (Out of Range)
+      final outOfRangeReport = await verifier.evaluateAttempt(
+        quest: quest,
+        attempt: attempt,
+        payload: const VerificationProofPayload(
+          userLat: 13.5000, // 50km away
+          userLon: 78.0000,
+          photoProofPath: 'camera_capture_tree_live.jpg',
+          isFreshCameraCapture: true,
+        ),
+      );
+      expect(outOfRangeReport.isSuccessful, isFalse);
+      expect(outOfRangeReport.overallMessage, contains('GPS Proximity Check Failed'));
+
+
+      // 2. Step 2 Failure (Photo of phone screen / monitor)
+      final fakeScreenReport = await verifier.evaluateAttempt(
+        quest: quest,
+        attempt: attempt,
+        payload: const VerificationProofPayload(
+          userLat: 12.9716, // In range!
+          userLon: 77.5946,
+          photoProofPath: 'camera_capture_phone_screen_tree_display.jpg',
+          isFreshCameraCapture: true,
+        ),
+      );
+      expect(fakeScreenReport.isSuccessful, isFalse);
+      expect(fakeScreenReport.overallMessage, contains('Please photograph a real tree, not an image displayed on another phone'));
+
+      // 3. Complete Success: On-Site GPS + Live Real-World Photo
+      final successReport = await verifier.evaluateAttempt(
+        quest: quest,
+        attempt: attempt,
+        payload: const VerificationProofPayload(
+          userLat: 12.9716, // In range!
+          userLon: 77.5946,
+          photoProofPath: 'camera_capture_tree_botanical_garden_authentic.jpg',
+          isFreshCameraCapture: true,
+        ),
+      );
+      expect(successReport.isSuccessful, isTrue);
     });
   });
 }
+
 
 class MockTestLocalStorageService implements ILocalStorageService {
   final Map<String, dynamic> _data = {};

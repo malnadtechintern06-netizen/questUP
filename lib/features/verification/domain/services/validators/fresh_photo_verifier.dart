@@ -34,31 +34,38 @@ class FreshPhotoVerifier implements IQuestValidator {
 
     if (requiresFreshOnly) {
       // Strict fresh-photo verification: must originate from the active camera capture session
+      final sessionValid = payload.questSession == null || payload.questSession!.isActive;
+
       final isFresh = payload.isFreshCameraCapture &&
+          sessionValid &&
           !isExplicitGallery &&
           ((payload.photoAttemptId != null && payload.photoAttemptId == attempt.attemptId) ||
               photo.contains('camera_capture_') ||
-              photo.contains('fresh_proof_') ||
-              payload.isFreshCameraCapture);
+              photo.contains('fresh_proof_'));
 
-      if (!isFresh || isExplicitGallery) {
+      if (!isFresh || isExplicitGallery || !sessionValid) {
         return const ValidatorResult(
           passed: false,
           validatorName: 'Fresh In-App Photo Proof',
           actualValue: 'Pre-existing or Gallery Image',
           requiredValue: 'Live In-App Camera Capture',
-          message: 'Fresh Photo Required: This quest requires taking a live photo right now using the in-app QuestUP camera. Gallery uploads are not permitted.',
+          message:
+              'Fresh Photo Required: This quest requires taking a live photo right now using the in-app QuestUP camera. Gallery uploads are not permitted.',
         );
       }
+
 
       return ValidatorResult(
         passed: true,
         validatorName: 'Fresh In-App Photo Proof',
-        actualValue: 'Live In-App Capture (Attempt: ${attempt.attemptId.substring(0, attempt.attemptId.length > 8 ? 8 : attempt.attemptId.length)})',
+        actualValue:
+            'Live In-App Capture (Session: ${attempt.attemptId.substring(0, attempt.attemptId.length > 8 ? 8 : attempt.attemptId.length)})',
         requiredValue: 'Live Camera Capture',
-        message: 'Fresh In-App Photo Verified: Live camera capture successfully validated for this active session.',
+        message:
+            'Fresh In-App Photo Verified: Live camera capture on-site successfully validated for this active session.',
       );
     }
+
 
     // Standard photo requirement (gallery allowed when requiresFreshPhoto is false)
     return ValidatorResult(

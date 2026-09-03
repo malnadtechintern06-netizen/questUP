@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:quest_up/app/router/route_paths.dart';
 import 'package:quest_up/app/theme/app_colors.dart';
 import 'package:quest_up/app/theme/app_typography.dart';
-import 'package:quest_up/core/widgets/custom_button.dart';
+import 'package:quest_up/core/widgets/premium_3d_button.dart';
 import 'package:quest_up/features/auth/presentation/providers/auth_providers.dart';
 import 'package:quest_up/features/auth/presentation/widgets/auth_text_field.dart';
 
@@ -51,8 +51,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final authState = ref.watch(authNotifierProvider);
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Create Account'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: Text(
+          'Create Call Sign',
+          style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.w800),
+        ),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -62,39 +68,44 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header
+                // Header Emblem
                 Center(
                   child: Column(
                     children: [
                       Container(
-                        width: 72,
-                        height: 72,
+                        width: 76,
+                        height: 76,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: AppColors.surface,
-                          border: Border.all(color: AppColors.primary, width: 2),
+                          border: Border.all(color: AppColors.secondary, width: 2),
                           boxShadow: [
                             BoxShadow(
-                              color: AppColors.primary.withValues(alpha: 0.25),
-                              blurRadius: 20,
+                              color: AppColors.secondary.withValues(alpha: 0.3),
+                              blurRadius: 24,
+                              spreadRadius: 2,
                             ),
                           ],
                         ),
                         child: const Icon(
                           Icons.person_add_alt_1_rounded,
-                          color: AppColors.primary,
-                          size: 36,
+                          color: AppColors.secondary,
+                          size: 38,
                         ),
                       ),
                       const SizedBox(height: 16),
                       Text(
                         'Join QuestUP',
-                        style: AppTypography.displayMedium.copyWith(fontSize: 24),
+                        style: AppTypography.displayMedium.copyWith(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
                       const SizedBox(height: 6),
+
                       Text(
-                        'Create your persona and explore real-world quests',
-                        style: AppTypography.bodyMedium,
+                        'Create your persona and start exploring real-world quests',
+                        style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
                         textAlign: TextAlign.center,
                       ),
                     ],
@@ -108,7 +119,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: AppColors.accentDanger.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: AppColors.accentDanger.withValues(alpha: 0.6)),
                     ),
                     child: Row(
@@ -216,13 +227,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 26),
 
-                // Register Submit Button
-                CustomButton(
+                // 3D Register Submit Button
+                Premium3DButton(
                   text: 'CREATE ACCOUNT & EXPLORE',
                   icon: Icons.rocket_launch_rounded,
                   isLoading: authState.isLoading,
+                  color: AppColors.secondary,
                   width: double.infinity,
                   onPressed: _handleRegister,
                 ),
@@ -262,3 +274,4 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     );
   }
 }
+
