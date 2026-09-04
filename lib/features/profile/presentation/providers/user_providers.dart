@@ -73,7 +73,7 @@ class UserProfileNotifier extends StateNotifier<AsyncValue<UserProfile>> {
     String? avatarKey,
   }) async {
     UserProfile? current = state.value;
-    if (current == null) {
+    if (current == null || (id != null && current.id != id)) {
       try {
         current = await _getUserProfileUseCase();
       } catch (_) {

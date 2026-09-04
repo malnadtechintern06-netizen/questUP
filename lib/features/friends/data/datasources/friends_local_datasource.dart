@@ -34,9 +34,21 @@ class FriendsLocalDataSource implements IFriendsLocalDataSource {
     return 'QST-$numberPart';
   }
 
+  Future<String> _getActiveUserId() async {
+    try {
+      final authSession = await _storage.getJson(AppConstants.keyAuthSession);
+      if (authSession != null && authSession is Map<String, dynamic>) {
+        return authSession['id']?.toString() ?? 'guest_player';
+      }
+    } catch (_) {}
+    return 'guest_player';
+  }
+
   @override
   Future<List<FriendProfileModel>> getFriends() async {
-    final raw = await _storage.getJson(AppConstants.keyFriends);
+    final userId = await _getActiveUserId();
+    final userSpecificKey = 'questup_friends_${userId}_v1';
+    final raw = await _storage.getJson(userSpecificKey);
     if (raw is List) {
       return raw
           .map((item) => FriendProfileModel.fromJson(item as Map<String, dynamic>))
@@ -52,13 +64,18 @@ class FriendsLocalDataSource implements IFriendsLocalDataSource {
 
   @override
   Future<void> saveFriends(List<FriendProfileModel> friends) async {
+    final userId = await _getActiveUserId();
+    final userSpecificKey = 'questup_friends_${userId}_v1';
     final list = friends.map((f) => f.toJson()).toList();
+    await _storage.saveJson(userSpecificKey, list);
     await _storage.saveJson(AppConstants.keyFriends, list);
   }
 
   @override
   Future<List<FriendRequestModel>> getFriendRequests() async {
-    final raw = await _storage.getJson(AppConstants.keyFriendRequests);
+    final userId = await _getActiveUserId();
+    final userSpecificKey = 'questup_friend_requests_${userId}_v1';
+    final raw = await _storage.getJson(userSpecificKey);
     if (raw is List) {
       return raw
           .map((item) => FriendRequestModel.fromJson(item as Map<String, dynamic>))
@@ -73,7 +90,7 @@ class FriendsLocalDataSource implements IFriendsLocalDataSource {
         senderTag: 'QST-1002',
         senderAvatarKey: 'avatar_sky_pilot',
         senderLevel: 5,
-        receiverId: 'current_user',
+        receiverId: userId,
         receiverTag: 'MY_TAG',
         status: FriendRequestStatus.pending,
         createdAt: DateTime.now().subtract(const Duration(hours: 3)),
@@ -85,7 +102,10 @@ class FriendsLocalDataSource implements IFriendsLocalDataSource {
 
   @override
   Future<void> saveFriendRequests(List<FriendRequestModel> requests) async {
+    final userId = await _getActiveUserId();
+    final userSpecificKey = 'questup_friend_requests_${userId}_v1';
     final list = requests.map((r) => r.toJson()).toList();
+    await _storage.saveJson(userSpecificKey, list);
     await _storage.saveJson(AppConstants.keyFriendRequests, list);
   }
 

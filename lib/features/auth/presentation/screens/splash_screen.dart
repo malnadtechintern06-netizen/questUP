@@ -113,12 +113,13 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       }
 
       if (isLocationReady) {
-        // Pre-acquire GPS coordinates and initiate quest loading
-        try {
-          final coords = await locationService.getCurrentLocation();
-          ref.read(activeGpsCoordinatesProvider.notifier).state = coords;
-          unawaited(ref.read(questsNotifierProvider.notifier).fetchQuests(coords: coords, showLoading: false));
-        } catch (_) {}
+        // Trigger GPS acquisition and quest loading asynchronously without blocking navigation
+        unawaited(
+          locationService.getCurrentLocation().then((coords) {
+            ref.read(activeGpsCoordinatesProvider.notifier).state = coords;
+            ref.read(questsNotifierProvider.notifier).fetchQuests(coords: coords, showLoading: false);
+          }).catchError((_) {}),
+        );
 
         if (mounted) {
           context.go(RoutePaths.home);

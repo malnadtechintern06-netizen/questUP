@@ -6,11 +6,11 @@
 
 declare(strict_types=1);
 
-define('DB_HOST', '127.0.0.1');
-define('DB_PORT', 3306);
-define('DB_NAME', 'questup_db');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+define('DB_HOST', getenv('DB_HOST') ?: '127.0.0.1');
+define('DB_PORT', (int)(getenv('DB_PORT') ?: 3306));
+define('DB_NAME', getenv('DB_NAME') ?: 'questup_db');
+define('DB_USER', getenv('DB_USER') ?: 'root');
+define('DB_PASS', getenv('DB_PASS') !== false ? getenv('DB_PASS') : '');
 define('DB_CHARSET', 'utf8mb4');
 
 class Database {
@@ -37,11 +37,11 @@ class Database {
                 self::$instance = new PDO($dsn, DB_USER, DB_PASS, $options);
             } catch (PDOException $e) {
                 error_log('[QuestUP Admin DB Error] ' . $e->getMessage());
-                die(json_encode([
-                    'error' => true,
-                    'message' => 'Database connection failed. Please ensure MySQL/XAMPP is running.',
-                    'details' => (defined('DEBUG_MODE') && DEBUG_MODE) ? $e->getMessage() : null,
-                ]));
+                die('<div style="font-family: sans-serif; padding: 20px; background: #1a1a2e; color: #ff6b6b; border-radius: 8px; margin: 20px;">' .
+                    '<h3>Database Connection Failed</h3>' .
+                    '<p>' . htmlspecialchars($e->getMessage()) . '</p>' .
+                    '<p style="color: #a0a0b0;">Please check your database settings in <code>config/database.php</code> (Host, Database Name, Username, Password).</p>' .
+                    '</div>');
             }
         }
 

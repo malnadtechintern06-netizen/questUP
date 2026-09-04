@@ -46,6 +46,7 @@ dependencies:
   share_plus: ^13.3.0
   mysql_client: ^0.0.27
   crypto: ^3.0.7
+  mailer: ^6.1.4
 
 dev_dependencies:
   flutter_test:

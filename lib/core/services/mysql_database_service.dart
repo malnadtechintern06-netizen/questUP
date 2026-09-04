@@ -19,6 +19,7 @@ class MySqlDatabaseService implements IMySqlDatabaseService {
   MySQLConnection? _connection;
   bool _isConnecting = false;
   String _workingHost = '';
+  DateTime? _lastConnectFailure;
 
   MySqlDatabaseService([MySqlConfig? config])
       : _config = config ?? MySqlConfig.defaults(),
@@ -33,11 +34,18 @@ class MySqlDatabaseService implements IMySqlDatabaseService {
   @override
   Future<bool> connect() async {
     if (isConnected) return true;
+
+    // Fail-fast if recent connection attempt failed (avoids blocking UI on every call)
+    if (_lastConnectFailure != null &&
+        DateTime.now().difference(_lastConnectFailure!) < const Duration(seconds: 15)) {
+      return false;
+    }
+
     if (_isConnecting) {
       // Wait for in-flight connection
       int waits = 0;
       while (_isConnecting && waits < 10) {
-        await Future.delayed(const Duration(milliseconds: 200));
+        await Future.delayed(const Duration(milliseconds: 100));
         waits++;
       }
       if (isConnected) return true;
@@ -51,7 +59,6 @@ class MySqlDatabaseService implements IMySqlDatabaseService {
 
     for (final host in hostsToTry) {
       try {
-        debugPrint('[MySQL] Connecting to $host:${_config.port}/${_config.database} as ${_config.userName}...');
         final conn = await MySQLConnection.createConnection(
           host: host,
           port: _config.port,
@@ -61,10 +68,11 @@ class MySqlDatabaseService implements IMySqlDatabaseService {
           secure: _config.secure,
         );
 
-        await conn.connect().timeout(const Duration(milliseconds: 3000));
+        await conn.connect().timeout(const Duration(milliseconds: 600));
         _connection = conn;
         _workingHost = host;
         _config = _config.copyWith(host: host);
+        _lastConnectFailure = null;
         debugPrint('[MySQL] MYSQL CONNECTION SUCCESS on host "$host", database "${_config.database}"');
 
         // Auto-initialize schema if needed
@@ -72,13 +80,13 @@ class MySqlDatabaseService implements IMySqlDatabaseService {
         _isConnecting = false;
         return true;
       } catch (e) {
-        debugPrint('[MySQL] MYSQL CONNECTION FAILED on host "$host": $e');
         _connection = null;
       }
     }
 
     _isConnecting = false;
-    debugPrint('[MySQL] MYSQL CONNECTION FAILED: Unable to reach MySQL server on any candidate host (${hostsToTry.join(", ")}).');
+    _lastConnectFailure = DateTime.now();
+    debugPrint('[MySQL] MYSQL Offline / Unreachable. Operating in ultra-fast local offline mode.');
     return false;
   }
 
@@ -132,7 +140,8 @@ class MySqlDatabaseService implements IMySqlDatabaseService {
           `status` VARCHAR(30) DEFAULT 'active',
           `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
           `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-          PRIMARY KEY (`id`)
+          PRIMARY KEY (`id`),
+          KEY `idx_users_email` (`email`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
       ''');
 
@@ -148,7 +157,8 @@ class MySqlDatabaseService implements IMySqlDatabaseService {
           `xp_to_next_level` INT DEFAULT 500,
           `coins` INT DEFAULT 100,
           `joined_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-          PRIMARY KEY (`user_id`)
+          PRIMARY KEY (`user_id`),
+          KEY `idx_profiles_email` (`email`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
       ''');
 
@@ -171,7 +181,8 @@ class MySqlDatabaseService implements IMySqlDatabaseService {
           `difficulty` VARCHAR(30) DEFAULT 'medium',
           `is_active` TINYINT(1) DEFAULT 1,
           `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-          PRIMARY KEY (`id`)
+          PRIMARY KEY (`id`),
+          KEY `idx_quests_active_cat` (`is_active`, `category`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
       ''');
 
@@ -190,7 +201,8 @@ class MySqlDatabaseService implements IMySqlDatabaseService {
           `review_notes` TEXT DEFAULT NULL,
           `reviewed_by` VARCHAR(64) DEFAULT NULL,
           PRIMARY KEY (`id`),
-          KEY `idx_user_quest` (`user_id`, `quest_id`)
+          KEY `idx_user_quest` (`user_id`, `quest_id`),
+          KEY `idx_quest_user` (`quest_id`, `user_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
       ''');
 
@@ -206,7 +218,8 @@ class MySqlDatabaseService implements IMySqlDatabaseService {
           `route_target` VARCHAR(100) DEFAULT NULL,
           `action_label` VARCHAR(100) DEFAULT NULL,
           `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-          PRIMARY KEY (`id`)
+          PRIMARY KEY (`id`),
+          KEY `idx_user_notif` (`user_id`, `is_read`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
       ''');
 
@@ -232,7 +245,23 @@ class MySqlDatabaseService implements IMySqlDatabaseService {
           `badge_id` VARCHAR(64) NOT NULL,
           `earned_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
           PRIMARY KEY (`id`),
-          UNIQUE KEY `idx_user_badge_unique` (`user_id`, `badge_id`)
+          UNIQUE KEY `idx_user_badge_unique` (`user_id`, `badge_id`),
+          KEY `idx_badge_user` (`user_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      ''');
+
+      // 7. Email OTPs Table
+      await _connection!.execute('''
+        CREATE TABLE IF NOT EXISTS `email_otps` (
+          `id` VARCHAR(64) NOT NULL,
+          `email` VARCHAR(191) NOT NULL,
+          `otp_code` VARCHAR(10) NOT NULL,
+          `expires_at` DATETIME NOT NULL,
+          `is_used` TINYINT(1) DEFAULT 0,
+          `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (`id`),
+          KEY `idx_email_otp` (`email`, `otp_code`),
+          KEY `idx_email_expires` (`email`, `expires_at`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
       ''');
     } catch (e) {

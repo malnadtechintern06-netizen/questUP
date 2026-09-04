@@ -8,7 +8,6 @@ import 'package:quest_up/core/widgets/premium_3d_button.dart';
 import 'package:quest_up/features/auth/presentation/providers/auth_providers.dart';
 import 'package:quest_up/features/auth/presentation/widgets/auth_text_field.dart';
 import 'package:quest_up/features/auth/presentation/widgets/forgot_password_dialog.dart';
-import 'package:quest_up/features/quests/presentation/providers/quest_providers.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -30,24 +29,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
+    if (ref.read(authNotifierProvider).isLoading) return;
     if (!_formKey.currentState!.validate()) return;
 
-    final success = await ref.read(authNotifierProvider.notifier).login(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    final success = await ref.read(authNotifierProvider.notifier).initiateLoginWithOtp(
+          email: email,
+          password: password,
         );
 
     if (success && mounted) {
-      final isLocationReady =
-          await ref.read(locationServiceProvider).isLocationEnabledAndPermitted();
-
-      if (!mounted) return;
-
-      if (isLocationReady) {
-        context.go(RoutePaths.home);
-      } else {
-        context.go(RoutePaths.locationPermission);
-      }
+      context.push(RoutePaths.otpVerification, extra: email);
     }
   }
 
@@ -216,11 +210,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                 // 3D Login Submit Button
                 Premium3DButton(
-                  text: 'LOGIN TO QUESTUP',
+                  text: authState.isLoading ? 'SIGNING IN...' : 'LOGIN TO QUESTUP',
                   icon: Icons.login_rounded,
                   isLoading: authState.isLoading,
                   width: double.infinity,
-                  onPressed: _handleLogin,
+                  onPressed: authState.isLoading ? null : _handleLogin,
                 ),
                 const SizedBox(height: 24),
 

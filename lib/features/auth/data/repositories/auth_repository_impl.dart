@@ -27,6 +27,37 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<bool> initiateLoginWithOtp({
+    required String email,
+    required String password,
+  }) async {
+    return await remoteDataSource.initiateLoginWithOtp(
+      email: email,
+      password: password,
+    );
+  }
+
+  @override
+  Future<AuthUser> verifyLoginOtp({
+    required String email,
+    required String otp,
+  }) async {
+    return await remoteDataSource.verifyLoginOtp(
+      email: email,
+      otp: otp,
+    );
+  }
+
+  @override
+  Future<bool> resendLoginOtp({
+    required String email,
+  }) async {
+    return await remoteDataSource.resendLoginOtp(
+      email: email,
+    );
+  }
+
+  @override
   Future<AuthUser> registerWithEmailPassword({
     required String name,
     required String email,

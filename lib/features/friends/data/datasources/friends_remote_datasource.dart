@@ -93,7 +93,7 @@ class FriendsRemoteDataSource implements IFriendsRemoteDataSource {
       'friends/search.php',
       queryParams: {
         'query': query,
-        if (currentUserId != null) 'current_user_id': currentUserId,
+        ...?currentUserId != null ? {'current_user_id': currentUserId} : null,
       },
     );
 

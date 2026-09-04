@@ -13,9 +13,21 @@ class QuestCalendarLocalDataSource implements IQuestCalendarLocalDataSource {
 
   QuestCalendarLocalDataSource(this._storage);
 
+  Future<String> _getActiveUserId() async {
+    try {
+      final authSession = await _storage.getJson(AppConstants.keyAuthSession);
+      if (authSession != null && authSession is Map<String, dynamic>) {
+        return authSession['id']?.toString() ?? 'guest_player';
+      }
+    } catch (_) {}
+    return 'guest_player';
+  }
+
   @override
-  Future<List<QuestCalendarEntryModel>> getAllEntries() async {
-    final jsonList = await _storage.getJson(AppConstants.keyCalendarEntries);
+  Future<List<QuestCalendarEntryModel>> getAllEntries([String? targetUserId]) async {
+    final userId = targetUserId ?? await _getActiveUserId();
+    final userSpecificKey = 'questup_calendar_${userId}_v1';
+    final jsonList = await _storage.getJson(userSpecificKey);
     if (jsonList != null && jsonList is List) {
       return jsonList
           .map((item) => QuestCalendarEntryModel.fromJson(item as Map<String, dynamic>))
@@ -39,7 +51,10 @@ class QuestCalendarLocalDataSource implements IQuestCalendarLocalDataSource {
 
   @override
   Future<void> saveAllEntries(List<QuestCalendarEntryModel> entries) async {
+    final userId = await _getActiveUserId();
+    final userSpecificKey = 'questup_calendar_${userId}_v1';
     final jsonList = entries.map((e) => e.toJson()).toList();
+    await _storage.saveJson(userSpecificKey, jsonList);
     await _storage.saveJson(AppConstants.keyCalendarEntries, jsonList);
   }
 }

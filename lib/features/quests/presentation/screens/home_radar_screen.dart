@@ -39,6 +39,7 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      debugPrint('[TIMING] HOME SCREEN READY');
       _checkAndAutoAcquireLocation();
     });
   }

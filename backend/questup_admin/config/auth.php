@@ -101,7 +101,11 @@ function admin_login(string $identifier, string $password): array {
         return ['success' => true, 'message' => 'Login successful!'];
     } catch (PDOException $e) {
         error_log('[Admin Login Error] ' . $e->getMessage());
-        return ['success' => false, 'message' => 'Database error occurred during login.'];
+        $msg = 'Database error occurred during login.';
+        if (strpos($e->getMessage(), 'admin_users') !== false || strpos($e->getMessage(), "doesn't exist") !== false) {
+            $msg = "Database table 'admin_users' is missing. Please import questup_db.sql into your database.";
+        }
+        return ['success' => false, 'message' => $msg];
     }
 }
 

@@ -40,7 +40,6 @@ import 'package:quest_up/features/auth/data/datasources/auth_remote_datasource.d
 import 'package:quest_up/core/errors/exceptions.dart';
 import 'package:quest_up/features/friends/data/datasources/friends_local_datasource.dart';
 import 'package:quest_up/features/friends/data/repositories/friends_repository_impl.dart';
-import 'package:quest_up/features/friends/domain/entities/friend_profile.dart';
 import 'package:quest_up/features/friends/domain/entities/friend_request.dart';
 
 
@@ -72,7 +71,7 @@ class MockUserLocalDataSource implements IUserLocalDataSource {
   MockUserLocalDataSource(this.profile);
 
   @override
-  Future<UserProfileModel> getUserProfile() async => profile;
+  Future<UserProfileModel> getUserProfile([String? targetUserId]) async => profile;
 
   @override
   Future<void> saveUserProfile(UserProfileModel updated) async {

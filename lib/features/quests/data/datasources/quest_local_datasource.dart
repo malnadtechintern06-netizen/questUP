@@ -30,16 +30,40 @@ class QuestLocalDataSource implements IQuestLocalDataSource {
         _activityCatalogService =
             activityCatalogService ?? ActivityQuestCatalogService();
 
+  Future<Set<String>> _getActiveUserCompletedQuestIds() async {
+    try {
+      final authSession = await _storage.getJson(AppConstants.keyAuthSession);
+      String? userId;
+      if (authSession != null && authSession is Map<String, dynamic>) {
+        userId = authSession['id']?.toString();
+      }
+
+      final targetKey = userId != null ? 'questup_user_profile_${userId}_v1' : AppConstants.keyUserProfile;
+      final profileJson = await _storage.getJson(targetKey);
+      if (profileJson != null && profileJson is Map<String, dynamic>) {
+        final completedList = profileJson['completedQuestIds'];
+        if (completedList is List) {
+          return completedList.map((e) => e.toString()).toSet();
+        }
+      }
+    } catch (_) {}
+    return <String>{};
+  }
+
   @override
   Future<List<QuestModel>> getQuests() async {
+    final completedIds = await _getActiveUserCompletedQuestIds();
     final jsonList = await _storage.getJson(AppConstants.keyQuests);
     if (jsonList != null && jsonList is List && jsonList.isNotEmpty) {
       return jsonList
           .map((item) => QuestModel.fromJson(item as Map<String, dynamic>))
+          .map((q) => QuestModel.fromEntity(q.copyWith(isCompleted: completedIds.contains(q.id))))
           .toList();
     }
     // Return base activity quests if storage is empty
-    return _activityCatalogService.getActivityQuests();
+    return _activityCatalogService.getActivityQuests().map((q) {
+      return q.copyWith(isCompleted: completedIds.contains(q.id));
+    }).map((q) => QuestModel.fromEntity(q)).toList();
   }
 
   @override
@@ -48,10 +72,7 @@ class QuestLocalDataSource implements IQuestLocalDataSource {
     double userLon, {
     double maxRadiusMeters = 5000.0,
   }) async {
-    final existing = await getQuests();
-
-    // Preserve any existing completed quest IDs so player progress is retained
-    final completedIds = existing.where((q) => q.isCompleted).map((q) => q.id).toSet();
+    final completedIds = await _getActiveUserCompletedQuestIds();
 
     // 1. Generate dynamic famous place quests connecting the user's location to important landmarks
     final locationQuests = await _placesDiscoveryService.generateFamousPlaceQuests(
@@ -94,14 +115,26 @@ class QuestLocalDataSource implements IQuestLocalDataSource {
 
   @override
   Future<void> markCompleted(String id) async {
-    final all = await getQuests();
-    final updated = all.map((q) {
-      if (q.id == id) {
-        return q.copyWith(isCompleted: true);
+    try {
+      final authSession = await _storage.getJson(AppConstants.keyAuthSession);
+      String? userId;
+      if (authSession != null && authSession is Map<String, dynamic>) {
+        userId = authSession['id']?.toString();
       }
-      return q;
-    }).map((q) => QuestModel.fromEntity(q)).toList();
 
-    await saveQuests(updated);
+      final targetKey = userId != null ? 'questup_user_profile_${userId}_v1' : AppConstants.keyUserProfile;
+      final profileJson = await _storage.getJson(targetKey);
+      if (profileJson != null && profileJson is Map<String, dynamic>) {
+        final completedList = List<String>.from(
+          (profileJson['completedQuestIds'] as List?)?.map((e) => e.toString()) ?? const [],
+        );
+        if (!completedList.contains(id)) {
+          completedList.add(id);
+          profileJson['completedQuestIds'] = completedList;
+          await _storage.saveJson(targetKey, profileJson);
+          await _storage.saveJson(AppConstants.keyUserProfile, profileJson);
+        }
+      }
+    } catch (_) {}
   }
 }

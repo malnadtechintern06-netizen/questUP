@@ -6,6 +6,20 @@ abstract class AuthRepository {
     required String password,
   });
 
+  Future<bool> initiateLoginWithOtp({
+    required String email,
+    required String password,
+  });
+
+  Future<AuthUser> verifyLoginOtp({
+    required String email,
+    required String otp,
+  });
+
+  Future<bool> resendLoginOtp({
+    required String email,
+  });
+
   Future<AuthUser> registerWithEmailPassword({
     required String name,
     required String email,

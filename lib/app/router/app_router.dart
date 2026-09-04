@@ -5,6 +5,7 @@ import 'package:quest_up/app/router/route_paths.dart';
 import 'package:quest_up/core/widgets/app_scaffold.dart';
 import 'package:quest_up/features/achievements/presentation/screens/achievements_screen.dart';
 import 'package:quest_up/features/auth/presentation/screens/login_screen.dart';
+import 'package:quest_up/features/auth/presentation/screens/otp_verification_screen.dart';
 import 'package:quest_up/features/auth/presentation/screens/register_screen.dart';
 import 'package:quest_up/features/auth/presentation/screens/splash_screen.dart';
 import 'package:quest_up/features/auth/presentation/screens/welcome_screen.dart';
@@ -45,6 +46,16 @@ final GoRouter appRouter = GoRouter(
       path: RoutePaths.login,
       name: RouteNames.login,
       builder: (context, state) => const LoginScreen(),
+    ),
+
+    // OTP Verification Screen
+    GoRoute(
+      path: RoutePaths.otpVerification,
+      name: RouteNames.otpVerification,
+      builder: (context, state) {
+        final email = (state.extra as String?) ?? state.uri.queryParameters['email'];
+        return OtpVerificationScreen(email: email);
+      },
     ),
 
     // Register Screen

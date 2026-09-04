@@ -12,10 +12,23 @@ class AchievementLocalDataSource implements IAchievementLocalDataSource {
 
   AchievementLocalDataSource(this._storage);
 
+  Future<String> _getActiveUserId() async {
+    try {
+      final authSession = await _storage.getJson(AppConstants.keyAuthSession);
+      if (authSession != null && authSession is Map<String, dynamic>) {
+        return authSession['id']?.toString() ?? 'guest_player';
+      }
+    } catch (_) {}
+    return 'guest_player';
+  }
+
   @override
-  Future<List<AchievementModel>> getAchievements() async {
+  Future<List<AchievementModel>> getAchievements([String? targetUserId]) async {
     final initial = _generateInitialAchievements();
-    final jsonList = await _storage.getJson(AppConstants.keyAchievements);
+    final userId = targetUserId ?? await _getActiveUserId();
+    final userSpecificKey = 'questup_achievements_${userId}_v1';
+
+    final jsonList = await _storage.getJson(userSpecificKey);
     if (jsonList != null && jsonList is List) {
       final savedList = jsonList
           .map((item) => AchievementModel.fromJson(item as Map<String, dynamic>))
@@ -43,7 +56,10 @@ class AchievementLocalDataSource implements IAchievementLocalDataSource {
 
   @override
   Future<void> saveAchievements(List<AchievementModel> list) async {
+    final userId = await _getActiveUserId();
+    final userSpecificKey = 'questup_achievements_${userId}_v1';
     final jsonList = list.map((a) => a.toJson()).toList();
+    await _storage.saveJson(userSpecificKey, jsonList);
     await _storage.saveJson(AppConstants.keyAchievements, jsonList);
   }
 

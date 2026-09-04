@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uuid/uuid.dart';
 import 'package:quest_up/app/config/mysql_config.dart';
 import 'package:quest_up/core/services/mysql_database_service.dart';
 import 'package:quest_up/features/profile/data/datasources/user_mysql_datasource.dart';

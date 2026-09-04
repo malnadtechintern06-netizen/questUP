@@ -197,7 +197,7 @@ class FriendsRepositoryImpl implements IFriendsRepository {
     }
 
     final req = requests[index];
-    requests[index] = req.copyWith(status: FriendRequestStatus.accepted) as FriendRequestModel;
+    requests[index] = req.copyWith(status: FriendRequestStatus.accepted);
     await localDataSource.saveFriendRequests(requests);
 
     final myProfile = await userRepository.getUserProfile();
@@ -248,7 +248,7 @@ class FriendsRepositoryImpl implements IFriendsRepository {
     final index = requests.indexWhere((r) => r.id == requestId);
     if (index != -1) {
       final req = requests[index];
-      requests[index] = req.copyWith(status: FriendRequestStatus.rejected) as FriendRequestModel;
+      requests[index] = req.copyWith(status: FriendRequestStatus.rejected);
       await localDataSource.saveFriendRequests(requests);
     }
 

@@ -180,7 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </form>
 
         <div class="mt-4 pt-3 border-top text-center text-muted" style="border-color: var(--border-subtle) !important; font-size: 0.78rem;">
-            <div>Database: <strong class="text-cyan">questup_db</strong> (XAMPP/MariaDB)</div>
+          <div>Database: <strong class="text-cyan">if0_42828865_questUP</strong> (InfinityFree)</div>
             <div class="mt-1">Protected by CSRF & BCrypt Authentication</div>
         </div>
     </div>
