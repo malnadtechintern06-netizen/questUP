@@ -310,14 +310,17 @@ class HomeCalendarWidget extends ConsumerWidget {
           Icon(icon, size: 13, color: color),
           const SizedBox(width: 4),
           Flexible(
-            child: Text(
-              '$count $label',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTypography.caption.copyWith(
-                color: color,
-                fontWeight: FontWeight.bold,
-                fontSize: 10.5,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                '$count $label',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.caption.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 10.5,
+                ),
               ),
             ),
           ),

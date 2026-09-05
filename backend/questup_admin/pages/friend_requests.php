@@ -39,39 +39,47 @@ if ($statusFilter !== 'all' && in_array($statusFilter, ['pending', 'accepted', '
 
 $whereSql = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
-// Count Query
-$countQuery = "
-    SELECT COUNT(*) as total
-    FROM friend_requests r
-    JOIN users u1 ON r.sender_id = u1.id
-    JOIN users u2 ON r.receiver_id = u2.id
-    $whereSql
-";
-$stmt = $db->prepare($countQuery);
-$stmt->execute($params);
-$totalRecords = (int)($stmt->fetch()['total'] ?? 0);
-$totalPages = max(1, (int)ceil($totalRecords / $limit));
+$totalRecords = 0;
+$totalPages = 1;
+$requests = [];
 
-// Fetch Data
-$dataQuery = "
-    SELECT r.*,
-           u1.name as sender_name, u1.email as sender_email,
-           u2.name as receiver_name, u2.email as receiver_email
-    FROM friend_requests r
-    JOIN users u1 ON r.sender_id = u1.id
-    JOIN users u2 ON r.receiver_id = u2.id
-    $whereSql
-    ORDER BY r.created_at DESC
-    LIMIT $limit OFFSET $offset
-";
-$stmt = $db->prepare($dataQuery);
-$stmt->execute($params);
-$requests = $stmt->fetchAll();
+try {
+    // Count Query
+    $countQuery = "
+        SELECT COUNT(*) as total
+        FROM friend_requests r
+        JOIN users u1 ON r.sender_id = u1.id
+        JOIN users u2 ON r.receiver_id = u2.id
+        $whereSql
+    ";
+    $stmt = $db->prepare($countQuery);
+    $stmt->execute($params);
+    $totalRecords = (int)($stmt->fetch()['total'] ?? 0);
+    $totalPages = max(1, (int)ceil($totalRecords / $limit));
+
+    // Fetch Data
+    $dataQuery = "
+        SELECT r.*,
+               u1.name as sender_name, u1.email as sender_email,
+               u2.name as receiver_name, u2.email as receiver_email
+        FROM friend_requests r
+        JOIN users u1 ON r.sender_id = u1.id
+        JOIN users u2 ON r.receiver_id = u2.id
+        $whereSql
+        ORDER BY r.created_at DESC
+        LIMIT $limit OFFSET $offset
+    ";
+    $stmt = $db->prepare($dataQuery);
+    $stmt->execute($params);
+    $requests = $stmt->fetchAll();
+} catch (Throwable $e) {
+    error_log('[QuestUP Admin friend_requests.php Error] ' . $e->getMessage());
+}
 ?>
 
 <div class="glass-card mb-4">
-    <form method="GET" action="friend_requests.php" class="row g-3 align-items-center">
-        <div class="col-lg-5 col-md-6">
+    <form method="GET" action="friend_requests.php" class="row g-2 g-md-3 align-items-center">
+        <div class="col-12 col-sm-6 col-md-5 col-xl-5">
             <div class="position-relative">
                 <input type="text" 
                        name="search" 
@@ -82,7 +90,7 @@ $requests = $stmt->fetchAll();
             </div>
         </div>
 
-        <div class="col-lg-3 col-md-4">
+        <div class="col-6 col-sm-3 col-md-3 col-xl-3">
             <select name="status" class="form-control-gaming" onchange="this.form.submit()">
                 <option value="all" <?= $statusFilter === 'all' ? 'selected' : '' ?>>All Statuses</option>
                 <option value="pending" <?= $statusFilter === 'pending' ? 'selected' : '' ?>>Pending Only</option>
@@ -91,8 +99,17 @@ $requests = $stmt->fetchAll();
             </select>
         </div>
 
-        <div class="col-lg-4 col-md-2 text-lg-end text-muted small">
-            Found <strong><?= number_format($totalRecords) ?></strong> friend requests
+        <div class="col-6 col-sm-3 col-md-4 col-xl-4 d-flex justify-content-between align-items-center">
+            <?php if ($search !== '' || $statusFilter !== 'all'): ?>
+                <a href="friend_requests.php" class="btn btn-gaming btn-gaming-outline btn-sm" title="Reset Filters">
+                    <i class="fas fa-redo me-1"></i> Reset
+                </a>
+            <?php else: ?>
+                <div></div>
+            <?php endif; ?>
+            <span class="text-muted small">
+                Found <strong><?= number_format($totalRecords) ?></strong> requests
+            </span>
         </div>
     </form>
 </div>

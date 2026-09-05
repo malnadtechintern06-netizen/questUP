@@ -1117,6 +1117,40 @@ out center 30;
           placeName: '$cleanArea Scenic Viewpoint',
         ),
       ),
+      DiscoveredPlace(
+        id: 'local_market_${gridLat}_$gridLon',
+        rawPlaceId: 'local_market_${gridLat}_$gridLon',
+        name: '$cleanArea Grand Central Market & Bazaar',
+        type: 'market',
+        types: const ['market', 'shop'],
+        specificCategory: 'market',
+        latitude: userLat + 0.0028,
+        longitude: userLon - 0.0019,
+        category: QuestCategory.food,
+        description: 'A vibrant marketplace showcasing local produce, crafts, and culture in $cleanArea.',
+        address: 'Market Square, $cleanArea',
+        imageUrl: QuestImageResolver.resolvePlaceCategoryImageUrl(
+          specificCategory: 'market',
+          placeName: '$cleanArea Central Market',
+        ),
+      ),
+      DiscoveredPlace(
+        id: 'local_sports_${gridLat}_$gridLon',
+        rawPlaceId: 'local_stadium_${gridLat}_$gridLon',
+        name: '$cleanArea Community Sports Complex & Arena',
+        type: 'sports',
+        types: const ['sports', 'leisure'],
+        specificCategory: 'sports',
+        latitude: userLat - 0.0042,
+        longitude: userLon + 0.0038,
+        category: QuestCategory.fitness,
+        description: 'An expansive outdoor sports arena and athletics ground in $cleanArea.',
+        address: 'Sports Complex Road, $cleanArea',
+        imageUrl: QuestImageResolver.resolvePlaceCategoryImageUrl(
+          specificCategory: 'sports',
+          placeName: '$cleanArea Sports Arena',
+        ),
+      ),
     ];
   }
 }

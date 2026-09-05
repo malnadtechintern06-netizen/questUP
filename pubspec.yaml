@@ -46,7 +46,8 @@ dependencies:
   share_plus: ^13.3.0
   mysql_client: ^0.0.27
   crypto: ^3.0.7
-  mailer: ^6.1.4
+  mailer: ^6.1.2
+  flutter_local_notifications: ^22.3.0
 
 dev_dependencies:
   flutter_test:
@@ -118,4 +119,5 @@ flutter:
   #         weight: 700
   #
   # For details regarding fonts from package dependencies,
-  # see https://flutter.dev/to/font-from-package
+  # see https://flutter.dev/to/font-from-packageA
+  

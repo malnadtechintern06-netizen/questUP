@@ -7,7 +7,6 @@ import 'package:quest_up/app/theme/app_typography.dart';
 import 'package:quest_up/core/widgets/empty_state_widget.dart';
 import 'package:quest_up/core/widgets/error_state_widget.dart';
 import 'package:quest_up/core/widgets/shimmer_loading.dart';
-import 'package:quest_up/features/location_permission/presentation/providers/location_permission_provider.dart';
 import 'package:quest_up/features/notifications/presentation/providers/notification_providers.dart';
 import 'package:quest_up/features/notifications/presentation/widgets/notifications_sheet.dart';
 import 'package:quest_up/features/quests/presentation/providers/quest_providers.dart';
@@ -16,11 +15,41 @@ import 'package:quest_up/features/quests/presentation/widgets/quest_card_widget.
 
 final statusFilterProvider = StateProvider<String>((ref) => 'all'); // 'all', 'available', 'completed'
 
-class QuestListScreen extends ConsumerWidget {
+class QuestListScreen extends ConsumerStatefulWidget {
   const QuestListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<QuestListScreen> createState() => _QuestListScreenState();
+}
+
+class _QuestListScreenState extends ConsumerState<QuestListScreen>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      debugPrint('[QUEST SCREEN] Screen opened, requesting latest quests from API');
+      ref.read(questsNotifierProvider.notifier).fetchQuests(showLoading: false);
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      debugPrint('[QUEST SCREEN] App resumed, requesting latest quests from API');
+      ref.read(questsNotifierProvider.notifier).fetchQuests(showLoading: false);
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final questsAsync = ref.watch(questsNotifierProvider);
     final selectedCategory = ref.watch(selectedCategoryProvider);
     final statusFilter = ref.watch(statusFilterProvider);
@@ -29,24 +58,36 @@ class QuestListScreen extends ConsumerWidget {
     final maxRadius = ref.watch(maxRadiusFilterMetersProvider);
     final unreadNotifsCount = ref.watch(unreadNotificationsCountProvider);
 
+    final allQuests = questsAsync.valueOrNull ?? [];
+    final availableCount = allQuests.where((q) => q.isActive && !q.isCompleted).length;
+    final completedCount = allQuests.where((q) => q.isActive && q.isCompleted).length;
+    final totalCount = allQuests.where((q) => q.isActive).length;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        titleSpacing: 16,
         title: Text(
           'Quest Log',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.w800),
         ),
         actions: [
           IconButton(
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
             tooltip: 'Quest Activity Calendar',
-            icon: const Icon(Icons.calendar_month_rounded, color: AppColors.secondary),
+            icon: const Icon(Icons.calendar_month_rounded, color: AppColors.secondary, size: 21),
             onPressed: () => context.push(RoutePaths.calendar),
           ),
           IconButton(
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
             tooltip: 'Refresh Quests',
-            icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
+            icon: const Icon(Icons.refresh_rounded, color: AppColors.primary, size: 21),
             onPressed: () =>
                 ref.read(questsNotifierProvider.notifier).refreshLocationAndQuests(),
           ),
@@ -54,30 +95,32 @@ class QuestListScreen extends ConsumerWidget {
             alignment: Alignment.topRight,
             children: [
               IconButton(
+                padding: const EdgeInsets.all(4),
+                constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
                 tooltip: 'Notifications',
-                icon: const Icon(Icons.notifications_outlined, color: AppColors.textPrimary),
+                icon: const Icon(Icons.notifications_outlined, color: AppColors.textPrimary, size: 21),
                 onPressed: () => NotificationsSheet.show(context),
               ),
               if (unreadNotifsCount > 0)
                 Positioned(
-                  right: 8,
-                  top: 8,
+                  right: 2,
+                  top: 2,
                   child: Container(
-                    padding: const EdgeInsets.all(4),
+                    padding: const EdgeInsets.all(3),
                     decoration: const BoxDecoration(
                       color: AppColors.accentDanger,
                       shape: BoxShape.circle,
                     ),
                     constraints: const BoxConstraints(
-                      minWidth: 16,
-                      minHeight: 16,
+                      minWidth: 15,
+                      minHeight: 15,
                     ),
                     child: Center(
                       child: Text(
                         '$unreadNotifsCount',
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 9,
+                          fontSize: 8.5,
                           fontWeight: FontWeight.bold,
                           height: 1.0,
                         ),
@@ -87,6 +130,7 @@ class QuestListScreen extends ConsumerWidget {
                 ),
             ],
           ),
+          const SizedBox(width: 6),
         ],
       ),
       body: Column(
@@ -185,22 +229,19 @@ class QuestListScreen extends ConsumerWidget {
             child: Row(
               children: [
                 _buildStatusTab(
-                  ref,
-                  label: 'All Quests',
+                  label: 'All ($totalCount)',
                   value: 'all',
                   isSelected: statusFilter == 'all',
                 ),
                 const SizedBox(width: 8),
                 _buildStatusTab(
-                  ref,
-                  label: 'Available',
+                  label: 'Available ($availableCount)',
                   value: 'available',
                   isSelected: statusFilter == 'available',
                 ),
                 const SizedBox(width: 8),
                 _buildStatusTab(
-                  ref,
-                  label: 'Completed',
+                  label: 'Completed ($completedCount)',
                   value: 'completed',
                   isSelected: statusFilter == 'completed',
                 ),
@@ -209,113 +250,90 @@ class QuestListScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
 
-          // List of quests (Closest first)
+          // List of quests (Closest first or all active quests)
           Expanded(
             child: RefreshIndicator(
               color: AppColors.primary,
               onRefresh: () async {
                 await ref
                     .read(questsNotifierProvider.notifier)
-                    .refreshLocationAndQuests();
+                    .fetchQuests(showLoading: false);
               },
-              child: activeGps == null
-                  ? ListView(
+              child: questsAsync.when(
+                loading: () => ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: const [
+                    QuestCardShimmer(),
+                    QuestCardShimmer(),
+                    QuestCardShimmer(),
+                  ],
+                ),
+                error: (err, _) => ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: [
+                    const SizedBox(height: 40),
+                    ErrorStateWidget(
+                      message: err.toString(),
+                      onRetry: () => ref
+                          .read(questsNotifierProvider.notifier)
+                          .refreshLocationAndQuests(),
+                    ),
+                  ],
+                ),
+                data: (quests) {
+                  final filtered = quests.where((q) {
+                    if (!q.isActive) return false;
+                    final matchesCat =
+                        selectedCategory == null || q.category == selectedCategory;
+                    final matchesQuery = query.isEmpty ||
+                        q.title.toLowerCase().contains(query.toLowerCase()) ||
+                        q.locationName.toLowerCase().contains(query.toLowerCase()) ||
+                        q.description.toLowerCase().contains(query.toLowerCase());
+                    final matchesStatus = statusFilter == 'all'
+                        ? true
+                        : (statusFilter == 'completed' ? q.isCompleted : !q.isCompleted);
+                    return matchesCat && matchesQuery && matchesStatus;
+                  }).toList();
+
+                  if (filtered.isEmpty) {
+                    return ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
                       children: [
                         const SizedBox(height: 60),
                         EmptyStateWidget(
-                          icon: Icons.location_off_rounded,
-                          title: 'Location Services Required',
+                          title: 'No Quests Found',
                           description:
-                              'Quests are only loaded once location services are turned on. Please enable GPS to discover quests around you.',
-                          actionText: 'Enable Location',
-                          onAction: () async {
-                            final notifier =
-                                ref.read(locationPermissionNotifierProvider.notifier);
-                            final success =
-                                await notifier.requestAndAcquireLocation();
-                            if (!success && context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: const Text(
-                                    'Please enable GPS and location permissions in device settings to load quests.',
-                                  ),
-                                  action: SnackBarAction(
-                                    label: 'SETTINGS',
-                                    onPressed: () => notifier.openAppSettings(),
-                                  ),
-                                ),
-                              );
-                            }
+                              'No quests matching your filters. Try pulling to refresh or clearing search.',
+                          actionText: 'Reset Filters',
+                          onAction: () {
+                            ref.read(selectedCategoryProvider.notifier).state = null;
+                            ref.read(searchQueryProvider.notifier).state = '';
+                            ref.read(statusFilterProvider.notifier).state = 'all';
+                            ref
+                                .read(questsNotifierProvider.notifier)
+                                .fetchQuests(showLoading: true);
                           },
                         ),
                       ],
-                    )
-                  : questsAsync.when(
-                      loading: () => ListView(
-                        children: const [
-                          QuestCardShimmer(),
-                          QuestCardShimmer(),
-                          QuestCardShimmer(),
-                        ],
-                      ),
-                      error: (err, _) => ErrorStateWidget(
-                        message: err.toString(),
-                        onRetry: () => ref
-                            .read(questsNotifierProvider.notifier)
-                            .refreshLocationAndQuests(),
-                      ),
-                      data: (quests) {
-                        final filtered = quests.where((q) {
-                          final matchesCat =
-                              selectedCategory == null || q.category == selectedCategory;
-                          final matchesQuery = query.isEmpty ||
-                              q.title.toLowerCase().contains(query.toLowerCase()) ||
-                              q.locationName.toLowerCase().contains(query.toLowerCase());
-                          final matchesStatus = statusFilter == 'completed'
-                              ? q.isCompleted
-                              : !q.isCompleted;
-                          return matchesCat && matchesQuery && matchesStatus;
-                        }).toList();
+                    );
+                  }
 
-
-
-                        if (filtered.isEmpty) {
-                          return ListView(
-                            children: [
-                              const SizedBox(height: 60),
-                              EmptyStateWidget(
-                                title: 'No Quests Found',
-                                description:
-                                    'No quests matching your filters. Try resetting search or moving to another location.',
-                                actionText: 'Reset Filters',
-                                onAction: () {
-                                  ref.read(selectedCategoryProvider.notifier).state = null;
-                                  ref.read(searchQueryProvider.notifier).state = '';
-                                  ref.read(statusFilterProvider.notifier).state = 'all';
-                                  ref
-                                      .read(questsNotifierProvider.notifier)
-                                      .refreshLocationAndQuests();
-                                },
-                              ),
-                            ],
-                          );
-                        }
-
-                        return ListView.builder(
-                          padding: const EdgeInsets.only(bottom: 32),
-                          itemCount: filtered.length,
-                          itemBuilder: (context, index) {
-                            final quest = filtered[index];
-                            return QuestCardWidget(
-                              quest: quest,
-                              onTap: () {
-                                context.push(RoutePaths.questDetailPath(quest.id));
-                              },
-                            );
-                          },
-                        );
-                      },
-                    ),
+                  return ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.only(bottom: 32),
+                    itemCount: filtered.length,
+                    itemBuilder: (context, index) {
+                      final quest = filtered[index];
+                      return QuestCardWidget(
+                        quest: quest,
+                        onTap: () {
+                          context.push(RoutePaths.questDetailPath(quest.id));
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
             ),
           ),
         ],
@@ -323,8 +341,7 @@ class QuestListScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildStatusTab(
-    WidgetRef ref, {
+  Widget _buildStatusTab({
     required String label,
     required String value,
     required bool isSelected,
@@ -369,4 +386,3 @@ class QuestListScreen extends ConsumerWidget {
     );
   }
 }
-

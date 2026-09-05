@@ -3,14 +3,29 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. Sidebar Mobile Toggle
+    // 1. Sidebar Toggle (Mobile & Desktop)
     const sidebar = document.getElementById('adminSidebar');
     const toggleBtn = document.getElementById('sidebarToggleBtn');
     const closeBtn = document.getElementById('sidebarCloseBtn');
 
-    if (toggleBtn && sidebar) {
-        toggleBtn.addEventListener('click', () => {
-            sidebar.classList.toggle('show');
+    // Restore desktop collapsed preference
+    if (window.innerWidth > 992 && localStorage.getItem('questup_sidebar_collapsed') === '1') {
+        document.body.classList.add('sidebar-collapsed');
+    }
+
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (window.innerWidth <= 992) {
+                if (sidebar) sidebar.classList.toggle('show');
+            } else {
+                document.body.classList.toggle('sidebar-collapsed');
+                const isCollapsed = document.body.classList.contains('sidebar-collapsed');
+                localStorage.setItem('questup_sidebar_collapsed', isCollapsed ? '1' : '0');
+                
+                // Trigger resize for charts/maps
+                window.dispatchEvent(new Event('resize'));
+            }
         });
     }
 
@@ -22,7 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Close sidebar when clicking outside on mobile
     document.addEventListener('click', (e) => {
-        if (sidebar && sidebar.classList.contains('show')) {
+        if (sidebar && sidebar.classList.contains('show') && window.innerWidth <= 992) {
             if (!sidebar.contains(e.target) && (!toggleBtn || !toggleBtn.contains(e.target))) {
                 sidebar.classList.remove('show');
             }

@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quest_up/core/services/location_service.dart';
+import 'package:quest_up/core/services/notification_service.dart';
 import 'package:quest_up/core/services/places_discovery_service.dart';
 import 'package:quest_up/core/utils/distance_calculator.dart';
 import 'package:quest_up/features/notifications/domain/entities/app_notification.dart';
@@ -102,38 +104,147 @@ final isLocationEnabledProvider = FutureProvider.autoDispose<bool>((ref) async {
   return await service.isLocationEnabledAndPermitted();
 });
 
-// Quests List Notifier with live GPS tracking, nearest-first sorting, and manual refresh
+// Quests List Notifier with live GPS tracking, nearest-first sorting, periodic background sync, and new quest notification dispatch
 class QuestsNotifier extends StateNotifier<AsyncValue<List<Quest>>> {
   final GetNearbyQuestsUseCase getNearbyQuestsUseCase;
+  final GetQuestsUseCase getQuestsUseCase;
   final ILocationService locationService;
   final Ref ref;
   StreamSubscription<LocationCoordinates>? _locationSubscription;
   LocationCoordinates? _lastFetchedLocation;
-  bool _isFetching = false;
+  Completer<void>? _ongoingFetch;
+  Timer? _periodicSyncTimer;
+  Set<String> _seenQuestIds = {};
+  bool _isInitializedSeenIds = false;
 
   QuestsNotifier({
     required this.getNearbyQuestsUseCase,
+    required this.getQuestsUseCase,
     required this.locationService,
     required this.ref,
   }) : super(const AsyncValue.loading()) {
     _initQuestsWithLocationCheck();
     _startLocationTracking();
+    _startPeriodicSync();
+  }
+
+  void _startPeriodicSync() {
+    // Periodically poll backend for newly uploaded quests every 25 seconds
+    _periodicSyncTimer = Timer.periodic(const Duration(seconds: 25), (_) {
+      fetchQuests(showLoading: false);
+    });
+  }
+
+  Future<void> _initSeenQuestIds(List<Quest> initialQuests) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedIds = prefs.getStringList('seen_quest_ids_v1');
+      if (savedIds != null && savedIds.isNotEmpty) {
+        _seenQuestIds = savedIds.toSet();
+      } else {
+        // First run: seed existing quests so we don't bombard user with all quests initially
+        _seenQuestIds = initialQuests.map((q) => q.id).toSet();
+        await prefs.setStringList('seen_quest_ids_v1', _seenQuestIds.toList());
+      }
+      _isInitializedSeenIds = true;
+    } catch (e) {
+      debugPrint('[QUEST NOTIFIER] Error initializing seen quest IDs: $e');
+      _seenQuestIds = initialQuests.map((q) => q.id).toSet();
+      _isInitializedSeenIds = true;
+    }
+  }
+
+  Future<void> _handleNewQuestsDetection(List<Quest> quests) async {
+    if (!_isInitializedSeenIds) {
+      await _initSeenQuestIds(quests);
+      return;
+    }
+
+    // Identify newly detected quests that were not previously seen
+    final newQuests =
+        quests.where((q) => !_seenQuestIds.contains(q.id)).toList();
+
+    if (newQuests.isNotEmpty) {
+      debugPrint(
+          '[QUEST NOTIFIER] 🔔 Detected ${newQuests.length} new quests uploaded to server!');
+
+      for (final newQuest in newQuests) {
+        _seenQuestIds.add(newQuest.id);
+
+        // 1. Dispatch Native System Notification to Phone's Status Bar / Shade
+        try {
+          await NotificationService.instance.showNewQuestNotification(newQuest);
+        } catch (e) {
+          debugPrint(
+              '[QUEST NOTIFIER] Error showing status-bar notification: $e');
+        }
+
+        // 2. Add In-App Notification entry to NotificationsNotifier
+        try {
+          final rewardText =
+              '+${newQuest.xpReward} XP • +${newQuest.coinReward} Coins';
+          final locText = newQuest.locationName.isNotEmpty
+              ? ' at ${newQuest.locationName}'
+              : '';
+
+          ref.read(notificationsNotifierProvider.notifier).addNotification(
+                AppNotification(
+                  id: 'notif-new-quest-${newQuest.id}',
+                  title: '⚔️ New Quest: ${newQuest.title}',
+                  message:
+                      'New real-world adventure available$locText! Rewards: $rewardText. Tap to explore details.',
+                  timestamp: DateTime.now(),
+                  type: NotificationType.quest,
+                  isRead: false,
+                  routeTarget: '/quests/${newQuest.id}',
+                  actionLabel: 'Explore Quest',
+                ),
+              );
+        } catch (e) {
+          debugPrint('[QUEST NOTIFIER] Error adding in-app notification: $e');
+        }
+      }
+
+      // Persist updated seen quest IDs
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList('seen_quest_ids_v1', _seenQuestIds.toList());
+      } catch (_) {}
+    }
   }
 
   Future<void> _initQuestsWithLocationCheck() async {
+    // 1. Immediately emit local/cached quests in 0ms so all cards and images appear instantly!
+    try {
+      final localSource = ref.read(questLocalDataSourceProvider);
+      final initialQuests = await localSource.getQuests();
+      if (initialQuests.isNotEmpty) {
+        state = AsyncValue.data(initialQuests);
+        _initSeenQuestIds(initialQuests);
+      }
+    } catch (_) {}
+
+    // 2. Fetch live quests & real GPS in the background smoothly without blank screen
     try {
       final isLocationReady = await locationService.isLocationEnabledAndPermitted();
       if (isLocationReady) {
-        // Location is enabled on device -> fetch quests for real location
-        await fetchQuests(showLoading: true);
+        await fetchQuests(showLoading: false);
       } else {
-        // Location is not active -> quests remain unloaded until location is enabled
         ref.read(activeGpsCoordinatesProvider.notifier).state = null;
-        state = const AsyncValue.data([]);
+        final quests = await getQuestsUseCase();
+        state = AsyncValue.data(quests);
+        await _handleNewQuestsDetection(quests);
       }
     } catch (_) {
-      ref.read(activeGpsCoordinatesProvider.notifier).state = null;
-      state = const AsyncValue.data([]);
+      try {
+        final quests = await getQuestsUseCase();
+        state = AsyncValue.data(quests);
+        await _handleNewQuestsDetection(quests);
+      } catch (e, st) {
+        if (!state.hasValue) {
+          state = AsyncValue.error(e, st);
+        }
+      }
     }
   }
 
@@ -189,8 +300,11 @@ class QuestsNotifier extends StateNotifier<AsyncValue<List<Quest>>> {
     LocationCoordinates? coords,
     bool showLoading = true,
   }) async {
-    if (_isFetching) return;
-    _isFetching = true;
+    if (_ongoingFetch != null) {
+      return _ongoingFetch!.future;
+    }
+    final completer = Completer<void>();
+    _ongoingFetch = completer;
 
     if (showLoading && (state.valueOrNull == null || state.valueOrNull!.isEmpty)) {
       state = const AsyncValue.loading();
@@ -198,34 +312,39 @@ class QuestsNotifier extends StateNotifier<AsyncValue<List<Quest>>> {
 
     final sw = Stopwatch()..start();
     try {
-      LocationCoordinates loc;
+      LocationCoordinates? loc;
       if (coords != null) {
         loc = coords;
       } else {
         final isReady = await locationService.isLocationEnabledAndPermitted();
-        if (!isReady) {
-          ref.read(activeGpsCoordinatesProvider.notifier).state = null;
-          state = const AsyncValue.data([]);
-          _isFetching = false;
-          return;
+        if (isReady) {
+          loc = await locationService.getCurrentLocation();
         }
-        loc = await locationService.getCurrentLocation();
       }
 
-      _lastFetchedLocation = loc;
-      ref.read(activeGpsCoordinatesProvider.notifier).state = loc;
+      List<Quest> quests;
+      if (loc != null) {
+        _lastFetchedLocation = loc;
+        ref.read(activeGpsCoordinatesProvider.notifier).state = loc;
+        final maxRadius = ref.read(maxRadiusFilterMetersProvider);
+        quests = await getNearbyQuestsUseCase(
+          userLat: loc.latitude,
+          userLon: loc.longitude,
+          maxDistanceMeters: maxRadius,
+        );
+      } else {
+        ref.read(activeGpsCoordinatesProvider.notifier).state = null;
+        quests = await getQuestsUseCase();
+      }
 
-      final maxRadius = ref.read(maxRadiusFilterMetersProvider);
-      final quests = await getNearbyQuestsUseCase(
-        userLat: loc.latitude,
-        userLon: loc.longitude,
-        maxDistanceMeters: maxRadius,
-      );
-
-      debugPrint('[QUESTUP] Quests refreshed in ${sw.elapsedMilliseconds}ms: ${quests.length} quests displayed.');
+      debugPrint('[QUEST PROVIDER] Updated quest count: ${quests.length}');
+      debugPrint('[QUEST PROVIDER] Refresh completed in ${sw.elapsedMilliseconds}ms');
       state = AsyncValue.data(quests);
 
-      if (quests.isNotEmpty) {
+      // Check for newly uploaded quests and dispatch phone notification bar alert
+      await _handleNewQuestsDetection(quests);
+
+      if (quests.isNotEmpty && loc != null) {
         final nearest = quests.first;
         final distText = (nearest.distanceMeters != null)
             ? ' (${(nearest.distanceMeters!).round()}m away)'
@@ -238,19 +357,24 @@ class QuestsNotifier extends StateNotifier<AsyncValue<List<Quest>>> {
             timestamp: DateTime.now(),
             type: NotificationType.quest,
             isRead: false,
-            routeTarget: '/quests',
+            routeTarget: '/quests/${nearest.id}',
             actionLabel: 'View Quests',
           ),
         );
       }
     } catch (e, st) {
-      debugPrint('[QUESTUP] Error fetching quests: $e');
+      debugPrint('[QUEST PROVIDER] Error fetching quests: $e');
       if (state.valueOrNull == null || state.valueOrNull!.isEmpty) {
         state = AsyncValue.error(e, st);
       }
     } finally {
-      _isFetching = false;
+      _ongoingFetch = null;
+      completer.complete();
     }
+  }
+
+  Future<void> refreshQuests({bool showLoading = false}) async {
+    await fetchQuests(showLoading: showLoading);
   }
 
   Future<void> refreshLocationAndQuests() async {
@@ -270,6 +394,7 @@ class QuestsNotifier extends StateNotifier<AsyncValue<List<Quest>>> {
   @override
   void dispose() {
     _locationSubscription?.cancel();
+    _periodicSyncTimer?.cancel();
     super.dispose();
   }
 }
@@ -277,9 +402,11 @@ class QuestsNotifier extends StateNotifier<AsyncValue<List<Quest>>> {
 final questsNotifierProvider =
     StateNotifierProvider<QuestsNotifier, AsyncValue<List<Quest>>>((ref) {
   final getNearby = ref.watch(getNearbyQuestsUseCaseProvider);
+  final getQuests = ref.watch(getQuestsUseCaseProvider);
   final locationService = ref.watch(locationServiceProvider);
   return QuestsNotifier(
     getNearbyQuestsUseCase: getNearby,
+    getQuestsUseCase: getQuests,
     locationService: locationService,
     ref: ref,
   );

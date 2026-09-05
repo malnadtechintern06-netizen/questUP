@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import '../../../../core/utils/distance_calculator.dart';
 import '../../domain/entities/quest.dart';
 import '../../domain/repositories/quest_repository.dart';
 import '../datasources/quest_local_datasource.dart';
 import '../datasources/quest_mysql_datasource.dart';
+import '../models/quest_model.dart';
 
 class QuestRepositoryImpl implements QuestRepository {
   final IQuestLocalDataSource localDataSource;
@@ -15,23 +17,62 @@ class QuestRepositoryImpl implements QuestRepository {
 
   @override
   Future<List<Quest>> getQuests() async {
-    final local = await localDataSource.getQuests();
-    final candidateQuests = List<Quest>.from(local.where((q) => q.isActive));
+    // 1. Fetch all local quests (22 quests)
+    final localQuests = await localDataSource.getQuests();
+    final localCount = localQuests.length;
+    debugPrint('LOCAL QUEST COUNT = $localCount');
 
-    // Also check MySQL in the background without blocking
+    // 2. Fetch fresh remote Cloud / REST API quests (7 quests)
+    List<QuestModel> remoteQuests = [];
     try {
-      final mySqlQuests = await mySqlDataSource.fetchQuestsFromMySql().timeout(
-        const Duration(milliseconds: 350),
+      final fetched = await mySqlDataSource.fetchQuestsFromMySql().timeout(
+        const Duration(seconds: 8),
         onTimeout: () => [],
       );
-      for (final q in mySqlQuests) {
-        if (q.isActive && !candidateQuests.any((existing) => existing.id == q.id)) {
-          candidateQuests.add(q);
+      remoteQuests = fetched.where((q) => q.isActive).toList();
+    } catch (e) {
+      debugPrint('[QUEST REPO] Error fetching remote quests: $e');
+    }
+
+    final apiCount = remoteQuests.length;
+    debugPrint('API QUEST COUNT = $apiCount');
+
+    // 3. Merge both sources by unique ID (no duplicates, 22 local + 7 API = 29 merged)
+    final merged = <Quest>[];
+    final seenIds = <String>{};
+
+    // Add all fresh remote API quests (preserving local completion state)
+    for (final q in remoteQuests) {
+      if (!seenIds.contains(q.id)) {
+        seenIds.add(q.id);
+        final localMatch = localQuests.where((l) => l.id == q.id).firstOrNull;
+        if (localMatch != null && localMatch.isCompleted) {
+          merged.add(q.copyWith(isCompleted: true));
+        } else {
+          merged.add(q);
         }
       }
+    }
+
+    // Add all local quests (never dropped)
+    for (final q in localQuests) {
+      if (q.isActive && !seenIds.contains(q.id)) {
+        seenIds.add(q.id);
+        merged.add(q);
+      }
+    }
+
+    final mergedCount = merged.length;
+    debugPrint('MERGED QUEST COUNT = $mergedCount');
+
+    // 4. Update local cache with the merged list
+    try {
+      await localDataSource.saveQuests(
+        merged.map((e) => QuestModel.fromEntity(e)).toList(),
+      );
     } catch (_) {}
 
-    return candidateQuests;
+    return merged;
   }
 
   @override
@@ -40,28 +81,56 @@ class QuestRepositoryImpl implements QuestRepository {
     required double userLon,
     double maxDistanceMeters = 50000,
   }) async {
-    // 1. Fetch dynamic local landmarks and activity quests instantly
+    // 1. Fetch dynamic local landmarks and activity quests (22 local)
     final localQuests = await localDataSource.getQuestsForLocation(
       userLat,
       userLon,
       maxRadiusMeters: maxDistanceMeters,
     );
-    final List<Quest> candidateQuests = List<Quest>.from(localQuests);
+    final localCount = localQuests.length;
+    debugPrint('LOCAL QUEST COUNT = $localCount');
 
-    // 2. Fetch any remote MySQL custom quests with non-blocking fast timeout
+    // 2. Fetch fresh remote Cloud / MySQL custom quests (7 API)
+    List<QuestModel> remoteQuests = [];
     try {
-      final mySqlQuests = await mySqlDataSource.fetchQuestsFromMySql().timeout(
-        const Duration(milliseconds: 350),
+      final fetched = await mySqlDataSource.fetchQuestsFromMySql().timeout(
+        const Duration(seconds: 8),
         onTimeout: () => [],
       );
-      if (mySqlQuests.isNotEmpty) {
-        for (final q in mySqlQuests) {
-          if (q.isActive && !candidateQuests.any((existing) => existing.id == q.id)) {
-            candidateQuests.add(q);
-          }
+      remoteQuests = fetched.where((q) => q.isActive).toList();
+    } catch (e) {
+      debugPrint('[QUEST REPO] Error fetching remote quests in getNearbyQuests: $e');
+    }
+
+    final apiCount = remoteQuests.length;
+    debugPrint('API QUEST COUNT = $apiCount');
+
+    final candidateQuests = <Quest>[];
+    final seenIds = <String>{};
+
+    // Prioritize all live remote API quests, preserving completion state
+    for (final q in remoteQuests) {
+      if (!seenIds.contains(q.id)) {
+        seenIds.add(q.id);
+        final localMatch = localQuests.where((l) => l.id == q.id).firstOrNull;
+        if (localMatch != null && localMatch.isCompleted) {
+          candidateQuests.add(q.copyWith(isCompleted: true));
+        } else {
+          candidateQuests.add(q);
         }
       }
-    } catch (_) {}
+    }
+
+    // Add local dynamic landmarks & activity quests
+    for (final q in localQuests) {
+      if (!seenIds.contains(q.id)) {
+        seenIds.add(q.id);
+        candidateQuests.add(q);
+      }
+    }
+
+    final mergedCount = candidateQuests.length;
+    debugPrint('MERGED QUEST COUNT = $mergedCount');
 
     // 3. Calculate exact Haversine distance for location quests
     final List<Quest> calculatedQuests = candidateQuests.map((quest) {
@@ -77,12 +146,14 @@ class QuestRepositoryImpl implements QuestRepository {
       return quest;
     }).toList();
 
-    // 4. Filter: Include location quests within radius, and universal activity quests
+    // 4. Filter: All custom API quests & activity quests are always accessible in directory;
+    // only auto-generated local dynamic landmarks respect the radar radius boundary
     final filtered = calculatedQuests.where((q) {
-      if (q.latitude != 0.0 && q.longitude != 0.0) {
+      final isAutoGeneratedLocal = q.id.startsWith('local_');
+      if (isAutoGeneratedLocal && q.latitude != 0.0 && q.longitude != 0.0) {
         return (q.distanceMeters ?? double.infinity) <= maxDistanceMeters;
       }
-      return true; // Universal activity quest available everywhere
+      return true; // Online admin quests & activity quests always included
     }).toList();
 
     // 5. Sort: Nearest location quests first, followed by activity quests
@@ -104,7 +175,20 @@ class QuestRepositoryImpl implements QuestRepository {
 
   @override
   Future<Quest?> getQuestById(String id) async {
-    return await localDataSource.getQuestById(id);
+    final local = await localDataSource.getQuestById(id);
+    if (local != null) return local;
+
+    try {
+      final remoteQuests = await mySqlDataSource.fetchQuestsFromMySql().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => [],
+      );
+      for (final q in remoteQuests) {
+        if (q.id == id) return q;
+      }
+    } catch (_) {}
+
+    return null;
   }
 
   @override

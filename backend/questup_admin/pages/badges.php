@@ -52,7 +52,7 @@ $allUsers = $userStmt->fetchAll();
                     <th>XP Honorarium</th>
                     <th>Explorers Unlocked</th>
                     <th>Status</th>
-                    <th class="text-end">Actions</th>
+                    <th class="text-end table-actions-cell">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -74,7 +74,6 @@ $allUsers = $userStmt->fetchAll();
                                     <div>
                                         <div class="fw-bold text-light"><?= e($b['name']) ?></div>
                                         <div class="small text-secondary"><?= e($b['description']) ?></div>
-                                        <div class="small text-muted font-monospace" style="font-size: 0.72rem;">ID: <?= e($b['id']) ?></div>
                                     </div>
                                 </div>
                             </td>
@@ -88,8 +87,8 @@ $allUsers = $userStmt->fetchAll();
                                 </span>
                             </td>
                             <td><?= get_status_badge((int)$b['is_active']) ?></td>
-                            <td class="text-end">
-                                <div class="d-inline-flex gap-1">
+                            <td class="text-end table-actions-cell">
+                                <div class="d-inline-flex gap-1 justify-content-end">
                                     <form method="POST" action="../actions/badge_actions.php" class="d-inline">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="action" value="toggle_badge">

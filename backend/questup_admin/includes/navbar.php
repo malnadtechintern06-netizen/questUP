@@ -7,11 +7,11 @@ declare(strict_types=1);
 ?>
 <div class="admin-main">
     <header class="admin-navbar">
-        <div class="d-flex align-items-center gap-3">
-            <button class="btn btn-action-icon d-lg-none" id="sidebarToggleBtn" aria-label="Toggle navigation">
+        <div class="d-flex align-items-center gap-2 gap-md-3 min-w-0">
+            <button class="btn btn-action-icon flex-shrink-0" id="sidebarToggleBtn" aria-label="Toggle navigation" title="Toggle Sidebar">
                 <i class="fas fa-bars"></i>
             </button>
-            <h1 class="navbar-page-title">
+            <h1 class="navbar-page-title text-truncate">
                 <?= e($pageTitle ?? 'Dashboard') ?>
             </h1>
         </div>

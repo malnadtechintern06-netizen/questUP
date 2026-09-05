@@ -3,7 +3,6 @@ import 'package:quest_up/app/config/app_constants.dart';
 import 'package:quest_up/app/theme/app_colors.dart';
 import 'package:quest_up/app/theme/app_typography.dart';
 import 'package:quest_up/core/utils/distance_calculator.dart';
-import 'package:quest_up/core/widgets/shimmer_loading.dart';
 import 'package:quest_up/features/quests/domain/entities/quest.dart';
 
 class GoogleMapsMarkerCardWidget extends StatefulWidget {
@@ -122,13 +121,10 @@ class _GoogleMapsMarkerCardWidgetState extends State<GoogleMapsMarkerCardWidget>
         height: widget.height,
         width: widget.width,
         fit: BoxFit.cover,
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return ShimmerBox(
-            height: widget.height ?? double.infinity,
-            width: widget.width ?? double.infinity,
-            borderRadius: 0,
-          );
+        gaplessPlayback: true,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          if (wasSynchronouslyLoaded || frame != null) return child;
+          return _buildVectorMapBackground();
         },
         errorBuilder: (_, _, _) => _buildVectorMapBackground(),
       );

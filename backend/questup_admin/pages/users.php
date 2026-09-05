@@ -59,38 +59,56 @@ $sortMap = [
 $orderColumn = $sortMap[$sortBy] ?? 'u.created_at';
 
 // Total Count for Pagination
-$countQuery = "
-    SELECT COUNT(*) as total
-    FROM users u
-    LEFT JOIN user_profiles p ON u.id = p.user_id
-    $whereSql
-";
-$stmt = $db->prepare($countQuery);
-$stmt->execute($params);
-$totalRecords = (int)($stmt->fetch()['total'] ?? 0);
-$totalPages = max(1, (int)ceil($totalRecords / $limit));
+$totalRecords = 0;
+$totalPages = 1;
+$users = [];
 
-// Fetch Users List
-$dataQuery = "
-    SELECT u.id, u.player_id, u.name, u.email, u.status, u.created_at,
-           p.avatar_key, p.level, p.current_xp, p.xp_to_next_level, p.coins,
-           (SELECT COUNT(*) FROM quest_completions WHERE user_id = u.id) as completed_count,
-           (SELECT COUNT(*) FROM user_badges WHERE user_id = u.id) as badge_count
-    FROM users u
-    LEFT JOIN user_profiles p ON u.id = p.user_id
-    $whereSql
-    ORDER BY $orderColumn $sortOrder
-    LIMIT $limit OFFSET $offset
-";
-$stmt = $db->prepare($dataQuery);
-$stmt->execute($params);
-$users = $stmt->fetchAll();
+try {
+    $countQuery = "
+        SELECT COUNT(*) as total
+        FROM users u
+        LEFT JOIN user_profiles p ON u.id = p.user_id
+        $whereSql
+    ";
+    $stmt = $db->prepare($countQuery);
+    $stmt->execute($params);
+    $totalRecords = (int)($stmt->fetch()['total'] ?? 0);
+    $totalPages = max(1, (int)ceil($totalRecords / $limit));
+
+    // Dynamically check if player_id column exists
+    $hasPlayerId = false;
+    try {
+        $colCheck = $db->query("SHOW COLUMNS FROM users LIKE 'player_id'");
+        $hasPlayerId = ($colCheck && $colCheck->rowCount() > 0);
+    } catch (Throwable $e) {
+        $hasPlayerId = false;
+    }
+    $playerIdSelect = $hasPlayerId ? "u.player_id" : "NULL as player_id";
+
+    // Fetch Users List
+    $dataQuery = "
+        SELECT u.id, $playerIdSelect, u.name, u.email, u.status, u.created_at,
+               p.avatar_key, p.level, p.current_xp, p.xp_to_next_level, p.coins,
+               (SELECT COUNT(*) FROM quest_completions WHERE user_id = u.id) as completed_count,
+               (SELECT COUNT(*) FROM user_badges WHERE user_id = u.id) as badge_count
+        FROM users u
+        LEFT JOIN user_profiles p ON u.id = p.user_id
+        $whereSql
+        ORDER BY $orderColumn $sortOrder
+        LIMIT $limit OFFSET $offset
+    ";
+    $stmt = $db->prepare($dataQuery);
+    $stmt->execute($params);
+    $users = $stmt->fetchAll();
+} catch (Throwable $e) {
+    error_log('[QuestUP Admin users.php Error] ' . $e->getMessage());
+}
 ?>
 
 <div class="glass-card mb-4">
     <!-- Filter & Search Toolbar -->
-    <form method="GET" action="users.php" class="row g-3 align-items-center">
-        <div class="col-lg-4 col-md-6">
+    <form method="GET" action="users.php" class="row g-2 g-md-3 align-items-center">
+        <div class="col-12 col-sm-6 col-md-4 col-xl-3">
             <div class="position-relative">
                 <input type="text" 
                        name="search" 
@@ -101,7 +119,7 @@ $users = $stmt->fetchAll();
             </div>
         </div>
 
-        <div class="col-lg-2 col-md-3">
+        <div class="col-6 col-sm-3 col-md-3 col-xl-2">
             <select name="status" class="form-control-gaming" onchange="this.form.submit()">
                 <option value="all" <?= $statusFilter === 'all' ? 'selected' : '' ?>>All Statuses</option>
                 <option value="active" <?= $statusFilter === 'active' ? 'selected' : '' ?>>Active Only</option>
@@ -109,22 +127,22 @@ $users = $stmt->fetchAll();
             </select>
         </div>
 
-        <div class="col-lg-2 col-md-3">
+        <div class="col-6 col-sm-3 col-md-2 col-xl-2">
             <select name="sort" class="form-control-gaming" onchange="this.form.submit()">
-                <option value="created_at" <?= $sortBy === 'created_at' ? 'selected' : '' ?>>Sort: Joined Date</option>
+                <option value="created_at" <?= $sortBy === 'created_at' ? 'selected' : '' ?>>Sort: Joined</option>
                 <option value="level" <?= $sortBy === 'level' ? 'selected' : '' ?>>Sort: Level</option>
-                <option value="xp" <?= $sortBy === 'xp' ? 'selected' : '' ?>>Sort: Current XP</option>
+                <option value="xp" <?= $sortBy === 'xp' ? 'selected' : '' ?>>Sort: XP</option>
                 <option value="coins" <?= $sortBy === 'coins' ? 'selected' : '' ?>>Sort: Coins</option>
-                <option value="name" <?= $sortBy === 'name' ? 'selected' : '' ?>>Sort: Name (A-Z)</option>
+                <option value="name" <?= $sortBy === 'name' ? 'selected' : '' ?>>Sort: Name</option>
             </select>
         </div>
 
-        <div class="col-lg-2 col-md-6">
+        <div class="col-6 col-sm-6 col-md-3 col-xl-2">
             <div class="d-flex gap-2">
                 <button type="submit" class="btn btn-gaming btn-gaming-cyan w-100">
                     <i class="fas fa-filter me-1"></i> Filter
                 </button>
-                <?php if ($search !== '' || $statusFilter !== 'all' || $levelFilter !== 'all'): ?>
+                <?php if ($search !== '' || $statusFilter !== 'all'): ?>
                     <a href="users.php" class="btn btn-gaming btn-gaming-outline" title="Reset Filters">
                         <i class="fas fa-redo"></i>
                     </a>
@@ -132,7 +150,7 @@ $users = $stmt->fetchAll();
             </div>
         </div>
 
-        <div class="col-lg-2 col-md-6 text-lg-end text-muted small">
+        <div class="col-6 col-sm-6 col-md-12 col-xl-3 text-xl-end text-muted small">
             Found <strong><?= number_format($totalRecords) ?></strong> explorers
         </div>
     </form>
@@ -151,7 +169,7 @@ $users = $stmt->fetchAll();
                     <th>Badges</th>
                     <th>Status</th>
                     <th>Joined</th>
-                    <th class="text-end">Actions</th>
+                    <th class="text-end table-actions-cell">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -200,8 +218,8 @@ $users = $stmt->fetchAll();
                             </td>
                             <td><?= get_status_badge($u['status'] ?? 'active') ?></td>
                             <td class="text-secondary small"><?= date('M j, Y', strtotime($u['created_at'])) ?></td>
-                            <td class="text-end">
-                                <div class="d-inline-flex gap-1">
+                            <td class="text-end table-actions-cell">
+                                <div class="d-inline-flex gap-1 justify-content-end">
                                     <a href="user_view.php?id=<?= urlencode($u['id']) ?>" class="btn-action-icon" title="View Full Profile">
                                         <i class="fas fa-eye"></i>
                                     </a>

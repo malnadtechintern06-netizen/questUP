@@ -19,6 +19,7 @@ import 'package:quest_up/features/calendar/presentation/widgets/home_calendar_wi
 import 'package:quest_up/features/location_permission/presentation/providers/location_permission_provider.dart';
 import 'package:quest_up/features/notifications/presentation/providers/notification_providers.dart';
 import 'package:quest_up/features/notifications/presentation/widgets/notifications_sheet.dart';
+import 'package:quest_up/features/profile/domain/entities/user_profile.dart';
 import 'package:quest_up/features/profile/presentation/providers/user_providers.dart';
 import 'package:quest_up/features/quests/domain/entities/quest.dart';
 import 'package:quest_up/features/quests/presentation/providers/quest_providers.dart';
@@ -34,14 +35,31 @@ class HomeRadarScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeRadarScreen> createState() => _HomeRadarScreenState();
 }
 
-class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
+class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       debugPrint('[TIMING] HOME SCREEN READY');
       _checkAndAutoAcquireLocation();
+      ref.read(questsNotifierProvider.notifier).fetchQuests(showLoading: false);
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      debugPrint('[HOME RADAR] App resumed, refreshing quests');
+      ref.read(questsNotifierProvider.notifier).fetchQuests(showLoading: false);
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   Future<void> _checkAndAutoAcquireLocation() async {
@@ -192,6 +210,31 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
     );
   }
 
+  String _formatDisplayName(String name) {
+    if (name.trim().isEmpty) return 'Explorer';
+    final parts = name.trim().split(RegExp(r'\s+'));
+    return parts.map((part) {
+      if (part.isEmpty) return '';
+      return part[0].toUpperCase() + part.substring(1).toLowerCase();
+    }).join(' ');
+  }
+
+  String _getTimeGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour >= 5 && hour < 12) return 'Good morning';
+    if (hour >= 12 && hour < 17) return 'Good afternoon';
+    if (hour >= 17 && hour < 21) return 'Good evening';
+    return 'Good evening';
+  }
+
+  String _getTimeEmoji() {
+    final hour = DateTime.now().hour;
+    if (hour >= 5 && hour < 12) return '🌅';
+    if (hour >= 12 && hour < 17) return '☀️';
+    if (hour >= 17 && hour < 21) return '🌆';
+    return '🌙';
+  }
+
   @override
   Widget build(BuildContext context) {
     final userProfileAsync = ref.watch(userProfileNotifierProvider);
@@ -203,7 +246,10 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
     final locationDetailsAsync = ref.watch(liveLocationDetailsProvider);
     final unreadNotifsCount = ref.watch(unreadNotificationsCountProvider);
 
-    final userName = userProfileAsync.valueOrNull?.name ?? 'Explorer';
+    final rawUserName = userProfileAsync.valueOrNull?.name ?? 'Explorer';
+    final userName = _formatDisplayName(rawUserName);
+    final timeGreeting = _getTimeGreeting();
+    final timeEmoji = _getTimeEmoji();
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -213,6 +259,7 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        titleSpacing: 0,
         leading: Builder(
           builder: (scaffoldContext) => IconButton(
             icon: const Icon(Icons.menu_rounded, color: AppColors.textPrimary),
@@ -222,54 +269,58 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
             },
           ),
         ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Flexible(
-                  child: Text(
-                    'Good morning, $userName!',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.titleMedium.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                const Text('👋', style: TextStyle(fontSize: 16)),
+        title: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppColors.primary.withValues(alpha: 0.2),
+                AppColors.primary.withValues(alpha: 0.05),
               ],
             ),
-            const SizedBox(height: 1),
-            Text(
-              'Your world is your adventure',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTypography.caption.copyWith(
-                color: AppColors.textSecondary,
-                fontSize: 11,
-              ),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: AppColors.primary.withValues(alpha: 0.45),
+              width: 1.2,
             ),
-          ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.explore_rounded, color: AppColors.primary, size: 15),
+              const SizedBox(width: 5),
+              Text(
+                'QuestUP',
+                style: AppTypography.titleLarge.copyWith(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.textPrimary,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           IconButton(
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
             tooltip: 'Quest Activity Calendar',
             icon: const Icon(
               Icons.calendar_month_rounded,
               color: AppColors.secondary,
+              size: 21,
             ),
             onPressed: () => context.push(RoutePaths.calendar),
           ),
           IconButton(
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
             tooltip: 'GPS Simulation Tool',
             icon: Icon(
               Icons.satellite_alt_rounded,
               color: isSimulated ? AppColors.secondary : AppColors.primary,
+              size: 21,
             ),
             onPressed: () => _showGpsSimulatorDialog(context, ref),
           ),
@@ -277,30 +328,32 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
             alignment: Alignment.topRight,
             children: [
               IconButton(
+                padding: const EdgeInsets.all(4),
+                constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
                 tooltip: 'Notifications',
-                icon: const Icon(Icons.notifications_outlined, color: AppColors.textPrimary),
+                icon: const Icon(Icons.notifications_outlined, color: AppColors.textPrimary, size: 21),
                 onPressed: () => NotificationsSheet.show(context),
               ),
               if (unreadNotifsCount > 0)
                 Positioned(
-                  right: 8,
-                  top: 8,
+                  right: 2,
+                  top: 2,
                   child: Container(
-                    padding: const EdgeInsets.all(4),
+                    padding: const EdgeInsets.all(3),
                     decoration: const BoxDecoration(
                       color: AppColors.accentDanger,
                       shape: BoxShape.circle,
                     ),
                     constraints: const BoxConstraints(
-                      minWidth: 16,
-                      minHeight: 16,
+                      minWidth: 15,
+                      minHeight: 15,
                     ),
                     child: Center(
                       child: Text(
                         '$unreadNotifsCount',
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 9,
+                          fontSize: 8.5,
                           fontWeight: FontWeight.bold,
                           height: 1.0,
                         ),
@@ -310,6 +363,7 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
                 ),
             ],
           ),
+          const SizedBox(width: 6),
         ],
       ),
       body: RefreshIndicator(
@@ -325,11 +379,32 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Hero Gamer Banner Card with Level, XP, and 3D Coin Badge
-              userProfileAsync.when(
-                data: (profile) => _buildHeroGamerCard(context, profile),
-                loading: () => const ShimmerBox(width: double.infinity, height: 210, borderRadius: 22),
-                error: (_, _) => const SizedBox.shrink(),
+              // 0. High-Impact Player Hero Greeting Header
+              _buildPlayerGreetingHeader(
+                greeting: timeGreeting,
+                formattedName: userName,
+                emoji: timeEmoji,
+                profile: userProfileAsync.valueOrNull,
+              ),
+              const SizedBox(height: 12),
+
+              // 1. Hero Gamer Banner Card with Level, XP, and 3D Coin Badge (Rendered Instantly)
+              _buildHeroGamerCard(
+                context,
+                userProfileAsync.valueOrNull ??
+                    UserProfile(
+                      id: 'guest',
+                      name: 'Explorer',
+                      email: '',
+                      avatarKey: 'avatar_ranger',
+                      level: 1,
+                      currentXp: 0,
+                      xpToNextLevel: 1000,
+                      coins: 100,
+                      completedQuestIds: const [],
+                      earnedBadgeIds: const [],
+                      joinedAt: DateTime(2025, 1, 1),
+                    ),
               ),
 
               const SizedBox(height: 18),
@@ -340,46 +415,72 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
               const SizedBox(height: 22),
 
               // 3. Nearby Adventures Section (Horizontal Floating 3D Cards)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Row(
-                      children: [
-                        const Icon(Icons.explore_rounded, size: 20, color: AppColors.primary),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Nearby Adventures',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTypography.titleLarge.copyWith(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.textPrimary,
+              Builder(
+                builder: (context) {
+                  final allQuests = questsAsync.valueOrNull ?? [];
+                  final availableCount = allQuests.where((q) => q.isActive && !q.isCompleted).length;
+
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.explore_rounded, size: 20, color: AppColors.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                'Nearby Adventures',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTypography.titleLarge.copyWith(
+                                  fontSize: 16.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.surfaceElevated,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppColors.border),
+                              ),
+                              child: Text(
+                                '$availableCount avail',
+                                style: const TextStyle(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 9.5,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (activeGps != null) ...[
+                        const SizedBox(width: 4),
+                        InkWell(
+                          onTap: () => context.go(RoutePaths.quests),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                            child: Text(
+                              'View all →',
+                              style: AppTypography.bodyMedium.copyWith(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  if (activeGps != null)
-                    InkWell(
-                      onTap: () => context.go(RoutePaths.quests),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                        child: Text(
-                          'View all →',
-                          style: AppTypography.bodyMedium.copyWith(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 12),
 
@@ -429,17 +530,34 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
                     );
                   },
 
-                  loading: () => SizedBox(
-                    height: 260,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: 3,
-                      itemBuilder: (context, index) => const Padding(
-                        padding: EdgeInsets.only(right: 14),
-                        child: ShimmerBox(width: 175, height: 260, borderRadius: 20),
+                  loading: () {
+                    final cached = questsAsync.valueOrNull;
+                    if (cached != null && cached.isNotEmpty) {
+                      final activeQuests = cached.where((q) => !q.isCompleted).toList();
+                      return SizedBox(
+                        height: 260,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: activeQuests.length,
+                          itemBuilder: (context, index) {
+                            final quest = activeQuests[index];
+                            return _buildAdventure3DCard(context, quest);
+                          },
+                        ),
+                      );
+                    }
+                    return SizedBox(
+                      height: 260,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: 3,
+                        itemBuilder: (context, index) => const Padding(
+                          padding: EdgeInsets.only(right: 14),
+                          child: ShimmerBox(width: 175, height: 260, borderRadius: 20),
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                   error: (err, stack) => ErrorStateWidget(
                     message: 'Failed to load nearby quests',
                     onRetry: () =>
@@ -501,40 +619,80 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
 
                 const SizedBox(height: 10),
 
-                // Location Details Bar
+                // Location Details Bar (Current Location HUD)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
                     color: AppColors.surface,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.border),
+                    border: Border.all(color: AppColors.borderBright, width: 1.1),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.25),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
                   ),
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(7),
+                        padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: AppColors.primaryLight,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                          color: AppColors.accentSuccess.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppColors.accentSuccess.withValues(alpha: 0.4)),
                         ),
-                        child: const Icon(Icons.location_on_rounded,
-                            size: 18, color: AppColors.primary),
+                        child: const Icon(Icons.my_location_rounded,
+                            size: 18, color: AppColors.accentSuccess),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            Row(
+                              children: [
+                                Text(
+                                  'CURRENT LOCATION',
+                                  style: AppTypography.caption.copyWith(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.accentSuccess,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryLight,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    'LIVE GPS',
+                                    style: AppTypography.caption.copyWith(
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.w900,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 1),
                             Text(
-                              locationDetailsAsync.valueOrNull?.areaName ?? 'Live GPS Location',
+                              locationDetailsAsync.valueOrNull?.areaName ?? 'Current Location',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: AppTypography.titleMedium.copyWith(fontSize: 13),
+                              style: AppTypography.titleMedium.copyWith(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                             Text(
                               locationDetailsAsync.valueOrNull?.formattedAddress ??
-                                  'GPS: ${activeGps.latitude.toStringAsFixed(4)}, ${activeGps.longitude.toStringAsFixed(4)}',
+                                  'GPS: ${activeGps.latitude.toStringAsFixed(4)}°, ${activeGps.longitude.toStringAsFixed(4)}°',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: AppTypography.caption.copyWith(
@@ -595,11 +753,131 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
                     },
                   ),
                 ),
-                const SizedBox(height: 36),
+                const SizedBox(height: 80),
+              ] else ...[
+                const SizedBox(height: 80),
               ],
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildPlayerGreetingHeader({
+    required String greeting,
+    required String formattedName,
+    required String emoji,
+    UserProfile? profile,
+  }) {
+    final level = profile?.level ?? 1;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        '$greeting,',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.bodyMedium.copyWith(
+                          color: AppColors.textSecondary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      emoji,
+                      style: const TextStyle(fontSize: 15),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '$formattedName!',
+                    style: AppTypography.displayMedium.copyWith(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.textPrimary,
+                      letterSpacing: -0.3,
+                      height: 1.15,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Your world is your adventure',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.textMuted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Level / Rank Badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceElevated,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: AppColors.primary.withValues(alpha: 0.4),
+                width: 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.15),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: const BoxDecoration(
+                    color: AppColors.accentSuccess,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  'LVL $level',
+                  style: AppTypography.badge.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 11.5,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -638,6 +916,7 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen> {
                     'assets/images/hero_poster.jpg',
                     fit: BoxFit.cover,
                     alignment: Alignment.center,
+                    gaplessPlayback: true,
                     errorBuilder: (context, error, stackTrace) => Container(
                       color: AppColors.surfaceElevated,
                     ),

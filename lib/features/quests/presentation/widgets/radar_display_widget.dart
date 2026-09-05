@@ -371,12 +371,30 @@ class _RadarDisplayWidgetState extends State<RadarDisplayWidget>
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 3),
                       Text(
                         quest.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: AppTypography.titleMedium.copyWith(fontSize: 14),
+                        style: AppTypography.titleMedium.copyWith(fontSize: 14, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on_rounded, size: 12, color: Color(0xFFEA4335)),
+                          const SizedBox(width: 3),
+                          Expanded(
+                            child: Text(
+                              quest.locationName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.caption.copyWith(
+                                color: AppColors.textSecondary,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 4),
                       Row(
@@ -397,11 +415,18 @@ class _RadarDisplayWidgetState extends State<RadarDisplayWidget>
                             ),
                           ),
                           const Spacer(),
-                          Text(
-                            'START →',
-                            style: AppTypography.badge.copyWith(
-                              color: AppColors.primary,
-                              fontSize: 10,
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryLight,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'OPEN →',
+                              style: AppTypography.badge.copyWith(
+                                color: AppColors.primary,
+                                fontSize: 9.5,
+                              ),
                             ),
                           ),
                         ],

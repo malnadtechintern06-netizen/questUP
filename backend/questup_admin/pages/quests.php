@@ -86,8 +86,8 @@ $quests = $stmt->fetchAll();
 
 <!-- Filters Toolbar Card -->
 <div class="glass-card mb-4">
-    <form method="GET" action="quests.php" class="row g-3 align-items-center">
-        <div class="col-lg-3 col-md-6">
+    <form method="GET" action="quests.php" class="row g-2 g-md-3 align-items-center">
+        <div class="col-12 col-md-6 col-lg-4 col-xxl-3">
             <div class="position-relative">
                 <input type="text" 
                        name="search" 
@@ -98,7 +98,7 @@ $quests = $stmt->fetchAll();
             </div>
         </div>
 
-        <div class="col-lg-2 col-md-3">
+        <div class="col-6 col-sm-6 col-md-3 col-lg-2 col-xxl-2">
             <select name="category" class="form-control-gaming" onchange="this.form.submit()">
                 <option value="all" <?= $category === 'all' ? 'selected' : '' ?>>All Categories</option>
                 <option value="exploration" <?= $category === 'exploration' ? 'selected' : '' ?>>Exploration</option>
@@ -109,7 +109,7 @@ $quests = $stmt->fetchAll();
             </select>
         </div>
 
-        <div class="col-lg-2 col-md-3">
+        <div class="col-6 col-sm-6 col-md-3 col-lg-2 col-xxl-2">
             <select name="difficulty" class="form-control-gaming" onchange="this.form.submit()">
                 <option value="all" <?= $difficulty === 'all' ? 'selected' : '' ?>>All Difficulties</option>
                 <option value="easy" <?= $difficulty === 'easy' ? 'selected' : '' ?>>Easy</option>
@@ -119,7 +119,7 @@ $quests = $stmt->fetchAll();
             </select>
         </div>
 
-        <div class="col-lg-2 col-md-3">
+        <div class="col-6 col-sm-6 col-md-3 col-lg-2 col-xxl-2">
             <select name="verification_type" class="form-control-gaming" onchange="this.form.submit()">
                 <option value="all" <?= $vtype === 'all' ? 'selected' : '' ?>>All Verifications</option>
                 <option value="locationGps" <?= $vtype === 'locationGps' ? 'selected' : '' ?>>GPS Location</option>
@@ -131,7 +131,7 @@ $quests = $stmt->fetchAll();
             </select>
         </div>
 
-        <div class="col-lg-2 col-md-3">
+        <div class="col-6 col-sm-6 col-md-3 col-lg-2 col-xxl-2">
             <select name="status" class="form-control-gaming" onchange="this.form.submit()">
                 <option value="all" <?= $status === 'all' ? 'selected' : '' ?>>All Statuses</option>
                 <option value="active" <?= $status === 'active' ? 'selected' : '' ?>>Active Quests</option>
@@ -139,10 +139,17 @@ $quests = $stmt->fetchAll();
             </select>
         </div>
 
-        <div class="col-lg-1 col-md-12">
-            <button type="submit" class="btn btn-gaming btn-gaming-cyan w-100">
-                <i class="fas fa-filter"></i>
-            </button>
+        <div class="col-12 col-sm-12 col-md-6 col-lg-2 col-xxl-1">
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-gaming btn-gaming-cyan w-100" title="Apply Filters">
+                    <i class="fas fa-filter"></i>
+                </button>
+                <?php if ($search !== '' || $category !== 'all' || $difficulty !== 'all' || $vtype !== 'all' || $status !== 'all'): ?>
+                    <a href="quests.php" class="btn btn-gaming btn-gaming-outline" title="Reset Filters">
+                        <i class="fas fa-redo"></i>
+                    </a>
+                <?php endif; ?>
+            </div>
         </div>
     </form>
 </div>
@@ -161,7 +168,7 @@ $quests = $stmt->fetchAll();
                     <th>Rewards</th>
                     <th>Completions</th>
                     <th>Status</th>
-                    <th class="text-end">Actions</th>
+                    <th class="text-end table-actions-cell">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -179,7 +186,7 @@ $quests = $stmt->fetchAll();
                                 <a href="quest_view.php?id=<?= urlencode($q['id']) ?>" class="fw-bold text-light text-decoration-none hover-cyan">
                                     <?= e($q['title']) ?>
                                 </a>
-                                <div class="small text-muted text-truncate" style="max-width: 200px;">
+                                <div class="small text-muted text-truncate" style="max-width: 180px;">
                                     <?= e($q['description']) ?>
                                 </div>
                             </td>
@@ -187,8 +194,8 @@ $quests = $stmt->fetchAll();
                             <td><?= get_difficulty_badge($q['difficulty'] ?? 'medium') ?></td>
                             <td><?= get_verification_badge($q['verification_type'] ?? 'locationGps') ?></td>
                             <td>
-                                <div class="fw-semibold small"><i class="fas fa-map-pin text-cyan me-1"></i><?= e($q['location_name'] ?? 'Local Area') ?></div>
-                                <div class="small text-muted font-monospace" style="font-size: 0.75rem;">
+                                <div class="fw-semibold small text-truncate" style="max-width: 140px;"><i class="fas fa-map-pin text-cyan me-1"></i><?= e($q['location_name'] ?? 'Local Area') ?></div>
+                                <div class="small text-muted font-monospace" style="font-size: 0.72rem;">
                                     <?= number_format((float)$q['latitude'], 4) ?>, <?= number_format((float)$q['longitude'], 4) ?> (±<?= (int)$q['radius_meters'] ?>m)
                                 </div>
                             </td>
@@ -202,8 +209,8 @@ $quests = $stmt->fetchAll();
                                 </span>
                             </td>
                             <td><?= get_status_badge((int)$q['is_active']) ?></td>
-                            <td class="text-end">
-                                <div class="d-inline-flex gap-1">
+                            <td class="text-end table-actions-cell">
+                                <div class="d-inline-flex gap-1 justify-content-end">
                                     <a href="quest_view.php?id=<?= urlencode($q['id']) ?>" class="btn-action-icon" title="View Quest Details">
                                         <i class="fas fa-eye"></i>
                                     </a>

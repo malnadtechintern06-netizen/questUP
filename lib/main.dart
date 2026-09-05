@@ -4,10 +4,18 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app/app.dart';
 import 'core/services/mysql_database_service.dart';
+import 'core/services/notification_service.dart';
 import 'features/sync/data/services/data_sync_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize native push & status-bar notification service
+  try {
+    await NotificationService.instance.init();
+  } catch (e) {
+    debugPrint('[MAIN] NotificationService initialization notice: $e');
+  }
 
   // Catch Flutter framework errors gracefully
   FlutterError.onError = (FlutterErrorDetails details) {

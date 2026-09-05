@@ -44,7 +44,7 @@ $baseUrl = $isSubPage ? '../' : './';
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <!-- Custom Gaming Admin CSS -->
-    <link rel="stylesheet" href="<?= $baseUrl ?>assets/css/admin.css?v=1.0.0">
+    <link rel="stylesheet" href="<?= $baseUrl ?>assets/css/admin.css?v=1.1.0">
 
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="<?= $baseUrl ?>assets/images/logo_emblem.png">

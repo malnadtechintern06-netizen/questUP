@@ -18,31 +18,33 @@ class UserRepositoryImpl implements UserRepository {
   Future<UserProfile> getUserProfile() async {
     final localProfile = await _localDataSource.getUserProfile();
 
-    // Check remote MySQL profile in the background or during sync
-    try {
-      final remoteProfile = await _mySqlDataSource.fetchProfileFromMySql(localProfile.id);
-      if (remoteProfile != null) {
-        // If remote has higher XP or level, merge remote progress
-        if (remoteProfile.currentXp > localProfile.currentXp || remoteProfile.level > localProfile.level) {
-          final merged = localProfile.copyWith(
-            level: remoteProfile.level,
-            currentXp: remoteProfile.currentXp,
-            xpToNextLevel: remoteProfile.xpToNextLevel,
-            coins: remoteProfile.coins,
-          );
-          await _localDataSource.saveUserProfile(UserProfileModel.fromEntity(merged));
-          return merged;
-        } else if (localProfile.currentXp > remoteProfile.currentXp || localProfile.level > remoteProfile.level) {
-          // Local is ahead; sync local forward to MySQL
-          await _mySqlDataSource.saveProfileToMySql(localProfile);
-        }
-      } else {
-        // User profile doesn't exist in MySQL yet; push local profile
-        await _mySqlDataSource.saveProfileToMySql(localProfile);
-      }
-    } catch (_) {}
+    // Check remote MySQL profile asynchronously in background without delaying instant UI render
+    _syncRemoteProfile(localProfile);
 
     return localProfile;
+  }
+
+  void _syncRemoteProfile(UserProfile localProfile) {
+    Future(() async {
+      try {
+        final remoteProfile = await _mySqlDataSource.fetchProfileFromMySql(localProfile.id);
+        if (remoteProfile != null) {
+          if (remoteProfile.currentXp > localProfile.currentXp || remoteProfile.level > localProfile.level) {
+            final merged = localProfile.copyWith(
+              level: remoteProfile.level,
+              currentXp: remoteProfile.currentXp,
+              xpToNextLevel: remoteProfile.xpToNextLevel,
+              coins: remoteProfile.coins,
+            );
+            await _localDataSource.saveUserProfile(UserProfileModel.fromEntity(merged));
+          } else if (localProfile.currentXp > remoteProfile.currentXp || localProfile.level > remoteProfile.level) {
+            await _mySqlDataSource.saveProfileToMySql(UserProfileModel.fromEntity(localProfile));
+          }
+        } else {
+          await _mySqlDataSource.saveProfileToMySql(UserProfileModel.fromEntity(localProfile));
+        }
+      } catch (_) {}
+    });
   }
 
   @override

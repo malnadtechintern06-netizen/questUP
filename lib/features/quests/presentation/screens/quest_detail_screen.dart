@@ -582,16 +582,42 @@ class QuestDetailScreen extends ConsumerWidget {
     Quest quest,
     dynamic activeGps,
   ) {
+    final hasCoordinates = quest.latitude != 0.0 && quest.longitude != 0.0;
+    final userCoords = activeGps;
+    final distanceMeters = (hasCoordinates && userCoords != null)
+        ? DistanceCalculator.calculateDistanceMeters(
+            lat1: userCoords.latitude,
+            lon1: userCoords.longitude,
+            lat2: quest.latitude,
+            lon2: quest.longitude,
+          )
+        : quest.distanceMeters;
+
+    final distStr = distanceMeters != null
+        ? DistanceCalculator.formatDistance(distanceMeters)
+        : 'Calculating...';
+
+    final isWithinRadius = (distanceMeters != null && distanceMeters <= quest.radiusMeters);
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.borderBright, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header Row
           Row(
             children: [
               Container(
@@ -599,30 +625,223 @@ class QuestDetailScreen extends ConsumerWidget {
                 decoration: BoxDecoration(
                   color: AppColors.primaryLight,
                   shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
                 ),
-                child: const Icon(Icons.navigation_rounded, size: 18, color: AppColors.primary),
+                child: const Icon(Icons.route_rounded, size: 18, color: AppColors.primary),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      quest.locationName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.titleMedium.copyWith(fontSize: 13),
+                      'ROUTE & DESTINATION DISPATCH',
+                      style: AppTypography.badge.copyWith(
+                        color: AppColors.primary,
+                        fontSize: 10,
+                        letterSpacing: 0.8,
+                      ),
                     ),
                     Text(
-                      'GPS: ${quest.latitude.toStringAsFixed(4)}, ${quest.longitude.toStringAsFixed(4)}',
-                      style: AppTypography.caption.copyWith(fontSize: 11),
+                      'GPS Telemetry & Waypoint Navigation',
+                      style: AppTypography.caption.copyWith(
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                      ),
                     ),
                   ],
                 ),
               ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isWithinRadius
+                      ? AppColors.accentSuccess.withValues(alpha: 0.15)
+                      : AppColors.primaryLight,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isWithinRadius ? AppColors.accentSuccess : AppColors.primary,
+                  ),
+                ),
+                child: Text(
+                  isWithinRadius ? 'IN RANGE (~${quest.radiusMeters.round()}m)' : distStr,
+                  style: AppTypography.badge.copyWith(
+                    color: isWithinRadius ? AppColors.accentSuccess : AppColors.primary,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
             ],
           ),
+          const SizedBox(height: 16),
+
+          // Route Visualizer: Origin to Destination
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceElevated,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              children: [
+                // Origin: Current Location
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.only(top: 2),
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: AppColors.accentSuccess,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.accentSuccess.withValues(alpha: 0.6),
+                            blurRadius: 6,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'CURRENT LOCATION (ORIGIN)',
+                            style: AppTypography.caption.copyWith(
+                              fontSize: 9.5,
+                              color: AppColors.accentSuccess,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            userCoords != null
+                                ? 'GPS: ${userCoords.latitude.toStringAsFixed(4)}°, ${userCoords.longitude.toStringAsFixed(4)}°'
+                                : 'Acquiring GPS position...',
+                            style: AppTypography.bodyMedium.copyWith(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+
+                // Connecting Dotted Line & Distance Indicator
+                Padding(
+                  padding: const EdgeInsets.only(left: 6, top: 4, bottom: 4),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 2,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: AppColors.borderBright,
+                          borderRadius: BorderRadius.circular(1),
+                        ),
+                      ),
+                      const SizedBox(width: 18),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.directions_walk_rounded, size: 12, color: AppColors.textMuted),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Distance: $distStr',
+                              style: AppTypography.caption.copyWith(
+                                fontSize: 10,
+                                color: AppColors.textSecondary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Destination: Target Location
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.only(top: 2),
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEA4335), // Google Maps Pin Red
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFEA4335).withValues(alpha: 0.6),
+                            blurRadius: 6,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'DESTINATION LOCATION (TARGET)',
+                            style: AppTypography.caption.copyWith(
+                              fontSize: 9.5,
+                              color: const Color(0xFFEA4335),
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            quest.locationName,
+                            style: AppTypography.bodyMedium.copyWith(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          if (hasCoordinates) ...[
+                            const SizedBox(height: 1),
+                            Text(
+                              'GPS: ${quest.latitude.toStringAsFixed(4)}°, ${quest.longitude.toStringAsFixed(4)}°',
+                              style: AppTypography.caption.copyWith(
+                                fontSize: 11,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 14),
+
+          // Action Buttons: Open in Google Maps & Live Walking Route
           Row(
             children: [
               Expanded(

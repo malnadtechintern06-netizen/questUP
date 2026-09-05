@@ -9,7 +9,7 @@ abstract class IQuestLocalDataSource {
   Future<List<QuestModel>> getQuestsForLocation(
     double userLat,
     double userLon, {
-    double maxRadiusMeters = 5000.0,
+    double maxRadiusMeters = 50000.0,
   });
   Future<void> saveQuests(List<QuestModel> quests);
   Future<QuestModel?> getQuestById(String id);
@@ -54,23 +54,47 @@ class QuestLocalDataSource implements IQuestLocalDataSource {
   Future<List<QuestModel>> getQuests() async {
     final completedIds = await _getActiveUserCompletedQuestIds();
     final jsonList = await _storage.getJson(AppConstants.keyQuests);
-    if (jsonList != null && jsonList is List && jsonList.isNotEmpty) {
-      return jsonList
-          .map((item) => QuestModel.fromJson(item as Map<String, dynamic>))
-          .map((q) => QuestModel.fromEntity(q.copyWith(isCompleted: completedIds.contains(q.id))))
-          .toList();
+
+    final localQuestsMap = <String, QuestModel>{};
+
+    // 1. Base static activity quests (14 quests)
+    for (final q in _activityCatalogService.getActivityQuests()) {
+      localQuestsMap[q.id] = QuestModel.fromEntity(q.copyWith(isCompleted: completedIds.contains(q.id)));
     }
-    // Return base activity quests if storage is empty
-    return _activityCatalogService.getActivityQuests().map((q) {
-      return q.copyWith(isCompleted: completedIds.contains(q.id));
-    }).map((q) => QuestModel.fromEntity(q)).toList();
+
+    // 2. Base landmark / proximity quests (8 quests)
+    final defaultLandmarks = await _placesDiscoveryService.generateFamousPlaceQuests(
+      userLat: 12.9716,
+      userLon: 77.5946,
+      searchRadiusMeters: 50000.0,
+      completedIds: completedIds,
+    );
+    for (final q in defaultLandmarks) {
+      localQuestsMap[q.id] = q;
+    }
+
+    // 3. Any additional saved local quests from storage
+    if (jsonList != null && jsonList is List) {
+      for (final item in jsonList) {
+        if (item is Map<String, dynamic>) {
+          try {
+            final q = QuestModel.fromJson(item);
+            if (q.id.startsWith('local_') || q.id.startsWith('quest_act_')) {
+              localQuestsMap[q.id] = QuestModel.fromEntity(q.copyWith(isCompleted: completedIds.contains(q.id)));
+            }
+          } catch (_) {}
+        }
+      }
+    }
+
+    return localQuestsMap.values.toList();
   }
 
   @override
   Future<List<QuestModel>> getQuestsForLocation(
     double userLat,
     double userLon, {
-    double maxRadiusMeters = 5000.0,
+    double maxRadiusMeters = 50000.0,
   }) async {
     final completedIds = await _getActiveUserCompletedQuestIds();
 
@@ -87,13 +111,12 @@ class QuestLocalDataSource implements IQuestLocalDataSource {
       return q.copyWith(isCompleted: completedIds.contains(q.id));
     }).map((q) => QuestModel.fromEntity(q)).toList();
 
-    // 3. Combine both collections: Location quests + Activity quests
+    // 3. Combine both collections: Location quests + Activity quests (22 local quests)
     final combined = <QuestModel>[
       ...locationQuests,
       ...activityQuests,
     ];
 
-    await saveQuests(combined);
     return combined;
   }
 

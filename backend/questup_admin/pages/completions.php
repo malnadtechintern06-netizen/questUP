@@ -80,8 +80,8 @@ $completions = $stmt->fetchAll();
 
 <!-- Filter Toolbar -->
 <div class="glass-card mb-4">
-    <form method="GET" action="completions.php" class="row g-3 align-items-center">
-        <div class="col-lg-4 col-md-6">
+    <form method="GET" action="completions.php" class="row g-2 g-md-3 align-items-center">
+        <div class="col-12 col-md-4 col-xl-4">
             <div class="position-relative">
                 <input type="text" 
                        name="search" 
@@ -92,7 +92,7 @@ $completions = $stmt->fetchAll();
             </div>
         </div>
 
-        <div class="col-lg-3 col-md-3">
+        <div class="col-6 col-md-3 col-xl-3">
             <select name="status" class="form-control-gaming" onchange="this.form.submit()">
                 <option value="all" <?= $statusFilter === 'all' ? 'selected' : '' ?>>All Verification Statuses</option>
                 <option value="verified" <?= $statusFilter === 'verified' ? 'selected' : '' ?>>Verified / Approved</option>
@@ -102,7 +102,7 @@ $completions = $stmt->fetchAll();
             </select>
         </div>
 
-        <div class="col-lg-3 col-md-3">
+        <div class="col-6 col-md-3 col-xl-3">
             <select name="verification_type" class="form-control-gaming" onchange="this.form.submit()">
                 <option value="all" <?= $vtypeFilter === 'all' ? 'selected' : '' ?>>All Verification Types</option>
                 <option value="locationGps" <?= $vtypeFilter === 'locationGps' ? 'selected' : '' ?>>GPS Location</option>
@@ -113,10 +113,17 @@ $completions = $stmt->fetchAll();
             </select>
         </div>
 
-        <div class="col-lg-2 col-md-12">
-            <button type="submit" class="btn btn-gaming btn-gaming-cyan w-100">
-                <i class="fas fa-filter me-1"></i> Filter
-            </button>
+        <div class="col-12 col-md-2 col-xl-2">
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-gaming btn-gaming-cyan w-100">
+                    <i class="fas fa-filter me-1"></i> Filter
+                </button>
+                <?php if ($search !== '' || $statusFilter !== 'all' || $vtypeFilter !== 'all'): ?>
+                    <a href="completions.php" class="btn btn-gaming btn-gaming-outline" title="Reset Filters">
+                        <i class="fas fa-redo"></i>
+                    </a>
+                <?php endif; ?>
+            </div>
         </div>
     </form>
 </div>
@@ -133,7 +140,7 @@ $completions = $stmt->fetchAll();
                     <th>Rewards Awarded</th>
                     <th>Status</th>
                     <th>Completed Date</th>
-                    <th class="text-end">Actions</th>
+                    <th class="text-end table-actions-cell">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -166,18 +173,20 @@ $completions = $stmt->fetchAll();
                             </td>
                             <td><?= get_status_badge($c['status'] ?? 'verified') ?></td>
                             <td class="text-secondary small"><?= date('M j, Y H:i', strtotime($c['completed_at'])) ?></td>
-                            <td class="text-end">
-                                <a href="verification.php?search=<?= urlencode($c['id']) ?>" class="btn-action-icon" title="View Submission & Proof">
-                                    <i class="fas fa-search-plus text-cyan"></i>
-                                </a>
-                                <form method="POST" action="../actions/completion_actions.php" class="d-inline" onsubmit="return confirm('Delete this completion log? Note: This will not automatically revoke player XP/Coins.');">
-                                    <?= csrf_field() ?>
-                                    <input type="hidden" name="action" value="delete_completion">
-                                    <input type="hidden" name="completion_id" value="<?= e($c['id']) ?>">
-                                    <button type="submit" class="btn-action-icon text-danger" title="Delete Completion Log">
-                                        <i class="fas fa-trash-alt"></i>
-                                    </button>
-                                </form>
+                            <td class="text-end table-actions-cell">
+                                <div class="d-inline-flex gap-1 justify-content-end">
+                                    <a href="verification.php?search=<?= urlencode($c['id']) ?>" class="btn-action-icon" title="View Submission & Proof">
+                                        <i class="fas fa-search-plus text-cyan"></i>
+                                    </a>
+                                    <form method="POST" action="../actions/completion_actions.php" class="d-inline" onsubmit="return confirm('Delete this completion log? Note: This will not automatically revoke player XP/Coins.');">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="action" value="delete_completion">
+                                        <input type="hidden" name="completion_id" value="<?= e($c['id']) ?>">
+                                        <button type="submit" class="btn-action-icon text-danger" title="Delete Completion Log">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </button>
+                                    </form>
+                                </div>
                             </td>
                         </tr>
                     <?php endforeach; ?>

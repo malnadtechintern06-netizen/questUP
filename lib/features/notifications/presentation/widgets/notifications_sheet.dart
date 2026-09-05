@@ -4,6 +4,7 @@ import 'package:quest_up/app/router/app_router.dart';
 import 'package:quest_up/app/router/route_paths.dart';
 import 'package:quest_up/app/theme/app_colors.dart';
 import 'package:quest_up/app/theme/app_typography.dart';
+import 'package:quest_up/features/quests/presentation/providers/quest_providers.dart';
 import '../../domain/entities/app_notification.dart';
 import '../providers/notification_providers.dart';
 
@@ -154,7 +155,23 @@ class NotificationsSheet extends ConsumerWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 4),
+                // Manual Quest Sync button
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.sync_rounded, size: 20, color: AppColors.primary),
+                  tooltip: 'Check for New Quests',
+                  onPressed: () async {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Checking server for newly uploaded quests...'),
+                        duration: Duration(seconds: 1),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                    await ref.read(questsNotifierProvider.notifier).refreshQuests(showLoading: false);
+                  },
+                ),
                 if (notifications.isNotEmpty && unreadCount > 0)
                   TextButton(
                     style: TextButton.styleFrom(
@@ -264,7 +281,11 @@ class NotificationsSheet extends ConsumerWidget {
                             if (item.routeTarget != null) {
                               final target = item.routeTarget!;
                               Navigator.of(context).pop();
-                              appRouter.go(target);
+                              if (target.startsWith('/quests/') && target != '/quests') {
+                                appRouter.push(target);
+                              } else {
+                                appRouter.go(target);
+                              }
                             }
                           },
                           child: Container(

@@ -1,12 +1,13 @@
 -- ==========================================================
 -- QuestUP COMPLETE LIVE DATABASE SCHEMA & SEED DATA
 -- Database: questup_db
--- Includes: App Tables, Badges, and Admin Panel User Auth
+-- Includes: App Tables, Badges, Friend Requests, Admin Auth
 -- ==========================================================
 
--- 1. Users Table (Player Authentication)
+-- 1. Users Table (Player Authentication & Player Tags)
 CREATE TABLE IF NOT EXISTS `users` (
   `id` VARCHAR(64) NOT NULL,
+  `player_id` VARCHAR(32) DEFAULT NULL,
   `name` VARCHAR(120) NOT NULL,
   `email` VARCHAR(191) NOT NULL UNIQUE,
   `password_hash` VARCHAR(255) NOT NULL,
@@ -15,7 +16,8 @@ CREATE TABLE IF NOT EXISTS `users` (
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  INDEX `idx_users_email` (`email`)
+  INDEX `idx_users_email` (`email`),
+  INDEX `idx_users_player_id` (`player_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 2. User Profiles Table (Game stats, XP, Level, Coins)
@@ -118,7 +120,23 @@ CREATE TABLE IF NOT EXISTS `badges` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 8. Email OTPs Table
+-- 8. Friend Requests & Social Connections Table
+CREATE TABLE IF NOT EXISTS `friend_requests` (
+  `id` VARCHAR(64) NOT NULL,
+  `sender_id` VARCHAR(64) NOT NULL,
+  `receiver_id` VARCHAR(64) NOT NULL,
+  `sender_tag` VARCHAR(32) DEFAULT NULL,
+  `receiver_tag` VARCHAR(32) DEFAULT NULL,
+  `status` ENUM('pending', 'accepted', 'rejected', 'cancelled') DEFAULT 'pending',
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX `idx_fr_sender` (`sender_id`),
+  INDEX `idx_fr_receiver` (`receiver_id`),
+  INDEX `idx_fr_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 9. Email OTPs Table
 CREATE TABLE IF NOT EXISTS `email_otps` (
   `id` VARCHAR(64) NOT NULL,
   `email` VARCHAR(191) NOT NULL,
@@ -131,7 +149,7 @@ CREATE TABLE IF NOT EXISTS `email_otps` (
   INDEX `idx_email_expires` (`email`, `expires_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 9. Admin Users Table (For Web Admin Panel Login)
+-- 10. Admin Users Table (For Web Admin Panel Login)
 CREATE TABLE IF NOT EXISTS `admin_users` (
   `id` VARCHAR(64) NOT NULL,
   `username` VARCHAR(60) NOT NULL UNIQUE,
