@@ -1,16 +1,13 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:quest_up/app/config/app_constants.dart';
 import 'package:quest_up/app/router/route_paths.dart';
 import 'package:quest_up/app/theme/app_colors.dart';
 import 'package:quest_up/app/theme/app_typography.dart';
 import 'package:quest_up/core/widgets/premium_3d_button.dart';
 import 'package:quest_up/features/auth/presentation/providers/auth_providers.dart';
-import 'package:quest_up/features/profile/presentation/providers/user_providers.dart';
 import 'package:quest_up/features/quests/presentation/providers/quest_providers.dart';
 
 class OtpVerificationScreen extends ConsumerStatefulWidget {
@@ -37,7 +34,6 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
   Timer? _timer;
   int _secondsRemaining = _resendCooldownSeconds;
   bool _canResend = false;
-  String? _debugPreviewCode;
 
   String get _targetEmail {
     final authState = ref.read(authNotifierProvider);
@@ -48,7 +44,6 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
   void initState() {
     super.initState();
     _startResendTimer();
-    _loadDebugOtpPreview();
   }
 
   void _startResendTimer() {
@@ -72,22 +67,6 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
         });
       }
     });
-  }
-
-  Future<void> _loadDebugOtpPreview() async {
-    if (!kDebugMode) return;
-    try {
-      final storage = ref.read(localStorageServiceProvider);
-      final raw = await storage.getJson(AppConstants.keyPendingOtps);
-      if (raw is Map<String, dynamic> && raw.containsKey(_targetEmail)) {
-        final record = raw[_targetEmail];
-        if (record is Map<String, dynamic>) {
-          setState(() {
-            _debugPreviewCode = record['otp_code'] as String?;
-          });
-        }
-      }
-    } catch (_) {}
   }
 
   @override
@@ -189,7 +168,6 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
 
     if (success && mounted) {
       _startResendTimer();
-      _loadDebugOtpPreview();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('A fresh verification code has been sent to your email!'),
@@ -197,14 +175,6 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
         ),
       );
     }
-  }
-
-  void _quickFillOtp(String code) {
-    if (code.length != _otpLength) return;
-    for (int i = 0; i < _otpLength; i++) {
-      _controllers[i].text = code[i];
-    }
-    _handleVerify();
   }
 
   @override
@@ -229,12 +199,14 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
         ),
         title: Text(
           'Security Verification',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.w800),
         ),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -333,18 +305,23 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
                 const SizedBox(height: 22),
               ],
 
-              // 6-Pin Input Boxes Row
+              // 6-Pin Input Boxes Row (Responsive with Expanded, never overflows)
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: List.generate(_otpLength, (index) {
-                  return _buildOtpDigitBox(index);
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 3.5),
+                      child: _buildOtpDigitBox(index),
+                    ),
+                  );
                 }),
               ),
               const SizedBox(height: 24),
 
-              // Resend Timer & Button
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              // Resend Timer & Button (Wrapped to prevent any horizontal overflow)
+              Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text(
                     "Didn't receive the code? ",
@@ -412,52 +389,7 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
                   ),
                 ),
               ),
-
-              // Debug / Dev Preview Badge (visible in debug mode for test ease)
-              if (kDebugMode && _debugPreviewCode != null) ...[
-                const SizedBox(height: 28),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.bug_report_rounded, color: Colors.amber, size: 18),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Dev OTP: $_debugPreviewCode',
-                        style: AppTypography.caption.copyWith(
-                          color: Colors.amber,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      InkWell(
-                        onTap: () => _quickFillOtp(_debugPreviewCode!),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.amber.withValues(alpha: 0.25),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            'Auto-Fill',
-                            style: AppTypography.caption.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+              const SizedBox(height: 16),
             ],
           ),
         ),
@@ -467,8 +399,7 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
 
   Widget _buildOtpDigitBox(int index) {
     return SizedBox(
-      width: 48,
-      height: 58,
+      height: 56,
       child: KeyboardListener(
         focusNode: FocusNode(),
         onKeyEvent: (event) => _onOtpKeyEvent(index, event),
@@ -480,7 +411,7 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
           style: AppTypography.gameNumber.copyWith(
             fontWeight: FontWeight.w900,
             color: AppColors.primary,
-            fontSize: 22,
+            fontSize: 20,
           ),
           inputFormatters: [
             LengthLimitingTextInputFormatter(6),
@@ -492,11 +423,11 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
             filled: true,
             fillColor: AppColors.surface,
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: AppColors.border, width: 1.5),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: AppColors.primary, width: 2.2),
             ),
           ),
