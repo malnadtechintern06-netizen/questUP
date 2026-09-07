@@ -39,16 +39,24 @@ void main() {
       expect(config.host, isNotEmpty);
       expect(config.port, 587);
       expect(config.fromName, 'QuestUP Security');
+      expect(config.enableBackendApi, isTrue);
+      expect(config.isConfigured, isTrue);
     });
 
-    test('EmailService dispatches/logs OTP correctly', () async {
+    test('EmailService dispatches/logs OTP and caches last dispatched OTP', () async {
       final service = EmailService();
+      const testEmail = 'test.explorer@questup.app';
+      const testOtp = '849201';
+
       final sent = await service.sendOtpEmail(
-        recipientEmail: 'test.explorer@questup.app',
-        otpCode: '849201',
+        recipientEmail: testEmail,
+        otpCode: testOtp,
         userName: 'Explorer Prime',
       );
       expect(sent, isTrue);
+
+      final cachedOtp = service.getLastDispatchedOtp(testEmail);
+      expect(cachedOtp, equals(testOtp));
     });
   });
 

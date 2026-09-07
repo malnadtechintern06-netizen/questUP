@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:quest_up/core/utils/distance_calculator.dart';
 import 'package:quest_up/features/quests/domain/entities/quest.dart';
 import 'package:quest_up/features/verification/domain/entities/quest_attempt.dart';
@@ -31,7 +32,10 @@ class GpsVerifier implements IQuestValidator {
       lon2: quest.longitude,
     );
 
-    final requiredRadius = quest.radiusMeters > 0 ? quest.radiusMeters : 75.0;
+    // Safe debug output for location quest verification
+    debugPrint('[QuestUP Location Quest] Distance to destination: ${distance.round()} m');
+
+    final requiredRadius = quest.radiusMeters > 0 ? quest.radiusMeters : 100.0;
     final isWithinRadius = distance <= requiredRadius;
 
     if (!isWithinRadius) {

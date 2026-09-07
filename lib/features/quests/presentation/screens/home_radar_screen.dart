@@ -886,9 +886,7 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen>
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.borderBright, width: 1.2),
+        borderRadius: BorderRadius.circular(26),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.45),
@@ -896,114 +894,190 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen>
             offset: const Offset(0, 6),
           ),
           BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.1),
-            blurRadius: 20,
-            spreadRadius: 1,
+            color: AppColors.primary.withValues(alpha: 0.22),
+            blurRadius: 24,
+            spreadRadius: 2,
           ),
         ],
       ),
-      child: Column(
-        children: [
-          // Banner Image with Cinematic Overlay
-          Stack(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(26),
+        child: AspectRatio(
+          aspectRatio: 459 / 874,
+          child: Stack(
+            fit: StackFit.expand,
             children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(23)),
-                child: SizedBox(
-                  height: 155,
-                  width: double.infinity,
-                  child: Image.asset(
-                    'assets/images/hero_poster.jpg',
-                    fit: BoxFit.cover,
-                    alignment: Alignment.center,
-                    gaplessPlayback: true,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      color: AppColors.surfaceElevated,
-                    ),
-                  ),
+              // 1. Hero Vertical Adventure Artwork (Clean, unmarred, perfect fit)
+              Image.asset(
+                'assets/images/hero_card.png',
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+                errorBuilder: (context, error, stackTrace) => Image.asset(
+                  'assets/images/hero_poster.jpg',
+                  fit: BoxFit.cover,
                 ),
               ),
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(23)),
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.2),
-                        AppColors.surface.withValues(alpha: 0.95),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+
+              // 2. Live Dynamic Coins Overlay (aligned with QuestUP logo at top right)
               Positioned(
-                left: 20,
-                bottom: 16,
+                top: 36,
                 right: 20,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0C1B2E).withValues(alpha: 0.92),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: const Color(0xFF00E5FF),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF00E5FF).withValues(alpha: 0.35),
+                        blurRadius: 8,
+                        spreadRadius: 1,
                       ),
-                      child: const Text(
-                        'EXPLORER DASHBOARD',
-                        style: TextStyle(
-                          color: Colors.black,
-                          fontSize: 9,
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.stars_rounded,
+                        color: Color(0xFFFFD700),
+                        size: 19,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        '${profile.coins} COINS',
+                        style: const TextStyle(
+                          color: Color(0xFFFFD700),
                           fontWeight: FontWeight.w900,
-                          letterSpacing: 0.8,
+                          fontSize: 12.5,
+                          letterSpacing: 0.5,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Turn the World Into Your Game.',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.2,
-                        height: 1.15,
-                        shadows: [
-                          Shadow(
-                            color: Colors.black,
-                            blurRadius: 10,
-                            offset: Offset(0, 2),
+                    ],
+                  ),
+                ),
+              ),
+
+              // 3. Live Dynamic Level & XP Overlay (positioned with ample padding in the bottom card area)
+              Positioned(
+                left: 20,
+                right: 20,
+                bottom: 24,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // Live Level Pill
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF00E5FF), Color(0xFF7C4DFF)],
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF00E5FF).withValues(alpha: 0.5),
+                                blurRadius: 10,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
-                        ],
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.location_on, color: Colors.black, size: 15),
+                              const SizedBox(width: 4),
+                              Text(
+                                'LVL ${profile.level}',
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 13,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Live XP Counter
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.bolt_rounded, color: Color(0xFF00E5FF), size: 17),
+                            const SizedBox(width: 3),
+                            Text(
+                              '${profile.currentXp} / ${profile.xpToNextLevel} XP',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12.5,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Live XP Track Bar
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        height: 11,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF08192D),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: const Color(0xFF00E5FF).withValues(alpha: 0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final pct = profile.xpToNextLevel > 0
+                                ? (profile.currentXp / profile.xpToNextLevel).clamp(0.0, 1.0)
+                                : 0.0;
+                            return Stack(
+                              children: [
+                                FractionallySizedBox(
+                                  widthFactor: pct,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      gradient: const LinearGradient(
+                                        colors: [Color(0xFF00E5FF), Color(0xFF00B0FF)],
+                                      ),
+                                      borderRadius: BorderRadius.circular(10),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFF00E5FF).withValues(alpha: 0.6),
+                                          blurRadius: 6,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-              // Coins Pill at Top Right of Hero
-              Positioned(
-                top: 14,
-                right: 14,
-                child: CoinCounter3D(
-                  coins: profile.coins,
-                ),
-              ),
             ],
           ),
-
-          // XP Progress Bar and Rank Section
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            child: AnimatedXpBar(
-              currentXp: profile.currentXp,
-              requiredXp: profile.xpToNextLevel,
-              level: profile.level,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

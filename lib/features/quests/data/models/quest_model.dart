@@ -77,23 +77,46 @@ class QuestModel extends Quest {
     super.requiresText = false,
     super.requiresGameSession = false,
     super.requiredVerificationRules = const [],
+    super.sourceType = 'admin',
+    super.googlePlaceId,
+    super.generationLatitude,
+    super.generationLongitude,
+    super.userId,
   });
 
   factory QuestModel.fromJson(Map<String, dynamic> json) {
     final questId = (json['id'] ?? json['questId'] ?? '').toString();
-    final radius = (json['radiusMeters'] ?? json['allowedRadius'] as num?)?.toDouble() ?? 75.0;
-    final active = (json['isActive'] ?? json['active'] as bool?) ?? true;
+    final radius = double.tryParse(json['radiusMeters']?.toString() ?? json['radius_meters']?.toString() ?? json['allowedRadius']?.toString() ?? '') ?? 75.0;
+    
+    final dynamic activeRaw = json['isActive'] ?? json['is_active'] ?? json['active'];
+    final bool active = activeRaw == null ||
+        activeRaw == true ||
+        activeRaw == 1 ||
+        activeRaw == '1' ||
+        activeRaw == 'true';
 
-    final catStr = json['category'] as String? ?? 'landmark';
+    final catStr = (json['category'] as String? ?? 'landmark').toLowerCase();
     final category = QuestCategory.values.firstWhere(
-      (e) => e.name == catStr,
-      orElse: () => QuestCategory.landmark,
+      (e) => e.name.toLowerCase() == catStr,
+      orElse: () {
+        if (catStr == 'exploration') return QuestCategory.location;
+        if (catStr == 'creativity') return QuestCategory.drawing;
+        if (catStr == 'intellect') return QuestCategory.writing;
+        if (catStr == 'social') return QuestCategory.custom;
+        return QuestCategory.landmark;
+      },
     );
 
-    final verTypeStr = json['verificationType'] as String? ?? 'locationGps';
+    final verTypeStr = (json['verificationType'] as String? ?? json['verification_type'] as String? ?? 'locationGps').toLowerCase();
     final verificationType = QuestVerificationType.values.firstWhere(
-      (e) => e.name == verTypeStr,
+      (e) => e.name.toLowerCase() == verTypeStr,
       orElse: () {
+        if (verTypeStr == 'photo' || verTypeStr == 'photoproof') return QuestVerificationType.photoProof;
+        if (verTypeStr == 'drawing' || verTypeStr == 'drawingcanvas') return QuestVerificationType.drawingCanvas;
+        if (verTypeStr == 'writing' || verTypeStr == 'writingtext') return QuestVerificationType.writingText;
+        if (verTypeStr == 'walking' || verTypeStr == 'walkinggps') return QuestVerificationType.walkingGps;
+        if (verTypeStr == 'gaming' || verTypeStr == 'gameplaytime') return QuestVerificationType.gameplayTime;
+        if (verTypeStr == 'qrcode' || verTypeStr == 'codephrase') return QuestVerificationType.compositeRules;
         if (category == QuestCategory.drawing) return QuestVerificationType.drawingCanvas;
         if (category == QuestCategory.writing) return QuestVerificationType.writingText;
         if (category == QuestCategory.walking) return QuestVerificationType.walkingGps;
@@ -110,9 +133,9 @@ class QuestModel extends Quest {
       },
     );
 
-    final repStr = json['repeatability'] as String? ?? 'oneTime';
+    final repStr = (json['repeatability'] as String? ?? 'oneTime').toLowerCase();
     final repeatability = QuestRepeatability.values.firstWhere(
-      (e) => e.name == repStr,
+      (e) => e.name.toLowerCase() == repStr,
       orElse: () => QuestRepeatability.oneTime,
     );
 
@@ -131,10 +154,57 @@ class QuestModel extends Quest {
             .toList() ??
         <String>[];
 
-    final photoUrlVal = json['photoUrl'] as String? ?? json['imageUrl'] as String?;
+    final photoUrlVal = json['photoUrl'] as String? ?? json['imageUrl'] as String? ?? json['image_asset_path'] as String?;
     final photoRefVal = json['photoReference'] as String? ?? json['photo_reference'] as String?;
     final imgSource = json['imageSource'] as String? ??
         (photoRefVal != null && photoRefVal.isNotEmpty ? 'google_places' : 'fallback');
+
+    final diffStr = (json['difficulty'] ?? 'medium').toString().toLowerCase();
+    final difficulty = QuestDifficulty.values.firstWhere(
+      (e) => e.name.toLowerCase() == diffStr,
+      orElse: () => QuestDifficulty.medium,
+    );
+
+    final xp = int.tryParse(json['xpReward']?.toString() ?? json['xp_reward']?.toString() ?? '') ?? 100;
+    final coins = int.tryParse(json['coinReward']?.toString() ?? json['coins_reward']?.toString() ?? json['coin_reward']?.toString() ?? '') ?? 50;
+    final level = int.tryParse(json['requiredLevel']?.toString() ?? json['required_level']?.toString() ?? '') ?? 1;
+    final lat = double.tryParse(json['latitude']?.toString() ?? '') ?? 0.0;
+    final lng = double.tryParse(json['longitude']?.toString() ?? '') ?? 0.0;
+    final locationName = json['locationName'] as String? ?? json['location_name'] as String? ?? 'Local Waypoint';
+
+    final reqObj = json['requiredObject'] as String? ?? json['required_object'] as String?;
+    final reqDrawing = json['requiredDrawingSubject'] as String? ?? json['required_drawing_subject'] as String?;
+    final reqPlace = json['requiredPlace'] as String? ?? json['required_place'] as String?;
+    final reqTarget = json['requiredTarget'] as String? ?? json['required_target'] as String?;
+    final reqDur = int.tryParse(json['requiredDurationSeconds']?.toString() ?? json['required_duration_seconds']?.toString() ?? '') ?? 0;
+    final reqDist = double.tryParse(json['requiredDistanceMeters']?.toString() ?? json['required_distance_meters']?.toString() ?? '') ?? 0.0;
+    final reqWords = int.tryParse(json['requiredWords']?.toString() ?? json['required_words']?.toString() ?? '') ?? 0;
+    final reqLines = int.tryParse(json['requiredLines']?.toString() ?? json['required_lines']?.toString() ?? '') ?? 0;
+    final reqReps = int.tryParse(json['requiredRepetitions']?.toString() ?? json['required_repetitions']?.toString() ?? '') ?? 0;
+
+    final reqGps = json['requiresGPS'] == true || json['requires_gps'] == 1 || json['requires_gps'] == '1' || json['requires_gps'] == true;
+    final reqPhoto = json['requiresPhoto'] == true || json['requires_photo'] == 1 || json['requires_photo'] == '1' || json['requires_photo'] == true;
+    final reqFreshPhoto = json['requiresFreshPhoto'] == true || json['requires_fresh_photo'] == 1 || json['requires_fresh_photo'] == '1' || json['requires_fresh_photo'] == true;
+    final reqVideo = json['requiresVideo'] == true || json['requires_video'] == 1 || json['requires_video'] == '1' || json['requires_video'] == true;
+    final reqDraw = json['requiresDrawing'] == true || json['requires_drawing'] == 1 || json['requires_drawing'] == '1' || json['requires_drawing'] == true;
+    final reqTxt = json['requiresText'] == true || json['requires_text'] == 1 || json['requires_text'] == '1' || json['requires_text'] == true;
+    final reqGame = json['requiresGameSession'] == true || json['requires_game_session'] == 1 || json['requires_game_session'] == '1' || json['requires_game_session'] == true;
+
+    final dynamicReqs = _buildDynamicRequirements(
+      verificationType: verificationType,
+      category: category,
+      requiredObject: reqObj,
+      requiredDrawingSubject: reqDrawing,
+      requiredWords: reqWords,
+      requiredDurationSeconds: reqDur,
+      requiredDistanceMeters: reqDist,
+      requiresGPS: reqGps,
+      requiresPhoto: reqPhoto,
+      requiresDrawing: reqDraw,
+      requiresText: reqTxt,
+      requiresVideo: reqVideo,
+      requiresGameSession: reqGame,
+    );
 
     return QuestModel(
       id: questId,
@@ -142,40 +212,28 @@ class QuestModel extends Quest {
       description: json['description'] as String? ?? '',
       storyline: json['storyline'] as String? ?? (json['description'] as String? ?? ''),
       category: category,
-      difficulty: QuestDifficulty.values.firstWhere(
-        (e) => e.name == json['difficulty'],
-        orElse: () => QuestDifficulty.easy,
-      ),
+      difficulty: difficulty,
       verificationType: verificationType,
       repeatability: repeatability,
-      latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
-      longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
-      locationName: json['locationName'] as String? ?? 'Local Waypoint',
-      originLocationName: json['originLocationName'] as String?,
-      historicalFact: json['historicalFact'] as String?,
+      latitude: lat,
+      longitude: lng,
+      locationName: locationName,
+      originLocationName: json['originLocationName'] as String? ?? json['origin_location_name'] as String?,
+      historicalFact: json['historicalFact'] as String? ?? json['historical_fact'] as String?,
       radiusMeters: radius,
-      xpReward: json['xpReward'] as int? ?? 100,
-      coinReward: json['coinReward'] as int? ?? 50,
-      requiredLevel: json['requiredLevel'] as int? ?? 1,
+      xpReward: xp,
+      coinReward: coins,
+      requiredLevel: level,
       isActive: active,
-      isCompleted: json['isCompleted'] as bool? ?? false,
+      isCompleted: json['isCompleted'] == true || json['isCompleted'] == 1 || json['isCompleted'] == '1',
       requirements: (json['requirements'] as List<dynamic>?)
               ?.map((e) => QuestRequirementModel.fromJson(e as Map<String, dynamic>))
               .toList() ??
-          [
-            const QuestRequirementModel(
-              title: 'Reach GPS Location',
-              description: 'Travel within the target coordinates radius',
-            ),
-            const QuestRequirementModel(
-              title: 'Snap Photo Proof',
-              description: 'Take a clear photograph of the waypoint',
-            ),
-          ],
-      iconKey: json['iconKey'] as String? ?? 'landmark',
-      distanceMeters: (json['distanceMeters'] as num?)?.toDouble(),
-      placeId: json['placeId'] as String?,
-      placeCategory: json['placeCategory'] as String?,
+          dynamicReqs,
+      iconKey: json['iconKey'] as String? ?? json['icon_key'] as String? ?? 'landmark',
+      distanceMeters: double.tryParse(json['distanceMeters']?.toString() ?? json['distance_meters']?.toString() ?? ''),
+      placeId: json['placeId'] as String? ?? json['place_id'] as String?,
+      placeCategory: json['placeCategory'] as String? ?? json['place_category'] as String?,
       placeAddress: json['placeAddress'] as String? ?? json['address'] as String?,
       placeTypes: pTypes,
       imageUrl: photoUrlVal,
@@ -183,25 +241,133 @@ class QuestModel extends Quest {
       photoReferences: pRefs,
       photoUrl: photoUrlVal,
       imageSource: imgSource,
-      requiredDurationSeconds: json['requiredDurationSeconds'] as int? ?? 0,
-      requiredDistanceMeters:
-          (json['requiredDistanceMeters'] as num?)?.toDouble() ?? 0.0,
-      requiredWords: json['requiredWords'] as int? ?? 0,
-      requiredLines: json['requiredLines'] as int? ?? 0,
-      requiredRepetitions: json['requiredRepetitions'] as int? ?? 0,
-      requiredObject: json['requiredObject'] as String?,
-      requiredPlace: json['requiredPlace'] as String?,
-      requiredTarget: json['requiredTarget'] as String?,
-      requiredDrawingSubject: json['requiredDrawingSubject'] as String?,
-      requiresGPS: json['requiresGPS'] as bool? ?? false,
-      requiresPhoto: json['requiresPhoto'] as bool? ?? false,
-      requiresFreshPhoto: json['requiresFreshPhoto'] as bool? ?? false,
-      requiresVideo: json['requiresVideo'] as bool? ?? false,
-      requiresDrawing: json['requiresDrawing'] as bool? ?? false,
-      requiresText: json['requiresText'] as bool? ?? false,
-      requiresGameSession: json['requiresGameSession'] as bool? ?? false,
+      requiredDurationSeconds: reqDur,
+      requiredDistanceMeters: reqDist,
+      requiredWords: reqWords,
+      requiredLines: reqLines,
+      requiredRepetitions: reqReps,
+      requiredObject: reqObj,
+      requiredPlace: reqPlace,
+      requiredTarget: reqTarget,
+      requiredDrawingSubject: reqDrawing,
+      requiresGPS: reqGps,
+      requiresPhoto: reqPhoto,
+      requiresFreshPhoto: reqFreshPhoto,
+      requiresVideo: reqVideo,
+      requiresDrawing: reqDraw,
+      requiresText: reqTxt,
+      requiresGameSession: reqGame,
       requiredVerificationRules: rulesList,
+      sourceType: json['sourceType'] as String? ?? json['source_type'] as String? ?? 'admin',
+      googlePlaceId: json['googlePlaceId'] as String? ?? json['google_place_id'] as String? ?? (json['placeId'] as String? ?? json['place_id'] as String?),
+      generationLatitude: double.tryParse(json['generationLatitude']?.toString() ?? json['generation_latitude']?.toString() ?? ''),
+      generationLongitude: double.tryParse(json['generationLongitude']?.toString() ?? json['generation_longitude']?.toString() ?? ''),
+      userId: json['userId'] as String? ?? json['user_id'] as String?,
     );
+  }
+
+  static List<QuestRequirementModel> _buildDynamicRequirements({
+    required QuestVerificationType verificationType,
+    required QuestCategory category,
+    String? requiredObject,
+    String? requiredDrawingSubject,
+    int requiredWords = 0,
+    int requiredDurationSeconds = 0,
+    double requiredDistanceMeters = 0.0,
+    bool requiresGPS = false,
+    bool requiresPhoto = false,
+    bool requiresDrawing = false,
+    bool requiresText = false,
+    bool requiresVideo = false,
+    bool requiresGameSession = false,
+  }) {
+    final list = <QuestRequirementModel>[];
+
+    if (requiresGPS || verificationType == QuestVerificationType.locationGps) {
+      list.add(const QuestRequirementModel(
+        title: 'Reach GPS Location',
+        description: 'Travel within the target waypoint coordinates',
+        requiresCameraProof: false,
+        requiresGpsLocation: true,
+      ));
+    }
+
+    if (requiredDistanceMeters > 0 || verificationType == QuestVerificationType.walkingGps) {
+      final distStr = requiredDistanceMeters >= 1000
+          ? '${(requiredDistanceMeters / 1000).toStringAsFixed(1)} km'
+          : '${requiredDistanceMeters.round()} m';
+      list.add(QuestRequirementModel(
+        title: 'Walk $distStr',
+        description: 'Cover at least $distStr of outdoor distance',
+        requiresCameraProof: false,
+        requiresGpsLocation: true,
+      ));
+    }
+
+    if (requiresDrawing || verificationType == QuestVerificationType.drawingCanvas) {
+      final subject = requiredDrawingSubject != null && requiredDrawingSubject.isNotEmpty
+          ? requiredDrawingSubject
+          : 'the requested scene';
+      list.add(QuestRequirementModel(
+        title: 'Draw $subject',
+        description: 'Create an original sketch on the digital canvas',
+        requiresCameraProof: false,
+        requiresGpsLocation: false,
+      ));
+    }
+
+    if (requiresText || verificationType == QuestVerificationType.writingText) {
+      final words = requiredWords > 0 ? requiredWords : 100;
+      list.add(QuestRequirementModel(
+        title: 'Write Journal Log',
+        description: 'Compose at least $words words in your explorer logbook',
+        requiresCameraProof: false,
+        requiresGpsLocation: false,
+      ));
+    }
+
+    if (requiresPhoto || verificationType == QuestVerificationType.photoProof) {
+      final target = requiredObject != null && requiredObject.isNotEmpty
+          ? requiredObject
+          : 'waypoint';
+      list.add(QuestRequirementModel(
+        title: 'Capture $target',
+        description: 'Take a clear, authentic photograph of a real $target',
+        requiresCameraProof: true,
+        requiresGpsLocation: requiresGPS,
+      ));
+    }
+
+    if (requiresVideo || verificationType == QuestVerificationType.timedVideo) {
+      final mins = requiredDurationSeconds > 0 ? (requiredDurationSeconds / 60).round() : 10;
+      list.add(QuestRequirementModel(
+        title: 'Record $mins Min Video Proof',
+        description: 'Record an uninterrupted verification video of the activity',
+        requiresCameraProof: true,
+        requiresGpsLocation: false,
+      ));
+    }
+
+    if (requiresGameSession || verificationType == QuestVerificationType.gameplayTime) {
+      final mins = requiredDurationSeconds > 0 ? (requiredDurationSeconds / 60).round() : 5;
+      list.add(QuestRequirementModel(
+        title: 'Engage for $mins Minutes',
+        description: 'Play and interact with the puzzle activity session',
+        requiresCameraProof: false,
+        requiresGpsLocation: false,
+      ));
+    }
+
+    if (list.isEmpty) {
+      list.add(const QuestRequirementModel(
+        title: 'Complete Quest Objective',
+        description: 'Follow the on-screen instructions to verify your adventure',
+        requiresCameraProof: false,
+        requiresGpsLocation: false,
+      ));
+    }
+
+    return list;
   }
 
   Map<String, dynamic> toJson() {
@@ -264,6 +430,16 @@ class QuestModel extends Quest {
       'requiresText': requiresText,
       'requiresGameSession': requiresGameSession,
       'requiredVerificationRules': requiredVerificationRules,
+      'sourceType': sourceType,
+      'source_type': sourceType,
+      'googlePlaceId': googlePlaceId,
+      'google_place_id': googlePlaceId,
+      'generationLatitude': generationLatitude,
+      'generation_latitude': generationLatitude,
+      'generationLongitude': generationLongitude,
+      'generation_longitude': generationLongitude,
+      'userId': userId,
+      'user_id': userId,
     };
   }
 
@@ -317,6 +493,11 @@ class QuestModel extends Quest {
       requiresText: entity.requiresText,
       requiresGameSession: entity.requiresGameSession,
       requiredVerificationRules: entity.requiredVerificationRules,
+      sourceType: entity.sourceType,
+      googlePlaceId: entity.googlePlaceId,
+      generationLatitude: entity.generationLatitude,
+      generationLongitude: entity.generationLongitude,
+      userId: entity.userId,
     );
   }
 }

@@ -72,7 +72,14 @@ $rad = (float)($quest['radius_meters'] ?? 150.0);
             </div>
 
             <h3 class="fs-4 mb-2"><?= e($quest['title']) ?></h3>
-            <p class="text-secondary mb-4"><?= nl2br(e($quest['description'])) ?></p>
+            <p class="text-secondary mb-3"><?= nl2br(e($quest['description'])) ?></p>
+
+            <?php if (!empty($quest['storyline'])): ?>
+            <div class="p-3 mb-3 rounded" style="background: rgba(138, 43, 226, 0.1); border-left: 3px solid var(--neon-purple);">
+                <div class="small text-purple fw-bold mb-1"><i class="fas fa-scroll me-1"></i> Quest Lore & Storyline</div>
+                <div class="small text-light fst-italic"><?= nl2br(e($quest['storyline'])) ?></div>
+            </div>
+            <?php endif; ?>
 
             <div class="row g-3 text-center mb-3">
                 <div class="col-4">
@@ -95,10 +102,44 @@ $rad = (float)($quest['radius_meters'] ?? 150.0);
                 </div>
             </div>
 
-            <div class="p-3 rounded small" style="background: var(--bg-surface); border: 1px solid var(--border-subtle);">
-                <div class="mb-2"><strong>Verification:</strong> <?= get_verification_badge($quest['verification_type'] ?? 'locationGps') ?></div>
+            <!-- Dynamic Verification Parameters Display -->
+            <div class="p-3 rounded small mb-3" style="background: var(--bg-surface); border: 1px solid var(--border-subtle);">
+                <div class="mb-2"><strong>Verification Mode:</strong> <?= get_verification_badge($quest['verification_type'] ?? 'locationGps') ?></div>
+                
+                <?php if (!empty($quest['required_object'])): ?>
+                <div class="mb-1"><i class="fas fa-camera text-cyan me-1"></i><strong>Target Object:</strong> <span class="badge bg-cyan text-dark"><?= e($quest['required_object']) ?></span></div>
+                <?php endif; ?>
+
+                <?php if (!empty($quest['required_drawing_subject'])): ?>
+                <div class="mb-1"><i class="fas fa-paint-brush text-purple me-1"></i><strong>Drawing Target:</strong> <span class="badge bg-purple text-light"><?= e($quest['required_drawing_subject']) ?></span></div>
+                <?php endif; ?>
+
+                <?php if (!empty($quest['required_words'])): ?>
+                <div class="mb-1"><i class="fas fa-file-alt text-gold me-1"></i><strong>Min Words:</strong> <?= (int)$quest['required_words'] ?> words</div>
+                <?php endif; ?>
+
+                <?php if (!empty($quest['required_duration_seconds'])): ?>
+                <div class="mb-1"><i class="fas fa-stopwatch text-success me-1"></i><strong>Duration:</strong> <?= (int)$quest['required_duration_seconds'] ?>s (<?= round((int)$quest['required_duration_seconds']/60, 1) ?> min)</div>
+                <?php endif; ?>
+
+                <?php if (!empty($quest['required_distance_meters'])): ?>
+                <div class="mb-1"><i class="fas fa-running text-info me-1"></i><strong>Distance:</strong> <?= (float)$quest['required_distance_meters'] ?>m</div>
+                <?php endif; ?>
+
                 <div class="mb-1"><strong>Location:</strong> <i class="fas fa-map-pin text-cyan ms-1 me-1"></i><?= e($quest['location_name'] ?? 'Local') ?> (<?= e($quest['place_type'] ?? 'landmark') ?>)</div>
+                <div class="mb-1"><strong>Icon Key:</strong> <code><?= e($quest['icon_key'] ?? 'landmark') ?></code></div>
                 <div><strong>UUID:</strong> <span class="font-monospace text-muted"><?= e($quest['id']) ?></span></div>
+            </div>
+
+            <!-- Active Rules Badges -->
+            <div class="d-flex flex-wrap gap-1">
+                <?php if (!empty($quest['requires_gps'])): ?><span class="badge bg-dark border border-secondary text-cyan"><i class="fas fa-satellite me-1"></i>GPS Check</span><?php endif; ?>
+                <?php if (!empty($quest['requires_photo'])): ?><span class="badge bg-dark border border-secondary text-warning"><i class="fas fa-camera me-1"></i>Photo Proof</span><?php endif; ?>
+                <?php if (!empty($quest['requires_fresh_photo'])): ?><span class="badge bg-dark border border-secondary text-danger"><i class="fas fa-shield-alt me-1"></i>No Gallery</span><?php endif; ?>
+                <?php if (!empty($quest['requires_drawing'])): ?><span class="badge bg-dark border border-secondary text-purple"><i class="fas fa-palette me-1"></i>Drawing</span><?php endif; ?>
+                <?php if (!empty($quest['requires_text'])): ?><span class="badge bg-dark border border-secondary text-gold"><i class="fas fa-pen me-1"></i>Text Log</span><?php endif; ?>
+                <?php if (!empty($quest['requires_video'])): ?><span class="badge bg-dark border border-secondary text-info"><i class="fas fa-video me-1"></i>Video</span><?php endif; ?>
+                <?php if (!empty($quest['requires_game_session'])): ?><span class="badge bg-dark border border-secondary text-success"><i class="fas fa-gamepad me-1"></i>Game</span><?php endif; ?>
             </div>
         </div>
     </div>

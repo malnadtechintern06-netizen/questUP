@@ -9,7 +9,7 @@ abstract class IQuestLocalDataSource {
   Future<List<QuestModel>> getQuestsForLocation(
     double userLat,
     double userLon, {
-    double maxRadiusMeters = 50000.0,
+    double maxRadiusMeters = 10000.0,
   });
   Future<void> saveQuests(List<QuestModel> quests);
   Future<QuestModel?> getQuestById(String id);
@@ -62,24 +62,21 @@ class QuestLocalDataSource implements IQuestLocalDataSource {
       localQuestsMap[q.id] = QuestModel.fromEntity(q.copyWith(isCompleted: completedIds.contains(q.id)));
     }
 
-    // 2. Base landmark / proximity quests (8 quests)
-    final defaultLandmarks = await _placesDiscoveryService.generateFamousPlaceQuests(
-      userLat: 12.9716,
-      userLon: 77.5946,
-      searchRadiusMeters: 50000.0,
-      completedIds: completedIds,
-    );
-    for (final q in defaultLandmarks) {
-      localQuestsMap[q.id] = q;
-    }
-
-    // 3. Any additional saved local quests from storage
+    // 2. Any additional saved local quests from storage (ignoring stale Bangalore/D'Souza placeholder quests)
     if (jsonList != null && jsonList is List) {
       for (final item in jsonList) {
         if (item is Map<String, dynamic>) {
           try {
             final q = QuestModel.fromJson(item);
-            if (q.id.startsWith('local_') || q.id.startsWith('quest_act_')) {
+            final titleLower = q.title.toLowerCase();
+            final locLower = q.locationName.toLowerCase();
+            if (titleLower.contains("d'souza") ||
+                titleLower.contains("sports complex") ||
+                titleLower.contains("#99") ||
+                locLower.contains("d'souza")) {
+              continue; // Exclude unwanted placeholder quests
+            }
+            if (q.id.isNotEmpty) {
               localQuestsMap[q.id] = QuestModel.fromEntity(q.copyWith(isCompleted: completedIds.contains(q.id)));
             }
           } catch (_) {}
@@ -94,7 +91,7 @@ class QuestLocalDataSource implements IQuestLocalDataSource {
   Future<List<QuestModel>> getQuestsForLocation(
     double userLat,
     double userLon, {
-    double maxRadiusMeters = 50000.0,
+    double maxRadiusMeters = 10000.0,
   }) async {
     final completedIds = await _getActiveUserCompletedQuestIds();
 
@@ -129,11 +126,36 @@ class QuestLocalDataSource implements IQuestLocalDataSource {
   @override
   Future<QuestModel?> getQuestById(String id) async {
     final all = await getQuests();
+    final match = all.where((q) => q.id == id).firstOrNull;
+    if (match != null) return match;
+
+    // Fallback: check storage directly in case it wasn't in getQuests()
     try {
-      return all.firstWhere((q) => q.id == id);
-    } catch (_) {
-      return null;
-    }
+      final jsonList = await _storage.getJson(AppConstants.keyQuests);
+      if (jsonList != null && jsonList is List) {
+        final completedIds = await _getActiveUserCompletedQuestIds();
+        for (final item in jsonList) {
+          if (item is Map<String, dynamic>) {
+            final q = QuestModel.fromJson(item);
+            if (q.id == id) {
+              final titleLower = q.title.toLowerCase();
+              final locLower = q.locationName.toLowerCase();
+              if (titleLower.contains("d'souza") ||
+                  titleLower.contains("sports complex") ||
+                  titleLower.contains("#99") ||
+                  locLower.contains("d'souza")) {
+                return null;
+              }
+              return QuestModel.fromEntity(
+                q.copyWith(isCompleted: completedIds.contains(q.id)),
+              );
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    return null;
   }
 
   @override

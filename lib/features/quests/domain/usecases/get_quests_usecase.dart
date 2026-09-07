@@ -6,7 +6,15 @@ class GetQuestsUseCase {
 
   const GetQuestsUseCase(this._repository);
 
-  Future<List<Quest>> call() async {
-    return await _repository.getQuests();
+  Future<List<Quest>> call({
+    double? userLat,
+    double? userLon,
+    String? userId,
+  }) async {
+    return await _repository.getQuests(
+      userLat: userLat,
+      userLon: userLon,
+      userId: userId,
+    );
   }
 }

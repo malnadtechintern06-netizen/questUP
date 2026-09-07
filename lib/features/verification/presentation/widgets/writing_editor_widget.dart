@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:quest_up/app/theme/app_colors.dart';
 import 'package:quest_up/app/theme/app_typography.dart';
@@ -29,15 +28,7 @@ class _WritingEditorWidgetState extends State<WritingEditorWidget> {
   final TextEditingController _controller = TextEditingController();
   int _wordCount = 0;
   int _lineCount = 0;
-
-  // Anti-Cheat and Originality Tracking
-  String _previousText = '';
-  int _keystrokeCount = 0;
-  int _pastedCharactersCount = 0;
-  bool _isPastedDetected = false;
-  int _activeTypingSeconds = 0;
-  Timer? _activeTypingTimer;
-  DateTime? _lastTypingTimestamp;
+  int _characterCount = 0;
 
   @override
   void initState() {
@@ -47,109 +38,83 @@ class _WritingEditorWidgetState extends State<WritingEditorWidget> {
 
   @override
   void dispose() {
-    _activeTypingTimer?.cancel();
     _controller.removeListener(_onTextChangedListener);
     _controller.dispose();
     super.dispose();
   }
 
-  void _startTypingTimerIfNeeded() {
-    _lastTypingTimestamp = DateTime.now();
-    if (_activeTypingTimer == null || !_activeTypingTimer!.isActive) {
-      _activeTypingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        if (_lastTypingTimestamp != null &&
-            DateTime.now().difference(_lastTypingTimestamp!).inSeconds < 4) {
-          setState(() {
-            _activeTypingSeconds++;
-          });
-        }
-      });
-    }
-  }
-
   void _onTextChangedListener() {
     final currentText = _controller.text;
     final text = currentText.trim();
-    final words = text.isEmpty ? 0 : text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
-    final lines = text.isEmpty ? 0 : text.split('\n').length;
+    final words = text.isEmpty
+        ? 0
+        : text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
+    final lines = text.isEmpty ? 0 : currentText.split('\n').length;
+    final chars = currentText.length;
 
-    // Detect large bursts inserted in a single event (> 20 characters added in one go)
-    final charDelta = currentText.length - _previousText.length;
-    if (widget.enableAntiCheat) {
-      _startTypingTimerIfNeeded();
-
-      if (charDelta > 0) {
-        if (charDelta > 20 && _previousText.isNotEmpty) {
-          // Large burst insertion detected: flagged as copy-paste from external app (e.g. ChatGPT)
-          _isPastedDetected = true;
-          _pastedCharactersCount += charDelta;
-        } else {
-          _keystrokeCount += charDelta;
-        }
-      } else if (currentText.isEmpty) {
-        // Reset cheat flag on clear
-        _isPastedDetected = false;
-        _pastedCharactersCount = 0;
-        _keystrokeCount = 0;
-      }
-    }
-
-    _previousText = currentText;
-
-    final isAuthentic = !_isPastedDetected && _pastedCharactersCount <= 10;
-    final isSatisfied = (widget.requiredWords == 0 || words >= widget.requiredWords) &&
-        (widget.requiredLines == 0 || lines >= widget.requiredLines) &&
-        isAuthentic;
+    final isSatisfied = (widget.requiredWords <= 0 || words >= widget.requiredWords) &&
+        (widget.requiredLines <= 0 || lines >= widget.requiredLines) &&
+        text.isNotEmpty;
 
     setState(() {
       _wordCount = words;
       _lineCount = lines;
+      _characterCount = chars;
     });
 
     widget.onTextChanged(text, words, isSatisfied);
-    widget.onDetailedTextChanged?.call(text, words, isSatisfied, isAuthentic, _pastedCharactersCount);
+    widget.onDetailedTextChanged?.call(text, words, isSatisfied, true, 0);
   }
 
-  void _clearAndReset() {
+  void _clearText() {
     _controller.clear();
     setState(() {
-      _isPastedDetected = false;
-      _pastedCharactersCount = 0;
-      _keystrokeCount = 0;
-      _activeTypingSeconds = 0;
+      _wordCount = 0;
+      _lineCount = 0;
+      _characterCount = 0;
     });
+    widget.onTextChanged('', 0, false);
+    widget.onDetailedTextChanged?.call('', 0, false, true, 0);
   }
 
   @override
   Widget build(BuildContext context) {
+    final targetWords = widget.requiredWords > 0 ? widget.requiredWords : 1;
     final progress = widget.requiredWords > 0
-        ? (_wordCount / widget.requiredWords).clamp(0.0, 1.0)
-        : 1.0;
-    final isWordTargetMet = widget.requiredWords == 0 || _wordCount >= widget.requiredWords;
-    final isAuthentic = !_isPastedDetected && _pastedCharactersCount <= 10;
-    final isSatisfied = isWordTargetMet && isAuthentic;
+        ? (_wordCount / targetWords).clamp(0.0, 1.0)
+        : (_wordCount > 0 ? 1.0 : 0.0);
+    final isSatisfied = (widget.requiredWords <= 0 || _wordCount >= widget.requiredWords) &&
+        (widget.requiredLines <= 0 || _lineCount >= widget.requiredLines) &&
+        _controller.text.trim().isNotEmpty;
 
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: _isPastedDetected
-              ? AppColors.accentDanger
-              : (isSatisfied ? AppColors.accentSuccess : AppColors.border),
-          width: (_isPastedDetected || isSatisfied) ? 1.5 : 1.0,
+          color: isSatisfied ? AppColors.accentSuccess : AppColors.borderBright,
+          width: isSatisfied ? 1.8 : 1.2,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: isSatisfied
+                ? AppColors.accentSuccess.withValues(alpha: 0.15)
+                : Colors.black.withValues(alpha: 0.25),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Header Bar with Word Count Meter & Anti-Cheat Shield Badge
+          // Header Bar with Word Count Meter & Status
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: const BoxDecoration(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
               color: AppColors.surfaceElevated,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-              border: Border(bottom: BorderSide(color: AppColors.border)),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(19)),
+              border: const Border(bottom: BorderSide(color: AppColors.border)),
             ),
             child: Column(
               children: [
@@ -160,21 +125,20 @@ class _WritingEditorWidgetState extends State<WritingEditorWidget> {
                       child: Row(
                         children: [
                           Icon(
-                            _isPastedDetected
-                                ? Icons.warning_amber_rounded
-                                : (isSatisfied ? Icons.check_circle_rounded : Icons.edit_note_rounded),
-                            color: _isPastedDetected
-                                ? AppColors.accentDanger
-                                : (isSatisfied ? AppColors.accentSuccess : AppColors.primary),
-                            size: 20,
+                            isSatisfied ? Icons.check_circle_rounded : Icons.edit_note_rounded,
+                            color: isSatisfied ? AppColors.accentSuccess : AppColors.primary,
+                            size: 22,
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               'Word Counter',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: AppTypography.titleMedium.copyWith(fontSize: 14),
+                              style: AppTypography.titleMedium.copyWith(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ],
@@ -182,123 +146,62 @@ class _WritingEditorWidgetState extends State<WritingEditorWidget> {
                     ),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                       decoration: BoxDecoration(
-                        color: _isPastedDetected
-                            ? AppColors.accentDanger.withValues(alpha: 0.15)
-                            : (isSatisfied
-                                ? AppColors.accentSuccess.withValues(alpha: 0.15)
-                                : AppColors.surface),
-                        borderRadius: BorderRadius.circular(10),
+                        color: isSatisfied
+                            ? AppColors.accentSuccess.withValues(alpha: 0.18)
+                            : AppColors.surface,
+                        borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: _isPastedDetected
-                              ? AppColors.accentDanger
-                              : (isSatisfied ? AppColors.accentSuccess : AppColors.border),
+                          color: isSatisfied ? AppColors.accentSuccess : AppColors.border,
+                          width: 1.2,
                         ),
                       ),
                       child: Text(
                         '$_wordCount / ${widget.requiredWords} words',
                         style: AppTypography.caption.copyWith(
-                          color: _isPastedDetected
-                              ? AppColors.accentDanger
-                              : (isSatisfied ? AppColors.accentSuccess : AppColors.textPrimary),
-                          fontWeight: FontWeight.bold,
+                          color: isSatisfied ? AppColors.accentSuccess : AppColors.textPrimary,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(8),
                   child: LinearProgressIndicator(
                     value: progress,
                     backgroundColor: AppColors.border,
                     valueColor: AlwaysStoppedAnimation<Color>(
-                      _isPastedDetected
-                          ? AppColors.accentDanger
-                          : (isSatisfied ? AppColors.accentSuccess : AppColors.primary),
+                      isSatisfied ? AppColors.accentSuccess : AppColors.primary,
                     ),
-                    minHeight: 6,
+                    minHeight: 7,
                   ),
                 ),
               ],
             ),
           ),
 
-          // Anti-Cheat Warning Banner if pasted content is detected
-          if (_isPastedDetected)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              margin: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.accentDanger.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.accentDanger.withValues(alpha: 0.5)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.shield_outlined, color: AppColors.accentDanger, size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Anti-Cheat Security Alert: Copy-Paste Detected',
-                          style: AppTypography.caption.copyWith(
-                            color: AppColors.accentDanger,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Pasting text generated from ChatGPT, notes, or web sources is not permitted. Please type your submission directly in the editor to verify originality and earn quest rewards.',
-                    style: AppTypography.caption.copyWith(
-                      color: AppColors.textPrimary,
-                      fontSize: 11,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: InkWell(
-                      onTap: _clearAndReset,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.accentDanger,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Text(
-                          'Clear & Type Authentically',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
           // Multi-line Text Field
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: TextField(
               controller: _controller,
-              maxLines: 8,
-              minLines: 5,
-              style: AppTypography.bodyLarge.copyWith(height: 1.5),
+              maxLines: null,
+              minLines: 6,
+              keyboardType: TextInputType.multiline,
+              textCapitalization: TextCapitalization.sentences,
+              style: AppTypography.bodyLarge.copyWith(height: 1.55, fontSize: 15),
               decoration: InputDecoration(
-                hintText: widget.promptHint,
-                hintStyle: AppTypography.bodyMedium.copyWith(color: AppColors.textMuted),
+                hintText: widget.promptHint.isNotEmpty
+                    ? widget.promptHint
+                    : 'Write your thoughts, description, or essay response here...',
+                hintStyle: AppTypography.bodyMedium.copyWith(
+                  color: AppColors.textMuted,
+                  height: 1.5,
+                ),
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
@@ -308,51 +211,12 @@ class _WritingEditorWidgetState extends State<WritingEditorWidget> {
             ),
           ),
 
-          // Anti-Cheat Status & Live Typing Telemetry Bar
+          // Footer Telemetry & Status Bar
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: const BoxDecoration(
               color: AppColors.surfaceElevated,
-              border: Border(top: BorderSide(color: AppColors.border)),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  _isPastedDetected
-                      ? Icons.lock_clock_rounded
-                      : Icons.verified_user_rounded,
-                  size: 14,
-                  color: _isPastedDetected ? AppColors.accentDanger : AppColors.accentSuccess,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    _isPastedDetected
-                        ? 'External Paste Detected (Blocked)'
-                        : 'Authentic Live Typing Verified',
-                    style: AppTypography.caption.copyWith(
-                      color: _isPastedDetected ? AppColors.accentDanger : AppColors.accentSuccess,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
-                if (_activeTypingSeconds > 0)
-                  Text(
-                    '⏱️ ${_activeTypingSeconds}s active',
-                    style: AppTypography.caption.copyWith(
-                      color: AppColors.textMuted,
-                      fontSize: 10,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-
-          // Footer Info Bar
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: const BoxDecoration(
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(19)),
               border: Border(top: BorderSide(color: AppColors.border)),
             ),
             child: Row(
@@ -360,42 +224,56 @@ class _WritingEditorWidgetState extends State<WritingEditorWidget> {
               children: [
                 Expanded(
                   child: Text(
-                    'Lines: $_lineCount | Chars: ${_controller.text.length} | Keystrokes: $_keystrokeCount',
+                    'Words: $_wordCount | Lines: $_lineCount | Chars: $_characterCount',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppTypography.caption.copyWith(color: AppColors.textMuted),
+                    style: AppTypography.caption.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 11,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
-                if (_isPastedDetected)
-                  Text(
-                    'Paste Blocked',
-                    style: AppTypography.caption.copyWith(
-                      color: AppColors.accentDanger,
-                      fontWeight: FontWeight.bold,
+                if (_controller.text.isNotEmpty)
+                  InkWell(
+                    onTap: _clearText,
+                    borderRadius: BorderRadius.circular(6),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      child: Text(
+                        'Clear',
+                        style: AppTypography.caption.copyWith(
+                          color: AppColors.accentDanger,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                        ),
+                      ),
                     ),
-                  )
-                else if (isSatisfied)
+                  ),
+                const SizedBox(width: 6),
+                if (isSatisfied)
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.check, size: 14, color: AppColors.accentSuccess),
+                      const Icon(Icons.check_circle_rounded, size: 15, color: AppColors.accentSuccess),
                       const SizedBox(width: 4),
                       Text(
                         'Requirement Met',
                         style: AppTypography.caption.copyWith(
                           color: AppColors.accentSuccess,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 11.5,
                         ),
                       ),
                     ],
                   )
                 else
                   Text(
-                    '${widget.requiredWords - _wordCount} words left',
+                    '${(widget.requiredWords - _wordCount).clamp(0, widget.requiredWords)} words left',
                     style: AppTypography.caption.copyWith(
                       color: AppColors.secondary,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 11.5,
                     ),
                   ),
               ],

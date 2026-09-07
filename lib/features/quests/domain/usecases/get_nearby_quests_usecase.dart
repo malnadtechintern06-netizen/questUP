@@ -10,11 +10,13 @@ class GetNearbyQuestsUseCase {
     required double userLat,
     required double userLon,
     double maxDistanceMeters = 50000,
+    String? userId,
   }) async {
     return await _repository.getNearbyQuests(
       userLat: userLat,
       userLon: userLon,
       maxDistanceMeters: maxDistanceMeters,
+      userId: userId,
     );
   }
 }

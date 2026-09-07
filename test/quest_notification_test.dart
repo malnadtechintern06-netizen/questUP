@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quest_up/features/notifications/domain/entities/app_notification.dart';
 import 'package:quest_up/features/notifications/presentation/providers/notification_providers.dart';
-import 'package:quest_up/features/quests/domain/entities/quest.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 void main() {

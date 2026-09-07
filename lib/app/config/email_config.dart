@@ -7,6 +7,9 @@ class EmailConfig {
   final String fromEmail;
   final bool isSsl;
 
+  final bool enableBackendApi;
+  final String? customApiUrl;
+
   const EmailConfig({
     required this.host,
     required this.port,
@@ -15,6 +18,8 @@ class EmailConfig {
     this.fromName = 'QuestUP Security',
     this.fromEmail = 'auth@questup.app',
     this.isSsl = false,
+    this.enableBackendApi = true,
+    this.customApiUrl,
   });
 
   /// Factory with defaults, supporting compile-time Dart environment overrides:
@@ -23,6 +28,7 @@ class EmailConfig {
   /// --dart-define=SMTP_USER=your_email@gmail.com
   /// --dart-define=SMTP_PASS=your_app_password
   /// --dart-define=SMTP_FROM=security@questup.app
+  /// --dart-define=ENABLE_BACKEND_EMAIL_API=true
   factory EmailConfig.defaults() {
     const host = String.fromEnvironment('SMTP_HOST', defaultValue: 'smtp.gmail.com');
     const portString = String.fromEnvironment('SMTP_PORT', defaultValue: '587');
@@ -32,6 +38,8 @@ class EmailConfig {
     const fromName = String.fromEnvironment('SMTP_FROM_NAME', defaultValue: 'QuestUP Security');
     const fromEmail = String.fromEnvironment('SMTP_FROM_EMAIL', defaultValue: 'security@questup.app');
     const isSsl = bool.fromEnvironment('SMTP_SSL', defaultValue: false);
+    const enableBackendApi = bool.fromEnvironment('ENABLE_BACKEND_EMAIL_API', defaultValue: true);
+    const customApiUrl = String.fromEnvironment('EMAIL_API_URL', defaultValue: '');
 
     return EmailConfig(
       host: host,
@@ -41,10 +49,13 @@ class EmailConfig {
       fromName: fromName,
       fromEmail: fromEmail,
       isSsl: isSsl,
+      enableBackendApi: enableBackendApi,
+      customApiUrl: customApiUrl.isNotEmpty ? customApiUrl : null,
     );
   }
 
-  bool get isConfigured => username.isNotEmpty && password.isNotEmpty;
+  bool get isSmtpConfigured => username.isNotEmpty && password.isNotEmpty;
+  bool get isConfigured => isSmtpConfigured || enableBackendApi;
 
   EmailConfig copyWith({
     String? host,
@@ -54,6 +65,8 @@ class EmailConfig {
     String? fromName,
     String? fromEmail,
     bool? isSsl,
+    bool? enableBackendApi,
+    String? customApiUrl,
   }) {
     return EmailConfig(
       host: host ?? this.host,
@@ -63,6 +76,8 @@ class EmailConfig {
       fromName: fromName ?? this.fromName,
       fromEmail: fromEmail ?? this.fromEmail,
       isSsl: isSsl ?? this.isSsl,
+      enableBackendApi: enableBackendApi ?? this.enableBackendApi,
+      customApiUrl: customApiUrl ?? this.customApiUrl,
     );
   }
 }

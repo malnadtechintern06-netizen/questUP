@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../app/config/app_constants.dart';
+import '../../../../app/config/mysql_config.dart';
 import '../../../../core/services/mysql_database_service.dart';
 import '../../../../core/storage/local_storage_service.dart';
 import '../../../profile/data/models/user_profile_model.dart';
@@ -29,23 +31,27 @@ class DataSyncService {
 
     try {
       debugPrint('[DataSync] Starting synchronization check with MySQL...');
+
+      // 1. Sync local users to Cloud MySQL via REST API
+      await _syncLocalUsersViaRestApi();
+
       final isConnected = await _dbService.connect();
       if (!isConnected) {
-        debugPrint('[DataSync] MySQL not reachable currently. Will retry on next session.');
+        debugPrint('[DataSync] Direct MySQL socket not reachable currently. REST sync completed.');
         _isSyncing = false;
         return;
       }
 
-      // 1. Synchronize Default Quests Catalog into MySQL if empty
+      // 2. Synchronize Default Quests Catalog into MySQL if empty
       await _syncQuestsCatalog();
 
-      // 2. Synchronize Local Users into MySQL
+      // 3. Synchronize Local Users into MySQL
       await _syncLocalUsers();
 
-      // 3. Synchronize Active User Profile into MySQL
+      // 4. Synchronize Active User Profile into MySQL
       await _syncUserProfile();
 
-      // 4. Migrate Historical Completed Quests to MySQL
+      // 5. Migrate Historical Completed Quests to MySQL
       await _syncCompletedQuests();
 
       debugPrint('[DataSync] Full synchronization with MySQL questup_db completed successfully!');
@@ -53,6 +59,58 @@ class DataSyncService {
       debugPrint('[DataSync] Synchronization error: $e');
     } finally {
       _isSyncing = false;
+    }
+  }
+
+  Future<void> _syncLocalUsersViaRestApi() async {
+    if (kIsWeb) return;
+
+    try {
+      final raw = await _storage.getJson(AppConstants.keyLocalUsers);
+      if (raw is! Map<String, dynamic> || raw.isEmpty) return;
+
+      final usersList = <Map<String, dynamic>>[];
+      for (final entry in raw.entries) {
+        final userData = entry.value;
+        if (userData is Map<String, dynamic>) {
+          final email = (userData['email'] as String?)?.trim().toLowerCase();
+          if (email != null && email.isNotEmpty) {
+            usersList.add(userData);
+          }
+        }
+      }
+
+      if (usersList.isEmpty) return;
+
+      final payload = jsonEncode({'users': usersList});
+      final candidateUrls = MySqlConfig.apiBaseUrls.map((b) => '$b/auth/sync.php').toList();
+
+      for (final urlStr in candidateUrls) {
+        HttpClient? client;
+        try {
+          final uri = Uri.parse(urlStr);
+          client = HttpClient()
+            ..connectionTimeout = const Duration(milliseconds: 2500)
+            ..badCertificateCallback = ((cert, host, port) => true);
+
+          final request = await client.postUrl(uri);
+          request.headers.set('Content-Type', 'application/json; charset=utf-8');
+          request.headers.set('Accept', 'application/json, */*');
+          request.headers.set('User-Agent', 'QuestUP-App/1.0');
+          request.write(payload);
+
+          final response = await request.close().timeout(const Duration(milliseconds: 3000));
+          if (response.statusCode == 200 || response.statusCode == 201) {
+            debugPrint('[DataSync REST] ✅ Synced ${usersList.length} local users via REST API: $urlStr');
+            break;
+          }
+        } catch (_) {
+        } finally {
+          client?.close(force: true);
+        }
+      }
+    } catch (e) {
+      debugPrint('[DataSync REST] Error during REST user sync: $e');
     }
   }
 

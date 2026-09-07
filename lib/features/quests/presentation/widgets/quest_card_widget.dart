@@ -193,6 +193,55 @@ class QuestCardWidget extends StatelessWidget {
                         ),
                       ),
                     ),
+                    // Source Type Badge: Dynamic 50km Location vs Global Admin
+                    if (quest.sourceType == 'admin')
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.secondary.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppColors.secondary.withValues(alpha: 0.6)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.stars_rounded, size: 11, color: AppColors.secondary),
+                            const SizedBox(width: 3),
+                            Text(
+                              'GLOBAL ADMIN',
+                              style: AppTypography.badge.copyWith(
+                                color: AppColors.secondary,
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (quest.sourceType == 'location_generated' || quest.sourceType == 'location')
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentLocation.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppColors.accentLocation.withValues(alpha: 0.6)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.place_rounded, size: 11, color: AppColors.accentLocation),
+                            const SizedBox(width: 3),
+                            Text(
+                              '10KM LOCAL',
+                              style: AppTypography.badge.copyWith(
+                                color: AppColors.accentLocation,
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     // Completed status or Distance
                     if (quest.isCompleted)
                       Container(

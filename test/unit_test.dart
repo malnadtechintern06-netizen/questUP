@@ -114,7 +114,19 @@ class MockQuestLocalDataSource implements IQuestLocalDataSource {
 
 class MockQuestMySqlDataSource implements IQuestMySqlDataSource {
   @override
-  Future<List<QuestModel>> fetchQuestsFromMySql() async => [];
+  Future<List<QuestModel>> fetchQuestsFromMySql({
+    String? userId,
+    double? userLat,
+    double? userLon,
+  }) async => [];
+
+  @override
+  Future<List<QuestModel>> generateLocationQuests({
+    required double latitude,
+    required double longitude,
+    String? userId,
+    int? radiusMeters,
+  }) async => [];
 
   @override
   Future<void> saveQuestToMySql(QuestModel quest) async {}

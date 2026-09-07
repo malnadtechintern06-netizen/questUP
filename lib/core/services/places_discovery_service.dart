@@ -1134,23 +1134,6 @@ out center 30;
           placeName: '$cleanArea Central Market',
         ),
       ),
-      DiscoveredPlace(
-        id: 'local_sports_${gridLat}_$gridLon',
-        rawPlaceId: 'local_stadium_${gridLat}_$gridLon',
-        name: '$cleanArea Community Sports Complex & Arena',
-        type: 'sports',
-        types: const ['sports', 'leisure'],
-        specificCategory: 'sports',
-        latitude: userLat - 0.0042,
-        longitude: userLon + 0.0038,
-        category: QuestCategory.fitness,
-        description: 'An expansive outdoor sports arena and athletics ground in $cleanArea.',
-        address: 'Sports Complex Road, $cleanArea',
-        imageUrl: QuestImageResolver.resolvePlaceCategoryImageUrl(
-          specificCategory: 'sports',
-          placeName: '$cleanArea Sports Arena',
-        ),
-      ),
     ];
   }
 }

@@ -98,6 +98,8 @@ class _ForgotPasswordDialogState extends State<ForgotPasswordDialog> {
                         Expanded(
                           child: Text(
                             'Reset Password',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: AppTypography.titleLarge,
                           ),
                         ),

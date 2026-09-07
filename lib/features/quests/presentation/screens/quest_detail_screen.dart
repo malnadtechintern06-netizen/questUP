@@ -48,13 +48,58 @@ class QuestDetailScreen extends ConsumerWidget {
           if (quest == null) {
             return Scaffold(
               backgroundColor: AppColors.background,
-              appBar: AppBar(backgroundColor: Colors.transparent),
-              body: const Center(child: Text('Quest Not Found')),
+              appBar: AppBar(
+                backgroundColor: Colors.transparent,
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                  onPressed: () => context.pop(),
+                ),
+              ),
+              body: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.search_off_rounded, size: 64, color: AppColors.textMuted),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Quest Not Found',
+                        style: AppTypography.titleLarge.copyWith(color: Colors.white),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'This quest could not be loaded. Please check your connection and try again.',
+                        textAlign: TextAlign.center,
+                        style: AppTypography.bodyMedium.copyWith(color: AppColors.textMuted),
+                      ),
+                      const SizedBox(height: 24),
+                      ElevatedButton.icon(
+                        onPressed: () => ref.refresh(singleQuestProvider(questId)),
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             );
           }
 
-          final isWithinRadius = quest.isWithinAllowedRadius;
-          final distStr = DistanceCalculator.formatDistance(quest.distanceMeters ?? 0);
+          double? liveDistance;
+          if (activeGps != null && quest.latitude != 0.0 && quest.longitude != 0.0) {
+            liveDistance = DistanceCalculator.calculateDistanceMeters(
+              lat1: activeGps.latitude,
+              lon1: activeGps.longitude,
+              lat2: quest.latitude,
+              lon2: quest.longitude,
+            );
+            debugPrint('[QuestUP Location Quest] Distance to destination: ${liveDistance.round()} m');
+          }
+          final effectiveDistance = liveDistance ?? quest.distanceMeters ?? 0.0;
+          final isWithinRadius = (quest.latitude == 0.0 && quest.longitude == 0.0) ||
+              (effectiveDistance <= (quest.radiusMeters > 0 ? quest.radiusMeters : 100.0));
+          final distStr = DistanceCalculator.formatDistance(effectiveDistance);
 
           return Stack(
             children: [
@@ -159,20 +204,20 @@ class QuestDetailScreen extends ConsumerWidget {
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                                     decoration: BoxDecoration(
-                                      color: AppColors.primary.withValues(alpha: 0.25),
+                                      color: AppColors.accentSuccess.withValues(alpha: 0.25),
                                       borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: AppColors.primary),
+                                      border: Border.all(color: AppColors.accentSuccess),
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        const Icon(Icons.my_location_rounded,
-                                            size: 13, color: AppColors.primary),
+                                        const Icon(Icons.location_on_rounded,
+                                            size: 13, color: AppColors.accentSuccess),
                                         const SizedBox(width: 4),
                                         Text(
-                                          'IN VERIFICATION RANGE',
+                                          'DESTINATION REACHED',
                                           style: AppTypography.badge.copyWith(
-                                            color: AppColors.primary,
+                                            color: AppColors.accentSuccess,
                                             fontSize: 10,
                                           ),
                                         ),
@@ -305,10 +350,10 @@ class QuestDetailScreen extends ConsumerWidget {
                   child: Premium3DButton(
                     text: quest.isCompleted
                         ? 'MISSION ACCOMPLISHED'
-                        : (isWithinRadius ? 'START VERIFICATION' : 'APPROACH LOCATION & VERIFY'),
+                        : (isWithinRadius ? 'START VERIFICATION (DESTINATION REACHED)' : 'APPROACH LOCATION & VERIFY'),
                     icon: quest.isCompleted
                         ? Icons.verified_rounded
-                        : (isWithinRadius ? Icons.qr_code_scanner_rounded : Icons.near_me_rounded),
+                        : (isWithinRadius ? Icons.check_circle_rounded : Icons.near_me_rounded),
                     color: quest.isCompleted
                         ? AppColors.accentSuccess
                         : (isWithinRadius ? AppColors.primary : AppColors.secondary),
@@ -334,12 +379,16 @@ class QuestDetailScreen extends ConsumerWidget {
       children: [
         Icon(icon, size: 16, color: AppColors.primary),
         const SizedBox(width: 8),
-        Text(
-          title,
-          style: AppTypography.badge.copyWith(
-            color: AppColors.primary,
-            fontSize: 11,
-            letterSpacing: 1.2,
+        Expanded(
+          child: Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTypography.badge.copyWith(
+              color: AppColors.primary,
+              fontSize: 11,
+              letterSpacing: 1.2,
+            ),
           ),
         ),
       ],
@@ -377,11 +426,15 @@ class QuestDetailScreen extends ConsumerWidget {
             children: [
               const Icon(Icons.workspace_premium_rounded, size: 16, color: AppColors.secondary),
               const SizedBox(width: 6),
-              Text(
-                'MISSION REWARDS VAULT',
-                style: AppTypography.badge.copyWith(
-                  color: AppColors.secondary,
-                  fontSize: 11,
+              Expanded(
+                child: Text(
+                  'MISSION REWARDS VAULT',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.badge.copyWith(
+                    color: AppColors.secondary,
+                    fontSize: 11,
+                  ),
                 ),
               ),
             ],
@@ -392,7 +445,7 @@ class QuestDetailScreen extends ConsumerWidget {
               // XP Reward Card
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                   decoration: BoxDecoration(
                     color: AppColors.surfaceElevated,
                     borderRadius: BorderRadius.circular(14),
@@ -401,42 +454,46 @@ class QuestDetailScreen extends ConsumerWidget {
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(7),
                         decoration: BoxDecoration(
                           color: AppColors.accentXp.withValues(alpha: 0.15),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.bolt_rounded, size: 20, color: AppColors.accentXp),
+                        child: const Icon(Icons.bolt_rounded, size: 18, color: AppColors.accentXp),
                       ),
-                      const SizedBox(width: 10),
-                      Flexible(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '+${quest.xpReward} XP',
-                              style: AppTypography.titleMedium.copyWith(
-                                color: AppColors.accentXp,
-                                fontWeight: FontWeight.w900,
-                                fontSize: 16,
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '+${quest.xpReward} XP',
+                                style: AppTypography.titleMedium.copyWith(
+                                  color: AppColors.accentXp,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 15,
+                                ),
                               ),
-                            ),
-                            Text(
-                              'Rank Boost',
-                              style: AppTypography.caption.copyWith(fontSize: 10),
-                            ),
-                          ],
+                              Text(
+                                'Rank Boost',
+                                style: AppTypography.caption.copyWith(fontSize: 10),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               // Coins Reward Card
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                   decoration: BoxDecoration(
                     color: AppColors.surfaceElevated,
                     borderRadius: BorderRadius.circular(14),
@@ -445,32 +502,36 @@ class QuestDetailScreen extends ConsumerWidget {
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(7),
                         decoration: BoxDecoration(
                           color: AppColors.secondary.withValues(alpha: 0.15),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(Icons.monetization_on_rounded,
-                            size: 20, color: AppColors.secondary),
+                            size: 18, color: AppColors.secondary),
                       ),
-                      const SizedBox(width: 10),
-                      Flexible(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '+${quest.coinReward} Coins',
-                              style: AppTypography.titleMedium.copyWith(
-                                color: AppColors.secondary,
-                                fontWeight: FontWeight.w900,
-                                fontSize: 16,
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '+${quest.coinReward} Coins',
+                                style: AppTypography.titleMedium.copyWith(
+                                  color: AppColors.secondary,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 15,
+                                ),
                               ),
-                            ),
-                            Text(
-                              'Store Currency',
-                              style: AppTypography.caption.copyWith(fontSize: 10),
-                            ),
-                          ],
+                              Text(
+                                'Store Currency',
+                                style: AppTypography.caption.copyWith(fontSize: 10),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],

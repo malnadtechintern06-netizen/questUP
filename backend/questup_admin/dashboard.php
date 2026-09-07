@@ -172,7 +172,89 @@ try {
         <div>
             <div class="kpi-value text-gold"><?= format_number($totalCoinsAwarded) ?></div>
             <div class="kpi-label">Total Coins Awarded</div>
-fl                                    <td><?= get_status_badge($c['status'] ?? 'verified') ?></td>
+        </div>
+    </div>
+</div>
+
+<!-- Charts & Analytics Row -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-8">
+        <div class="glass-card">
+            <div class="card-header-clean">
+                <h2 class="card-title-clean">
+                    <i class="fas fa-chart-line text-cyan"></i>
+                    <span>Exploration & Engagement Trend</span>
+                </h2>
+            </div>
+            <div style="height: 280px; position: relative;">
+                <canvas id="engagementChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="glass-card">
+            <div class="card-header-clean">
+                <h2 class="card-title-clean">
+                    <i class="fas fa-chart-pie text-purple"></i>
+                    <span>Quest Categories</span>
+                </h2>
+            </div>
+            <div style="height: 280px; position: relative;">
+                <canvas id="categoryChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tables Row -->
+<div class="row g-4">
+    <!-- Recent Quest Completions Table -->
+    <div class="col-lg-7">
+        <div class="glass-card">
+            <div class="card-header-clean">
+                <h2 class="card-title-clean">
+                    <i class="fas fa-trophy text-gold"></i>
+                    <span>Recent Quest Completions</span>
+                </h2>
+                <a href="pages/completions.php" class="btn btn-gaming btn-gaming-outline py-1 px-3" style="font-size: 0.78rem;">
+                    View All <i class="fas fa-arrow-right ms-1"></i>
+                </a>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table-custom">
+                    <thead>
+                        <tr>
+                            <th>Quest</th>
+                            <th>Explorer</th>
+                            <th>Rewards</th>
+                            <th>Status</th>
+                            <th>Time</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($recentCompletions)): ?>
+                            <tr>
+                                <td colspan="5" class="text-center py-4 text-muted">
+                                    <i class="fas fa-inbox fs-3 mb-2 d-block opacity-50"></i>
+                                    No recent completions found.
+                                </td>
+                            </tr>
+                        <?php else: ?>
+                            <?php foreach ($recentCompletions as $c): ?>
+                                <tr>
+                                    <td>
+                                        <div class="fw-bold text-light"><?= e($c['quest_title'] ?? 'Exploration Quest') ?></div>
+                                        <div class="small text-secondary"><?= ucfirst(e($c['category'] ?? 'General')) ?></div>
+                                    </td>
+                                    <td>
+                                        <div class="text-light"><?= e($c['user_name'] ?? 'Explorer') ?></div>
+                                    </td>
+                                    <td>
+                                        <span class="small text-cyan fw-bold">+<?= (int)($c['xp_earned'] ?? 0) ?> XP</span>
+                                        <span class="small text-gold fw-bold ms-1">+<?= (int)($c['coins_earned'] ?? 0) ?> <i class="fas fa-coins"></i></span>
+                                    </td>
+                                    <td><?= get_status_badge($c['status'] ?? 'verified') ?></td>
                                     <td class="text-secondary small"><?= time_ago($c['completed_at']) ?></td>
                                 </tr>
                             <?php endforeach; ?>
@@ -242,92 +324,98 @@ $extraScripts = <<<HTML
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     // 1. Engagement Timeline Chart
-    const ctxTimeline = document.getElementById('engagementChart').getContext('2d');
-    new Chart(ctxTimeline, {
-        type: 'line',
-        data: {
-            labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-            datasets: [
-                {
-                    label: 'Completions',
-                    data: [12, 19, 14, 25, 22, 38, 45],
-                    borderColor: '#00e5ff',
-                    backgroundColor: 'rgba(0, 229, 255, 0.1)',
-                    fill: true,
-                    tension: 0.4,
-                    borderWidth: 2,
-                    pointBackgroundColor: '#00e5ff',
-                    pointRadius: 4
-                },
-                {
-                    label: 'New Users',
-                    data: [5, 8, 6, 12, 10, 18, 22],
-                    borderColor: '#a855f7',
-                    backgroundColor: 'rgba(168, 85, 247, 0.05)',
-                    fill: true,
-                    tension: 0.4,
-                    borderWidth: 2,
-                    pointBackgroundColor: '#a855f7',
-                    pointRadius: 4
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    labels: { color: '#94a3b8', font: { family: 'Outfit', size: 12 } }
-                }
+    const elTimeline = document.getElementById('engagementChart');
+    if (elTimeline) {
+        const ctxTimeline = elTimeline.getContext('2d');
+        new Chart(ctxTimeline, {
+            type: 'line',
+            data: {
+                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                datasets: [
+                    {
+                        label: 'Completions',
+                        data: [12, 19, 14, 25, 22, 38, 45],
+                        borderColor: '#00e5ff',
+                        backgroundColor: 'rgba(0, 229, 255, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 2,
+                        pointBackgroundColor: '#00e5ff',
+                        pointRadius: 4
+                    },
+                    {
+                        label: 'New Users',
+                        data: [5, 8, 6, 12, 10, 18, 22],
+                        borderColor: '#a855f7',
+                        backgroundColor: 'rgba(168, 85, 247, 0.05)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 2,
+                        pointBackgroundColor: '#a855f7',
+                        pointRadius: 4
+                    }
+                ]
             },
-            scales: {
-                x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { color: '#64748b', font: { family: 'Outfit' } }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: { color: '#94a3b8', font: { family: 'Outfit', size: 12 } }
+                    }
                 },
-                y: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { color: '#64748b', font: { family: 'Outfit' } }
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: '#64748b', font: { family: 'Outfit' } }
+                    },
+                    y: {
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: '#64748b', font: { family: 'Outfit' } }
+                    }
                 }
             }
-        }
-    });
+        });
+    }
 
     // 2. Categories Doughnut Chart
-    const ctxCat = document.getElementById('categoryChart').getContext('2d');
-    const catLabels = $catLabelsJson;
-    const catCounts = $catCountsJson;
+    const elCat = document.getElementById('categoryChart');
+    if (elCat) {
+        const ctxCat = elCat.getContext('2d');
+        const catLabels = $catLabelsJson;
+        const catCounts = $catCountsJson;
 
-    new Chart(ctxCat, {
-        type: 'doughnut',
-        data: {
-            labels: catLabels.length ? catLabels : ['Exploration', 'Fitness', 'Drawing', 'Intellect', 'Social'],
-            datasets: [{
-                data: catCounts.length ? catCounts : [35, 20, 15, 20, 10],
-                backgroundColor: [
-                    '#00e5ff',
-                    '#a855f7',
-                    '#ffb800',
-                    '#10b981',
-                    '#ff4757',
-                    '#38bdf8'
-                ],
-                borderWidth: 2,
-                borderColor: '#141b2d'
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: { color: '#94a3b8', font: { family: 'Outfit', size: 11 }, padding: 12 }
-                }
+        new Chart(ctxCat, {
+            type: 'doughnut',
+            data: {
+                labels: catLabels.length ? catLabels : ['Exploration', 'Fitness', 'Drawing', 'Intellect', 'Social'],
+                datasets: [{
+                    data: catCounts.length ? catCounts : [35, 20, 15, 20, 10],
+                    backgroundColor: [
+                        '#00e5ff',
+                        '#a855f7',
+                        '#ffb800',
+                        '#10b981',
+                        '#ff4757',
+                        '#38bdf8'
+                    ],
+                    borderWidth: 2,
+                    borderColor: '#141b2d'
+                }]
             },
-            cutout: '70%'
-        }
-    });
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { color: '#94a3b8', font: { family: 'Outfit', size: 11 }, padding: 12 }
+                    }
+                },
+                cutout: '70%'
+            }
+        });
+    }
 });
 </script>
 HTML;

@@ -62,6 +62,7 @@ $orderColumn = $sortMap[$sortBy] ?? 'u.created_at';
 $totalRecords = 0;
 $totalPages = 1;
 $users = [];
+$queryError = null;
 
 try {
     $countQuery = "
@@ -87,8 +88,9 @@ try {
 
     // Fetch Users List
     $dataQuery = "
-        SELECT u.id, $playerIdSelect, u.name, u.email, u.status, u.created_at,
-               p.avatar_key, p.level, p.current_xp, p.xp_to_next_level, p.coins,
+        SELECT u.id, $playerIdSelect, u.name, u.email, COALESCE(u.status, 'active') as status, u.created_at,
+               p.avatar_key, COALESCE(p.level, 1) as level, COALESCE(p.current_xp, 0) as current_xp,
+               COALESCE(p.xp_to_next_level, 500) as xp_to_next_level, COALESCE(p.coins, 100) as coins,
                (SELECT COUNT(*) FROM quest_completions WHERE user_id = u.id) as completed_count,
                (SELECT COUNT(*) FROM user_badges WHERE user_id = u.id) as badge_count
         FROM users u
@@ -101,9 +103,25 @@ try {
     $stmt->execute($params);
     $users = $stmt->fetchAll();
 } catch (Throwable $e) {
-    error_log('[QuestUP Admin users.php Error] ' . $e->getMessage());
+    $queryError = $e->getMessage();
+    error_log('[QuestUP Admin users.php Error] ' . $queryError);
+    // Safe Fallback Query directly on users table
+    try {
+        $stmt = $db->query("SELECT id, name, email, 'active' as status, created_at, 1 as level, 0 as current_xp, 100 as coins, 0 as completed_count, 0 as badge_count FROM users ORDER BY created_at DESC LIMIT $limit");
+        $users = $stmt ? $stmt->fetchAll() : [];
+        $totalRecords = count($users);
+    } catch (Throwable $e2) {
+        $users = [];
+    }
 }
 ?>
+
+<?php if (!empty($queryError)): ?>
+    <div class="alert alert-warning glow-border mb-4">
+        <i class="fas fa-exclamation-triangle me-2"></i>
+        <strong>Database Notice:</strong> <?= e($queryError) ?>
+    </div>
+<?php endif; ?>
 
 <div class="glass-card mb-4">
     <!-- Filter & Search Toolbar -->
@@ -186,16 +204,16 @@ try {
                             <td>
                                 <div class="d-flex align-items-center gap-3">
                                     <div class="admin-avatar" style="width: 36px; height: 36px; font-size: 0.85rem;">
-                                        <?= strtoupper(substr($u['name'] ?? 'U', 0, 1)) ?>
+                                        <?= strtoupper(substr((string)($u['name'] ?? 'U'), 0, 1)) ?>
                                     </div>
                                     <div>
-                                        <a href="user_view.php?id=<?= urlencode($u['id']) ?>" class="fw-bold text-light text-decoration-none hover-cyan">
+                                        <a href="user_view.php?id=<?= urlencode((string)($u['id'] ?? '')) ?>" class="fw-bold text-light text-decoration-none hover-cyan">
                                             <?= e($u['name'] ?? 'Adventurer') ?>
                                         </a>
                                         <span class="badge bg-dark text-cyan border border-secondary font-monospace ms-1" style="font-size: 0.72rem;">
                                             <?= e($u['player_id'] ?? 'QST-0000') ?>
                                         </span>
-                                        <div class="small text-secondary"><?= e($u['email']) ?></div>
+                                        <div class="small text-secondary"><?= e($u['email'] ?? '') ?></div>
                                     </div>
                                 </div>
                             </td>
@@ -208,37 +226,39 @@ try {
                             </td>
                             <td>
                                 <span class="badge bg-success bg-opacity-25 text-success border border-success border-opacity-25">
-                                    <i class="fas fa-trophy me-1"></i><?= (int)$u['completed_count'] ?>
+                                    <i class="fas fa-trophy me-1"></i><?= (int)($u['completed_count'] ?? 0) ?>
                                 </span>
                             </td>
                             <td>
                                 <span class="badge bg-purple bg-opacity-25 text-purple border border-purple border-opacity-25">
-                                    <i class="fas fa-medal me-1"></i><?= (int)$u['badge_count'] ?>
+                                    <i class="fas fa-medal me-1"></i><?= (int)($u['badge_count'] ?? 0) ?>
                                 </span>
                             </td>
-                            <td><?= get_status_badge($u['status'] ?? 'active') ?></td>
-                            <td class="text-secondary small"><?= date('M j, Y', strtotime($u['created_at'])) ?></td>
+                            <td><?= get_status_badge((string)($u['status'] ?? 'active')) ?></td>
+                            <td class="text-secondary small">
+                                <?= !empty($u['created_at']) ? date('M j, Y', (int)strtotime((string)$u['created_at'])) : 'Recently' ?>
+                            </td>
                             <td class="text-end table-actions-cell">
                                 <div class="d-inline-flex gap-1 justify-content-end">
-                                    <a href="user_view.php?id=<?= urlencode($u['id']) ?>" class="btn-action-icon" title="View Full Profile">
+                                    <a href="user_view.php?id=<?= urlencode((string)($u['id'] ?? '')) ?>" class="btn-action-icon" title="View Full Profile">
                                         <i class="fas fa-eye"></i>
                                     </a>
-                                    <a href="user_edit.php?id=<?= urlencode($u['id']) ?>" class="btn-action-icon" title="Edit Stats / Level">
+                                    <a href="user_edit.php?id=<?= urlencode((string)($u['id'] ?? '')) ?>" class="btn-action-icon" title="Edit Stats / Level">
                                         <i class="fas fa-edit text-cyan"></i>
                                     </a>
                                     <form method="POST" action="../actions/user_actions.php" class="d-inline" onsubmit="return confirm('Change status for this user?');">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="action" value="toggle_status">
-                                        <input type="hidden" name="user_id" value="<?= e($u['id']) ?>">
-                                        <input type="hidden" name="current_status" value="<?= e($u['status'] ?? 'active') ?>">
+                                        <input type="hidden" name="user_id" value="<?= e((string)($u['id'] ?? '')) ?>">
+                                        <input type="hidden" name="current_status" value="<?= e((string)($u['status'] ?? 'active')) ?>">
                                         <button type="submit" class="btn-action-icon" title="<?= ($u['status'] ?? 'active') === 'disabled' ? 'Enable User' : 'Disable User' ?>">
                                             <i class="fas <?= ($u['status'] ?? 'active') === 'disabled' ? 'fa-check text-success' : 'fa-ban text-warning' ?>"></i>
                                         </button>
                                     </form>
-                                    <form method="POST" action="../actions/user_actions.php" class="d-inline" onsubmit="return confirm('PERMANENTLY delete user <?= e($u['name']) ?> and all associated records? This cannot be undone!');">
+                                    <form method="POST" action="../actions/user_actions.php" class="d-inline" onsubmit="return confirm('PERMANENTLY delete user <?= e($u['name'] ?? 'User') ?> and all associated records? This cannot be undone!');">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="action" value="delete_user">
-                                        <input type="hidden" name="user_id" value="<?= e($u['id']) ?>">
+                                        <input type="hidden" name="user_id" value="<?= e((string)($u['id'] ?? '')) ?>">
                                         <button type="submit" class="btn-action-icon text-danger" title="Delete User">
                                             <i class="fas fa-trash-alt"></i>
                                         </button>

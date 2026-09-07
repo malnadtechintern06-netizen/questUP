@@ -121,6 +121,13 @@ class Quest {
   final bool requiresGameSession;
   final List<String> requiredVerificationRules;
 
+  // Dynamic Location Quest Generation Attributes
+  final String sourceType; // 'admin' | 'location_generated'
+  final String? googlePlaceId;
+  final double? generationLatitude;
+  final double? generationLongitude;
+  final String? userId;
+
   const Quest({
     required this.id,
     required this.title,
@@ -170,6 +177,11 @@ class Quest {
     this.requiresText = false,
     this.requiresGameSession = false,
     this.requiredVerificationRules = const [],
+    this.sourceType = 'admin',
+    this.googlePlaceId,
+    this.generationLatitude,
+    this.generationLongitude,
+    this.userId,
   });
 
   double get allowedRadius => radiusMeters;
@@ -238,6 +250,11 @@ class Quest {
     bool? requiresText,
     bool? requiresGameSession,
     List<String>? requiredVerificationRules,
+    String? sourceType,
+    String? googlePlaceId,
+    double? generationLatitude,
+    double? generationLongitude,
+    String? userId,
   }) {
     return Quest(
       id: id ?? this.id,
@@ -292,6 +309,11 @@ class Quest {
       requiresGameSession: requiresGameSession ?? this.requiresGameSession,
       requiredVerificationRules:
           requiredVerificationRules ?? this.requiredVerificationRules,
+      sourceType: sourceType ?? this.sourceType,
+      googlePlaceId: googlePlaceId ?? this.googlePlaceId,
+      generationLatitude: generationLatitude ?? this.generationLatitude,
+      generationLongitude: generationLongitude ?? this.generationLongitude,
+      userId: userId ?? this.userId,
     );
   }
 }

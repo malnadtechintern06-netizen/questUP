@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'package:quest_up/app/config/app_constants.dart';
+import 'package:quest_up/app/config/mysql_config.dart';
 import 'package:quest_up/core/errors/exceptions.dart';
 import 'package:quest_up/core/services/email_service.dart';
 import 'package:quest_up/core/services/mysql_database_service.dart';
@@ -532,6 +534,73 @@ class AuthMySqlDataSource implements IAuthRemoteDataSource {
     return true;
   }
 
+  Future<bool> _registerViaRestApi({
+    required String id,
+    required String name,
+    required String email,
+    required String passwordHash,
+    required String salt,
+  }) async {
+    if (kIsWeb) return false;
+
+    final payload = jsonEncode({
+      'id': id,
+      'name': name,
+      'email': email,
+      'password_hash': passwordHash,
+      'salt': salt,
+      'level': 1,
+      'current_xp': 0,
+      'xp_to_next_level': 500,
+      'coins': 100,
+      'avatar_key': 'avatar_1',
+    });
+
+    final completer = Completer<bool>();
+    final candidateUrls = MySqlConfig.apiBaseUrls.map((b) => '$b/auth/register.php').toList();
+    int pendingCount = candidateUrls.length;
+
+    for (final urlStr in candidateUrls) {
+      () async {
+        HttpClient? client;
+        try {
+          final uri = Uri.parse(urlStr);
+          client = HttpClient()
+            ..connectionTimeout = const Duration(milliseconds: 2500)
+            ..badCertificateCallback = ((cert, host, port) => true);
+
+          final request = await client.postUrl(uri);
+          request.headers.set('Content-Type', 'application/json; charset=utf-8');
+          request.headers.set('Accept', 'application/json, */*');
+          request.headers.set('User-Agent', 'QuestUP-App/1.0');
+          request.write(payload);
+
+          final response = await request.close().timeout(const Duration(milliseconds: 3000));
+          if (response.statusCode == 200 || response.statusCode == 201) {
+            final bodyStr = await response.transform(utf8.decoder).join();
+            try {
+              final json = jsonDecode(bodyStr);
+              if (json is Map && json['success'] == true) {
+                debugPrint('[Auth REST] ✅ User registered in MySQL via REST API: $urlStr');
+                if (!completer.isCompleted) completer.complete(true);
+                return;
+              }
+            } catch (_) {}
+          }
+        } catch (_) {
+        } finally {
+          client?.close(force: true);
+          pendingCount--;
+          if (pendingCount <= 0 && !completer.isCompleted) {
+            completer.complete(false);
+          }
+        }
+      }();
+    }
+
+    return await completer.future;
+  }
+
   @override
   Future<AuthUserModel> register({
     required String name,
@@ -547,108 +616,83 @@ class AuthMySqlDataSource implements IAuthRemoteDataSource {
       throw const AppException('Password must be at least 6 characters long.');
     }
 
+    final localUsers = await _getLocalUsersMap();
+    if (localUsers.containsKey(cleanEmail)) {
+      throw const AppException('An account with this email already exists.');
+    }
+
     final userId = const Uuid().v4();
     final salt = const Uuid().v4().substring(0, 16);
     final passwordHash = _hashPassword(password, salt);
+    final createdAt = DateTime.now();
 
-    // 1. Try MySQL Database Registration if connected
-    final isDbReady = await _dbService.connect();
-    if (isDbReady) {
-      try {
-        // Check for existing user
-        final checkResult = await _dbService.execute(
-          'SELECT id FROM users WHERE email = :email LIMIT 1',
-          {'email': cleanEmail},
-        );
+    final user = AuthUserModel(
+      id: userId,
+      email: cleanEmail,
+      displayName: cleanName,
+      createdAt: createdAt,
+    );
 
-        if (checkResult != null && checkResult.rows.isNotEmpty) {
-          throw const AppException('An account with this email already exists.');
-        }
-
-        // Insert into users table
-        await _dbService.execute(
-          '''
-          INSERT INTO users (id, name, email, password_hash, salt, created_at)
-          VALUES (:id, :name, :email, :password_hash, :salt, NOW())
-          ''',
-          {
-            'id': userId,
-            'name': cleanName,
-            'email': cleanEmail,
-            'password_hash': passwordHash,
-            'salt': salt,
-          },
-        );
-
-        // Insert into user_profiles table
-        await _dbService.execute(
-          '''
-          INSERT INTO user_profiles (user_id, name, email, level, current_xp, xp_to_next_level, coins, joined_at)
-          VALUES (:user_id, :name, :email, 1, 0, 500, 100, NOW())
-          ''',
-          {
-            'user_id': userId,
-            'name': cleanName,
-            'email': cleanEmail,
-          },
-        );
-
-        final user = AuthUserModel(
-          id: userId,
-          email: cleanEmail,
-          displayName: cleanName,
-          createdAt: DateTime.now(),
-        );
-
-        // Save into local credentials store as well
-        final localUsers = await _getLocalUsersMap();
-        localUsers[cleanEmail] = {
-          'id': userId,
-          'name': cleanName,
-          'email': cleanEmail,
-          'password_hash': passwordHash,
-          'salt': salt,
-          'created_at': DateTime.now().toIso8601String(),
-        };
-        await _storage.saveJson(AppConstants.keyLocalUsers, localUsers);
-
-        await _storage.saveJson(AppConstants.keyAuthSession, user.toJson());
-        _authStreamController.add(user);
-        debugPrint('[MySQL] User registered successfully: ${user.email} (${user.id})');
-        return user;
-      } on AppException {
-        rethrow;
-      } catch (e) {
-        debugPrint('[MySQL] Registration query notice: $e. Falling back to local store.');
-      }
-    }
-
-    // 2. Offline / Local Fallback Registration
-    final localUsers = await _getLocalUsersMap();
-    if (localUsers.containsKey(cleanEmail)) {
-      throw const AppException('An account with this email already exists. Please sign in.');
-    }
-
+    // Save into local credentials store immediately
     localUsers[cleanEmail] = {
       'id': userId,
       'name': cleanName,
       'email': cleanEmail,
       'password_hash': passwordHash,
       'salt': salt,
-      'created_at': DateTime.now().toIso8601String(),
+      'created_at': createdAt.toIso8601String(),
     };
     await _storage.saveJson(AppConstants.keyLocalUsers, localUsers);
-
-    final user = AuthUserModel(
-      id: userId,
-      email: cleanEmail,
-      displayName: cleanName,
-      createdAt: DateTime.now(),
-    );
-
     await _storage.saveJson(AppConstants.keyAuthSession, user.toJson());
     _authStreamController.add(user);
-    debugPrint('[Local Auth] User registered and credentials secured: ${user.email}');
+
+    // 1. Asynchronously sync to cloud MySQL via REST API
+    unawaited(_registerViaRestApi(
+      id: userId,
+      name: cleanName,
+      email: cleanEmail,
+      passwordHash: passwordHash,
+      salt: salt,
+    ));
+
+    // 2. Also sync via direct MySQL if connected
+    if (_dbService.isConnected) {
+      unawaited(() async {
+        try {
+          await _dbService.execute(
+            '''
+            INSERT INTO users (id, name, email, password_hash, salt, status, created_at)
+            VALUES (:id, :name, :email, :password_hash, :salt, 'active', NOW())
+            ON DUPLICATE KEY UPDATE name = VALUES(name), status = 'active'
+            ''',
+            {
+              'id': userId,
+              'name': cleanName,
+              'email': cleanEmail,
+              'password_hash': passwordHash,
+              'salt': salt,
+            },
+          );
+          await _dbService.execute(
+            '''
+            INSERT INTO user_profiles (user_id, name, email, level, current_xp, xp_to_next_level, coins, joined_at)
+            VALUES (:user_id, :name, :email, 1, 0, 500, 100, NOW())
+            ON DUPLICATE KEY UPDATE name = VALUES(name), email = VALUES(email)
+            ''',
+            {
+              'user_id': userId,
+              'name': cleanName,
+              'email': cleanEmail,
+            },
+          );
+          debugPrint('[MySQL Direct] User synchronized: $cleanEmail');
+        } catch (e) {
+          debugPrint('[MySQL Direct] User insert notice: $e');
+        }
+      }());
+    }
+
+    debugPrint('[Auth] User registered successfully: ${user.email} (${user.id})');
     return user;
   }
 

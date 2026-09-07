@@ -91,7 +91,7 @@ final getQuestByIdUseCaseProvider = Provider<GetQuestByIdUseCase>((ref) {
 // Filter & Category state
 final selectedCategoryProvider = StateProvider<QuestCategory?>((ref) => null);
 final searchQueryProvider = StateProvider<String>((ref) => '');
-final maxRadiusFilterMetersProvider = StateProvider<double>((ref) => 50000.0); // 50km default
+final maxRadiusFilterMetersProvider = StateProvider<double>((ref) => 10000.0); // 10km default
 
 // Latest Coordinates Provider (updated by GPS and simulation)
 final activeGpsCoordinatesProvider = StateProvider<LocationCoordinates?>((ref) => null);
@@ -165,11 +165,9 @@ class QuestsNotifier extends StateNotifier<AsyncValue<List<Quest>>> {
         quests.where((q) => !_seenQuestIds.contains(q.id)).toList();
 
     if (newQuests.isNotEmpty) {
-      debugPrint(
-          '[QUEST NOTIFIER] 🔔 Detected ${newQuests.length} new quests uploaded to server!');
-
       for (final newQuest in newQuests) {
         _seenQuestIds.add(newQuest.id);
+        debugPrint('[QuestUP] New quest received: ${newQuest.title} (${newQuest.id})');
 
         // 1. Dispatch Native System Notification to Phone's Status Bar / Shade
         try {
@@ -213,6 +211,16 @@ class QuestsNotifier extends StateNotifier<AsyncValue<List<Quest>>> {
     }
   }
 
+  String? _getCurrentUserId() {
+    try {
+      final profile = ref.read(userProfileNotifierProvider).value;
+      if (profile != null && profile.id.isNotEmpty && profile.id != 'guest_player') {
+        return profile.id;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<void> _initQuestsWithLocationCheck() async {
     // 1. Immediately emit local/cached quests in 0ms so all cards and images appear instantly!
     try {
@@ -231,13 +239,24 @@ class QuestsNotifier extends StateNotifier<AsyncValue<List<Quest>>> {
         await fetchQuests(showLoading: false);
       } else {
         ref.read(activeGpsCoordinatesProvider.notifier).state = null;
-        final quests = await getQuestsUseCase();
+        debugPrint('[QuestUP GPS] Location permission not granted or service disabled');
+        ref.read(notificationsNotifierProvider.notifier).addNotification(
+          AppNotification(
+            id: 'notif-location-permission',
+            title: '📍 Location Access Needed',
+            message: 'Enable location permission to discover personalized landmark quests near you!',
+            timestamp: DateTime.now(),
+            type: NotificationType.system,
+            isRead: false,
+          ),
+        );
+        final quests = await getQuestsUseCase(userId: _getCurrentUserId());
         state = AsyncValue.data(quests);
         await _handleNewQuestsDetection(quests);
       }
     } catch (_) {
       try {
-        final quests = await getQuestsUseCase();
+        final quests = await getQuestsUseCase(userId: _getCurrentUserId());
         state = AsyncValue.data(quests);
         await _handleNewQuestsDetection(quests);
       } catch (e, st) {
@@ -252,6 +271,8 @@ class QuestsNotifier extends StateNotifier<AsyncValue<List<Quest>>> {
     _locationSubscription = locationService.locationStream.listen(
       (newCoords) {
         ref.read(activeGpsCoordinatesProvider.notifier).state = newCoords;
+        debugPrint('[QuestUP GPS] Current latitude: ${newCoords.latitude}');
+        debugPrint('[QuestUP GPS] Current longitude: ${newCoords.longitude}');
 
         if (_lastFetchedLocation == null) {
           fetchQuests(coords: newCoords, showLoading: false);
@@ -265,12 +286,12 @@ class QuestsNotifier extends StateNotifier<AsyncValue<List<Quest>>> {
           lon2: newCoords.longitude,
         );
 
-        if (distanceMoved >= 150.0) {
-          // Significant location change (>=150m): re-fetch real nearby landmarks for new area
+        if (distanceMoved >= 500.0) {
+          // Significant location change (>=500m): re-fetch real nearby landmarks for new area
           _lastFetchedLocation = newCoords;
           fetchQuests(coords: newCoords, showLoading: false);
         } else {
-          // Minor movement: smoothly recalculate distances without reloading UI
+          // Minor movement (<500m): smoothly recalculate distances without reloading UI
           _updateLiveDistances(newCoords);
         }
       },
@@ -326,16 +347,16 @@ class QuestsNotifier extends StateNotifier<AsyncValue<List<Quest>>> {
       if (loc != null) {
         _lastFetchedLocation = loc;
         ref.read(activeGpsCoordinatesProvider.notifier).state = loc;
-        final maxRadius = ref.read(maxRadiusFilterMetersProvider);
-        quests = await getNearbyQuestsUseCase(
-          userLat: loc.latitude,
-          userLon: loc.longitude,
-          maxDistanceMeters: maxRadius,
-        );
+        debugPrint('[QuestUP GPS] Current latitude: ${loc.latitude}');
+        debugPrint('[QuestUP GPS] Current longitude: ${loc.longitude}');
       } else {
         ref.read(activeGpsCoordinatesProvider.notifier).state = null;
-        quests = await getQuestsUseCase();
       }
+      quests = await getQuestsUseCase(
+        userLat: loc?.latitude,
+        userLon: loc?.longitude,
+        userId: _getCurrentUserId(),
+      );
 
       debugPrint('[QUEST PROVIDER] Updated quest count: ${quests.length}');
       debugPrint('[QUEST PROVIDER] Refresh completed in ${sw.elapsedMilliseconds}ms');
@@ -416,17 +437,32 @@ final questsNotifierProvider =
 final filteredQuestsProvider = Provider<List<Quest>>((ref) {
   final questsAsync = ref.watch(questsNotifierProvider);
   final selectedCategory = ref.watch(selectedCategoryProvider);
-  final query = ref.watch(searchQueryProvider).toLowerCase().trim();
+  final rawQuery = ref.watch(searchQueryProvider);
+  final cleanQuery = rawQuery.trim().toLowerCase();
 
   return questsAsync.when(
     data: (quests) {
       return quests.where((q) {
         if (q.isCompleted) return false;
         final matchesCat = selectedCategory == null || q.category == selectedCategory;
-        final matchesQuery = query.isEmpty ||
-            q.title.toLowerCase().contains(query) ||
-            q.locationName.toLowerCase().contains(query) ||
-            q.description.toLowerCase().contains(query);
+        if (cleanQuery.isEmpty) return matchesCat;
+
+        final searchSpace = [
+          q.title,
+          q.locationName,
+          q.description,
+          q.category.name,
+          q.placeAddress ?? '',
+          q.originLocationName ?? '',
+          q.storyline,
+          q.historicalFact ?? '',
+          q.sourceType,
+          q.difficulty.name,
+          q.verificationType.name,
+        ].join(' ').toLowerCase();
+
+        final tokens = cleanQuery.split(RegExp(r'\s+')).where((t) => t.isNotEmpty);
+        final matchesQuery = tokens.every((token) => searchSpace.contains(token));
         return matchesCat && matchesQuery;
       }).toList();
     },
@@ -436,9 +472,54 @@ final filteredQuestsProvider = Provider<List<Quest>>((ref) {
   );
 });
 
+// Radar & nearby quests provider (filtered strictly by max distance)
+final nearbyQuestsProvider = Provider<List<Quest>>((ref) {
+  final questsAsync = ref.watch(questsNotifierProvider);
+  final maxRadius = ref.watch(maxRadiusFilterMetersProvider);
+
+  return questsAsync.when(
+    data: (quests) {
+      return quests.where((q) {
+        if (q.latitude != 0.0 && q.longitude != 0.0) {
+          return (q.distanceMeters ?? double.infinity) <= maxRadius;
+        }
+        return true; // Activity quests always accessible
+      }).toList();
+    },
+    loading: () => [],
+    error: (err, stack) => [],
+  );
+});
+
 // Single Quest Provider by ID
 final singleQuestProvider =
     FutureProvider.family<Quest?, String>((ref, questId) async {
+  // 1. Instant check in memory (from questsNotifierProvider where user tapped the quest card)
+  final inMemoryQuests = ref.watch(questsNotifierProvider).valueOrNull;
+  if (inMemoryQuests != null && inMemoryQuests.isNotEmpty) {
+    final match = inMemoryQuests.where((q) => q.id == questId).firstOrNull;
+    if (match != null) {
+      return match;
+    }
+  }
+
+  // 2. Fetch from repository (checks local storage cache first, then MySQL if needed)
   final getById = ref.watch(getQuestByIdUseCaseProvider);
-  return await getById(questId);
+  final quest = await getById(questId);
+  if (quest != null) {
+    return quest;
+  }
+
+  // 3. Fallback: Force refresh all quests from repository in case new quest was added recently
+  try {
+    final profile = ref.read(userProfileNotifierProvider).value;
+    final userId = (profile != null && profile.id.isNotEmpty && profile.id != 'guest_player') ? profile.id : null;
+    final allQuests = await ref.read(getQuestsUseCaseProvider).call(userId: userId);
+    final refreshedMatch = allQuests.where((q) => q.id == questId).firstOrNull;
+    if (refreshedMatch != null) {
+      return refreshedMatch;
+    }
+  } catch (_) {}
+
+  return null;
 });

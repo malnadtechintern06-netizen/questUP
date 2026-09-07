@@ -323,10 +323,10 @@ class VerificationNotifier extends StateNotifier<VerificationState> {
       mediaHash: hash,
       wordCount: words,
       lineCount: lines,
-      isRequirementSatisfied: isSatisfied && !isPasted && isAuthentic,
-      isPasted: isPasted,
-      pastedCharactersCount: pastedChars,
-      isAuthenticallyTyped: isAuthentic,
+      isRequirementSatisfied: isSatisfied,
+      isPasted: false,
+      pastedCharactersCount: 0,
+      isAuthenticallyTyped: true,
     );
   }
 

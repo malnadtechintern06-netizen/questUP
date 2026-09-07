@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:quest_up/app/router/route_paths.dart';
 import 'package:quest_up/app/theme/app_colors.dart';
 import 'package:quest_up/app/theme/app_typography.dart';
+import 'package:quest_up/core/services/email_service.dart';
 import 'package:quest_up/core/widgets/premium_3d_button.dart';
 import 'package:quest_up/features/auth/presentation/providers/auth_providers.dart';
 import 'package:quest_up/features/quests/presentation/providers/quest_providers.dart';
@@ -44,6 +46,11 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
   void initState() {
     super.initState();
     _startResendTimer();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _focusNodes.isNotEmpty) {
+        _focusNodes.first.requestFocus();
+      }
+    });
   }
 
   void _startResendTimer() {
@@ -162,6 +169,13 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
   Future<void> _handleResend() async {
     if (!_canResend) return;
 
+    for (final c in _controllers) {
+      c.clear();
+    }
+    if (_focusNodes.isNotEmpty) {
+      _focusNodes.first.requestFocus();
+    }
+
     final success = await ref
         .read(authNotifierProvider.notifier)
         .resendOtp(email: _targetEmail);
@@ -170,7 +184,7 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
       _startResendTimer();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('A fresh verification code has been sent to your email!'),
+          content: Text('A fresh verification code has been dispatched to your email!'),
           backgroundColor: AppColors.secondary,
         ),
       );
@@ -180,6 +194,7 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authNotifierProvider);
+    final lastDispatchedOtp = EmailService.instance.getLastDispatchedOtp(_targetEmail);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -267,7 +282,50 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 28),
+
+              // Dev / Test Mode Passcode Helper (When testing or offline)
+              if (kDebugMode && lastDispatchedOtp != null && lastDispatchedOtp.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                InkWell(
+                  onTap: () {
+                    for (int i = 0; i < _otpLength; i++) {
+                      if (i < lastDispatchedOtp.length) {
+                        _controllers[i].text = lastDispatchedOtp[i];
+                      }
+                    }
+                    if (lastDispatchedOtp.length >= _otpLength) {
+                      _handleVerify();
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.4)),
+                    ),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.bolt_rounded, size: 16, color: AppColors.primary),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Test Code: $lastDispatchedOtp (Tap to Autofill)',
+                            style: AppTypography.caption.copyWith(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 24),
 
               // Error Banner (if any)
               if (authState.errorMessage != null) ...[

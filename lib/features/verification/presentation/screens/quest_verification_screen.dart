@@ -82,7 +82,34 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
         ),
         data: (quest) {
           if (quest == null) {
-            return const Center(child: Text('Quest not found'));
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.search_off_rounded, size: 64, color: AppColors.textMuted),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Quest Not Found',
+                      style: AppTypography.titleLarge.copyWith(color: Colors.white),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'This quest could not be loaded for verification.',
+                      textAlign: TextAlign.center,
+                      style: AppTypography.bodyMedium.copyWith(color: AppColors.textMuted),
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton.icon(
+                      onPressed: () => ref.refresh(singleQuestProvider(widget.questId)),
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            );
           }
 
           final userProfile = ref.watch(userProfileNotifierProvider).valueOrNull;
@@ -446,6 +473,10 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
           )
         : null;
 
+    if (dist != null) {
+      debugPrint('[QuestUP Location Quest] Distance to destination: ${dist.round()} m');
+    }
+
     final isPhotoReq = quest.requiresPhoto ||
         quest.requiresFreshPhoto ||
         quest.verificationType == QuestVerificationType.photoProof;
@@ -475,12 +506,16 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
             children: [
               const Icon(Icons.verified_user_rounded, color: AppColors.primary, size: 18),
               const SizedBox(width: 8),
-              Text(
-                'TWO-STEP ON-SITE VERIFICATION PIPELINE',
-                style: AppTypography.badge.copyWith(
-                  color: AppColors.primary,
-                  fontSize: 10,
-                  letterSpacing: 0.8,
+              Expanded(
+                child: Text(
+                  'TWO-STEP ON-SITE VERIFICATION PIPELINE',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.badge.copyWith(
+                    color: AppColors.primary,
+                    fontSize: 10,
+                    letterSpacing: 0.8,
+                  ),
                 ),
               ),
             ],
@@ -495,8 +530,8 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
                 ? (userCoords == null
                     ? 'Acquiring high-precision GPS position...'
                     : (isGpsNearby
-                        ? 'On-Site position confirmed (${dist?.round()}m from landmark)'
-                        : 'Out of Range (${dist?.round()}m away • Need < ${quest.radiusMeters.round()}m)'))
+                        ? 'Destination Reached: On-Site position confirmed (${dist?.round()}m from landmark)'
+                        : 'Out of Range (${dist?.round()}m away • Need < ${(quest.radiusMeters > 0 ? quest.radiusMeters : 100).round()}m)'))
                 : 'GPS Geofence not required for this mission',
             isComplete: isGpsNearby && (hasGps ? userCoords != null : true),
             isAlert: hasGps && userCoords != null && !isGpsNearby,
@@ -744,12 +779,16 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
             children: [
               const Icon(Icons.security_rounded, color: AppColors.primary, size: 18),
               const SizedBox(width: 8),
-              Text(
-                'VERIFICATION CHECKLIST & ANTI-CHEAT',
-                style: AppTypography.badge.copyWith(
-                  color: AppColors.primary,
-                  fontSize: 10,
-                  letterSpacing: 1.0,
+              Expanded(
+                child: Text(
+                  'VERIFICATION CHECKLIST & ANTI-CHEAT',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.badge.copyWith(
+                    color: AppColors.primary,
+                    fontSize: 10,
+                    letterSpacing: 1.0,
+                  ),
                 ),
               ),
             ],
@@ -839,9 +878,13 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
                     : AppColors.accentDanger,
               ),
               const SizedBox(width: 8),
-              Text(
-                'Validation Telemetry Breakdown',
-                style: AppTypography.titleMedium.copyWith(fontSize: 14, fontWeight: FontWeight.bold),
+              Expanded(
+                child: Text(
+                  'Validation Telemetry Breakdown',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.titleMedium.copyWith(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ),

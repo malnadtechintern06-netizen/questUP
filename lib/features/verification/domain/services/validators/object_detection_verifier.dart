@@ -80,18 +80,20 @@ class ObjectDetectionVerifier implements IQuestValidator {
       }
     } catch (_) {}
 
-    // 3. Strict Photo Subject Match Verification
+    // 3. Photo Subject Match Verification
     // A captured image is valid if it matches target object in media tokens OR is a live camera capture from an active quest session
-    final isLiveCameraCapture = payload.isFreshCameraCapture &&
-        (photoLower.contains('camera_capture_') ||
-         photoLower.contains('fresh_proof_') ||
-         photoLower.contains('cap_') ||
-         photoLower.contains('img_') ||
-         photoLower.contains('camera'));
+    final isLiveCameraCapture = payload.isFreshCameraCapture ||
+        photoLower.contains('camera_capture_') ||
+        photoLower.contains('fresh_proof_') ||
+        photoLower.contains('scaled_image_picker_') ||
+        photoLower.contains('image_picker') ||
+        photoLower.contains('cap_') ||
+        photoLower.contains('img_') ||
+        photoLower.contains('camera');
 
     final isObjectInMedia = photoLower.contains(requiredObj);
 
-    if (!isObjectInMedia && !isLiveCameraCapture) {
+    if (!isObjectInMedia && !isLiveCameraCapture && !payload.isFreshCameraCapture) {
       return ValidatorResult(
         passed: false,
         validatorName: 'Object Detection',

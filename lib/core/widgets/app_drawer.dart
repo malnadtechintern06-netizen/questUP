@@ -40,9 +40,13 @@ class AppDrawer extends ConsumerWidget {
               child: const Icon(Icons.menu_book_rounded, color: AppColors.primary, size: 20),
             ),
             const SizedBox(width: 10),
-            Text(
-              'How to Play QuestUP',
-              style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.w800),
+            Expanded(
+              child: Text(
+                'How to Play QuestUP',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.w800),
+              ),
             ),
           ],
         ),

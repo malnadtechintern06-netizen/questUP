@@ -9,6 +9,7 @@ import 'package:quest_up/core/widgets/error_state_widget.dart';
 import 'package:quest_up/core/widgets/shimmer_loading.dart';
 import 'package:quest_up/features/notifications/presentation/providers/notification_providers.dart';
 import 'package:quest_up/features/notifications/presentation/widgets/notifications_sheet.dart';
+import 'package:quest_up/features/quests/domain/entities/quest.dart';
 import 'package:quest_up/features/quests/presentation/providers/quest_providers.dart';
 import 'package:quest_up/features/quests/presentation/widgets/category_filter_chips.dart';
 import 'package:quest_up/features/quests/presentation/widgets/quest_card_widget.dart';
@@ -24,9 +25,12 @@ class QuestListScreen extends ConsumerStatefulWidget {
 
 class _QuestListScreenState extends ConsumerState<QuestListScreen>
     with WidgetsBindingObserver {
+  late final TextEditingController _searchController;
+
   @override
   void initState() {
     super.initState();
+    _searchController = TextEditingController(text: ref.read(searchQueryProvider));
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       debugPrint('[QUEST SCREEN] Screen opened, requesting latest quests from API');
@@ -45,11 +49,43 @@ class _QuestListScreenState extends ConsumerState<QuestListScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _searchController.dispose();
     super.dispose();
+  }
+
+  bool _matchesQuestSearch(Quest q, String query) {
+    final clean = query.trim().toLowerCase();
+    if (clean.isEmpty) return true;
+
+    final searchSpace = [
+      q.title,
+      q.locationName,
+      q.description,
+      q.category.name,
+      q.placeAddress ?? '',
+      q.originLocationName ?? '',
+      q.storyline,
+      q.historicalFact ?? '',
+      q.sourceType,
+      q.difficulty.name,
+      q.verificationType.name,
+    ].join(' ').toLowerCase();
+
+    final tokens = clean.split(RegExp(r'\s+')).where((t) => t.isNotEmpty);
+    return tokens.every((token) => searchSpace.contains(token));
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<String>(searchQueryProvider, (previous, next) {
+      if (_searchController.text != next) {
+        _searchController.value = TextEditingValue(
+          text: next,
+          selection: TextSelection.collapsed(offset: next.length),
+        );
+      }
+    });
+
     final questsAsync = ref.watch(questsNotifierProvider);
     final selectedCategory = ref.watch(selectedCategoryProvider);
     final statusFilter = ref.watch(statusFilterProvider);
@@ -185,16 +221,24 @@ class _QuestListScreenState extends ConsumerState<QuestListScreen>
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: TextField(
+              controller: _searchController,
               onChanged: (val) => ref.read(searchQueryProvider.notifier).state = val,
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => FocusScope.of(context).unfocus(),
               style: AppTypography.bodyLarge,
               decoration: InputDecoration(
-                hintText: 'Search quests by title or landmark...',
+                hintText: 'Search quests by title, landmark, or category...',
                 hintStyle: AppTypography.bodyMedium.copyWith(color: AppColors.textMuted),
                 prefixIcon: const Icon(Icons.search_rounded, color: AppColors.textMuted),
                 suffixIcon: query.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear_rounded, color: AppColors.textMuted),
-                        onPressed: () => ref.read(searchQueryProvider.notifier).state = '',
+                        tooltip: 'Clear search',
+                        onPressed: () {
+                          _searchController.clear();
+                          ref.read(searchQueryProvider.notifier).state = '';
+                          FocusScope.of(context).unfocus();
+                        },
                       )
                     : null,
                 filled: true,
@@ -285,10 +329,7 @@ class _QuestListScreenState extends ConsumerState<QuestListScreen>
                     if (!q.isActive) return false;
                     final matchesCat =
                         selectedCategory == null || q.category == selectedCategory;
-                    final matchesQuery = query.isEmpty ||
-                        q.title.toLowerCase().contains(query.toLowerCase()) ||
-                        q.locationName.toLowerCase().contains(query.toLowerCase()) ||
-                        q.description.toLowerCase().contains(query.toLowerCase());
+                    final matchesQuery = _matchesQuestSearch(q, query);
                     final matchesStatus = statusFilter == 'all'
                         ? true
                         : (statusFilter == 'completed' ? q.isCompleted : !q.isCompleted);
@@ -306,6 +347,7 @@ class _QuestListScreenState extends ConsumerState<QuestListScreen>
                               'No quests matching your filters. Try pulling to refresh or clearing search.',
                           actionText: 'Reset Filters',
                           onAction: () {
+                            _searchController.clear();
                             ref.read(selectedCategoryProvider.notifier).state = null;
                             ref.read(searchQueryProvider.notifier).state = '';
                             ref.read(statusFilterProvider.notifier).state = 'all';
@@ -318,21 +360,94 @@ class _QuestListScreenState extends ConsumerState<QuestListScreen>
                     );
                   }
 
+                  final locationQuests = filtered.where((q) => q.sourceType != 'admin').toList();
+                  final adminQuests = filtered.where((q) => q.sourceType == 'admin').toList();
+
+                  final listChildren = <Widget>[];
+
+                  if (locationQuests.isNotEmpty) {
+                    listChildren.add(_buildSectionHeader(
+                      'LOCATION QUESTS (10 KM RADIUS)',
+                      '${locationQuests.length} Nearby',
+                      Icons.explore_rounded,
+                      AppColors.accentLocation,
+                    ));
+                    for (final q in locationQuests) {
+                      listChildren.add(QuestCardWidget(
+                        quest: q,
+                        onTap: () => context.push(RoutePaths.questDetailPath(q.id)),
+                      ));
+                    }
+                  }
+
+                  if (adminQuests.isNotEmpty) {
+                    listChildren.add(_buildSectionHeader(
+                      'GLOBAL ADMIN QUESTS',
+                      '${adminQuests.length} Challenges',
+                      Icons.stars_rounded,
+                      AppColors.secondary,
+                    ));
+                    for (final q in adminQuests) {
+                      listChildren.add(QuestCardWidget(
+                        quest: q,
+                        onTap: () => context.push(RoutePaths.questDetailPath(q.id)),
+                      ));
+                    }
+                  }
+
                   return ListView.builder(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.only(bottom: 32),
-                    itemCount: filtered.length,
-                    itemBuilder: (context, index) {
-                      final quest = filtered[index];
-                      return QuestCardWidget(
-                        quest: quest,
-                        onTap: () {
-                          context.push(RoutePaths.questDetailPath(quest.id));
-                        },
-                      );
-                    },
+                    itemCount: listChildren.length,
+                    itemBuilder: (context, index) => listChildren[index],
                   );
                 },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(
+    String title,
+    String countText,
+    IconData icon,
+    Color color,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.badge.copyWith(
+                color: color,
+                fontSize: 11,
+                letterSpacing: 0.8,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: color.withValues(alpha: 0.4)),
+            ),
+            child: Text(
+              countText,
+              style: AppTypography.caption.copyWith(
+                color: color,
+                fontWeight: FontWeight.bold,
+                fontSize: 9.5,
               ),
             ),
           ),

@@ -88,7 +88,7 @@ class _DrawingCanvasWidgetState extends State<DrawingCanvasWidget> {
         _currentStroke = null;
       });
 
-      if (_strokes.length >= 2) {
+      if (_strokes.isNotEmpty) {
         widget.onDrawingReady('drawing_strokes_${_strokes.length}_proof.png');
       }
     }
@@ -99,8 +99,10 @@ class _DrawingCanvasWidgetState extends State<DrawingCanvasWidget> {
       setState(() {
         _redoStrokes.add(_strokes.removeLast());
       });
-      if (_strokes.length >= 2) {
+      if (_strokes.isNotEmpty) {
         widget.onDrawingReady('drawing_strokes_${_strokes.length}_proof.png');
+      } else {
+        widget.onDrawingReady('');
       }
     }
   }
@@ -110,7 +112,9 @@ class _DrawingCanvasWidgetState extends State<DrawingCanvasWidget> {
       setState(() {
         _strokes.add(_redoStrokes.removeLast());
       });
-      widget.onDrawingReady('drawing_strokes_${_strokes.length}_proof.png');
+      if (_strokes.isNotEmpty) {
+        widget.onDrawingReady('drawing_strokes_${_strokes.length}_proof.png');
+      }
     }
   }
 
@@ -120,6 +124,7 @@ class _DrawingCanvasWidgetState extends State<DrawingCanvasWidget> {
       _redoStrokes.clear();
       _currentStroke = null;
     });
+    widget.onDrawingReady('');
   }
 
   @override
