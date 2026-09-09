@@ -8,7 +8,7 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
@@ -20,14 +20,24 @@ require_once __DIR__ . '/../../config/database.php';
 $rawBody = file_get_contents('php://input');
 $data = json_decode($rawBody, true) ?? $_POST;
 
-$requestId = trim($data['request_id'] ?? '');
-$action = strtolower(trim($data['action'] ?? 'accept')); // 'accept' or 'reject'
-$currentUserId = trim($data['user_id'] ?? '');
+$requestId = trim((string)($data['request_id'] ?? $_GET['request_id'] ?? ''));
+$action = strtolower(trim((string)($data['action'] ?? $_GET['action'] ?? 'accept'))); // 'accept' or 'reject'
+$currentUserId = trim((string)($data['user_id'] ?? $_GET['user_id'] ?? ''));
 
 if ($requestId === '') {
+    http_response_code(400);
     echo json_encode([
         'success' => false,
         'message' => 'Request ID is required.',
+    ]);
+    exit;
+}
+
+if (!in_array($action, ['accept', 'reject'], true)) {
+    http_response_code(400);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Invalid action. Must be accept or reject.',
     ]);
     exit;
 }
@@ -40,9 +50,20 @@ try {
     $req = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$req) {
+        http_response_code(404);
         echo json_encode([
             'success' => false,
             'message' => 'Friend request not found.',
+        ]);
+        exit;
+    }
+
+    // If currentUserId provided, ensure they are the recipient or authorized participant
+    if ($currentUserId !== '' && $req['receiver_id'] !== $currentUserId && $req['sender_id'] !== $currentUserId) {
+        http_response_code(403);
+        echo json_encode([
+            'success' => false,
+            'message' => 'You are not authorized to respond to this friend request.',
         ]);
         exit;
     }
@@ -51,37 +72,45 @@ try {
         $upStmt = $db->prepare("UPDATE friend_requests SET status = 'accepted', updated_at = NOW() WHERE id = :id");
         $upStmt->execute(['id' => $requestId]);
 
-        // Insert into user_friends
-        $fId = sprintf(
-            '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-            mt_rand(0, 0xffff),
-            mt_rand(0, 0x0fff) | 0x4000,
-            mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
-        );
-
+        // Insert bidirectional entries into user_friends cache table
         $insFriend = $db->prepare("
             INSERT IGNORE INTO user_friends (id, user_id, friend_id, created_at)
             VALUES (:id, :u, :f, NOW())
         ");
         $insFriend->execute([
-            'id' => $fId,
+            'id' => bin2hex(random_bytes(16)),
             'u'  => $req['sender_id'],
             'f'  => $req['receiver_id'],
+        ]);
+        $insFriend->execute([
+            'id' => bin2hex(random_bytes(16)),
+            'u'  => $req['receiver_id'],
+            'f'  => $req['sender_id'],
         ]);
 
         echo json_encode([
             'success' => true,
-            'message' => 'Friend request accepted! Added to your squad.',
+            'status'  => 'accepted',
+            'message' => 'Friend request accepted! Mutual squad friendship established.',
         ]);
     } else {
         $upStmt = $db->prepare("UPDATE friend_requests SET status = 'rejected', updated_at = NOW() WHERE id = :id");
         $upStmt->execute(['id' => $requestId]);
 
+        // Clean up from user_friends if any
+        $delFriend = $db->prepare("
+            DELETE FROM user_friends 
+            WHERE (user_id = :u AND friend_id = :f) OR (user_id = :f AND friend_id = :u)
+        ");
+        $delFriend->execute([
+            'u' => $req['sender_id'],
+            'f' => $req['receiver_id'],
+        ]);
+
         echo json_encode([
             'success' => true,
-            'message' => 'Friend request rejected.',
+            'status'  => 'rejected',
+            'message' => 'Friend request declined.',
         ]);
     }
 } catch (PDOException $e) {

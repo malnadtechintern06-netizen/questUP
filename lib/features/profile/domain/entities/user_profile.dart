@@ -1,5 +1,6 @@
 class UserProfile {
   final String id;
+  final String playerId;
   final String name;
   final String email;
   final String avatarKey;
@@ -13,6 +14,7 @@ class UserProfile {
 
   const UserProfile({
     required this.id,
+    this.playerId = 'QST-0000',
     required this.name,
     required this.email,
     required this.avatarKey,
@@ -27,6 +29,7 @@ class UserProfile {
 
   UserProfile copyWith({
     String? id,
+    String? playerId,
     String? name,
     String? email,
     String? avatarKey,
@@ -40,6 +43,7 @@ class UserProfile {
   }) {
     return UserProfile(
       id: id ?? this.id,
+      playerId: playerId ?? this.playerId,
       name: name ?? this.name,
       email: email ?? this.email,
       avatarKey: avatarKey ?? this.avatarKey,

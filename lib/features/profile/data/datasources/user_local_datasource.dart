@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import '../../../../app/config/app_constants.dart';
 import '../../../../core/storage/local_storage_service.dart';
 import '../models/user_profile_model.dart';
@@ -21,10 +23,12 @@ class UserLocalDataSource implements IUserLocalDataSource {
     String? sessionEmail;
     String? sessionName;
     String? sessionId;
+    String? sessionPlayerId;
     if (authSession != null && authSession is Map<String, dynamic>) {
       sessionEmail = authSession['email']?.toString();
       sessionName = authSession['displayName']?.toString() ?? authSession['name']?.toString();
       sessionId = authSession['id']?.toString();
+      sessionPlayerId = authSession['player_id']?.toString() ?? authSession['playerId']?.toString();
     }
 
     final effectiveUserId = targetUserId ?? sessionId ?? 'guest_player';
@@ -33,11 +37,21 @@ class UserLocalDataSource implements IUserLocalDataSource {
     // 1. Try to get user-specific saved profile
     final json = await _storage.getJson(userSpecificKey);
     if (json != null && json is Map<String, dynamic>) {
-      final model = UserProfileModel.fromJson(json);
+      var model = UserProfileModel.fromJson(json);
+      bool needsSave = false;
       if (sessionName != null && sessionName.isNotEmpty && model.name != sessionName) {
-        final updated = UserProfileModel.fromEntity(model.copyWith(name: sessionName));
-        await saveUserProfile(updated);
-        return updated;
+        model = UserProfileModel.fromEntity(model.copyWith(name: sessionName));
+        needsSave = true;
+      }
+      if (model.playerId == 'QST-0000') {
+        final resolvedTag = (sessionPlayerId != null && sessionPlayerId.isNotEmpty)
+            ? sessionPlayerId
+            : _computePlayerTag(effectiveUserId, sessionEmail);
+        model = UserProfileModel.fromEntity(model.copyWith(playerId: resolvedTag));
+        needsSave = true;
+      }
+      if (needsSave) {
+        await saveUserProfile(model);
       }
       return model;
     }
@@ -50,9 +64,14 @@ class UserLocalDataSource implements IUserLocalDataSource {
       }
     }
 
+    final initialPlayerId = (sessionPlayerId != null && sessionPlayerId.isNotEmpty)
+        ? sessionPlayerId
+        : _computePlayerTag(effectiveUserId, sessionEmail);
+
     // 2. Brand new clean profile for this user
     final defaultProfile = UserProfileModel(
       id: effectiveUserId,
+      playerId: initialPlayerId,
       name: (sessionName != null && sessionName.isNotEmpty) ? sessionName : 'Explorer',
       email: (sessionEmail != null && sessionEmail.isNotEmpty) ? sessionEmail : 'explorer@questup.com',
       avatarKey: 'avatar_ranger',
@@ -67,6 +86,14 @@ class UserLocalDataSource implements IUserLocalDataSource {
 
     await saveUserProfile(defaultProfile);
     return defaultProfile;
+  }
+
+  String _computePlayerTag(String userId, [String? email]) {
+    final source = email != null && email.isNotEmpty ? email : userId;
+    final bytes = utf8.encode(source);
+    final hash = sha256.convert(bytes).toString();
+    final numberPart = int.parse(hash.substring(0, 4), radix: 16) % 9000 + 1000;
+    return 'QST-$numberPart';
   }
 
   @override

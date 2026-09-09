@@ -13,6 +13,15 @@ abstract class IQuestMySqlDataSource {
   Future<void> saveQuestToMySql(QuestModel quest);
   Future<bool> saveCompletionToMySql(QuestCompletion completion);
   Future<bool> isQuestCompletedByUserInMySql(String questId, String userId);
+  Future<bool> shareQuestWithFriend({
+    required String questId,
+    required String questTitle,
+    required String senderId,
+    required String senderName,
+    required String senderTag,
+    required String receiverId,
+  });
+  Future<List<Map<String, dynamic>>> fetchSharedQuests(String userId);
 }
 
 class QuestMySqlDataSource implements IQuestMySqlDataSource {
@@ -369,5 +378,82 @@ class QuestMySqlDataSource implements IQuestMySqlDataSource {
       debugPrint('[MySQL] MYSQL QUEST COMPLETION INSERT FAILED: $e');
       return false;
     }
+  }
+
+  @override
+  Future<bool> shareQuestWithFriend({
+    required String questId,
+    required String questTitle,
+    required String senderId,
+    required String senderName,
+    required String senderTag,
+    required String receiverId,
+  }) async {
+    final urlsToTry = <String>[
+      if (_workingApiBaseUrl != null && _workingApiBaseUrl!.isNotEmpty) _workingApiBaseUrl!,
+      ...MySqlConfig.apiBaseUrls.where((u) => u != _workingApiBaseUrl),
+    ];
+
+    final body = {
+      'quest_id': questId,
+      'quest_title': questTitle,
+      'sender_id': senderId,
+      'sender_name': senderName,
+      'sender_tag': senderTag,
+      'receiver_id': receiverId,
+    };
+
+    for (final baseUrl in urlsToTry) {
+      try {
+        final client = HttpClient();
+        client.connectionTimeout = const Duration(milliseconds: 1500);
+        client.badCertificateCallback = ((X509Certificate cert, String host, int port) => true);
+        final uri = Uri.parse('$baseUrl/quests/share.php');
+        final req = await client.postUrl(uri);
+        req.headers.contentType = ContentType.json;
+        req.write(jsonEncode(body));
+        final resp = await req.close();
+        final respBody = await resp.transform(utf8.decoder).join();
+        client.close();
+        final json = jsonDecode(respBody) as Map<String, dynamic>;
+        if (json['success'] == true) {
+          _workingApiBaseUrl = baseUrl;
+          return true;
+        }
+      } catch (e) {
+        debugPrint('[QuestUP Share] Error on $baseUrl: $e');
+      }
+    }
+    return false;
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchSharedQuests(String userId) async {
+    final urlsToTry = <String>[
+      if (_workingApiBaseUrl != null && _workingApiBaseUrl!.isNotEmpty) _workingApiBaseUrl!,
+      ...MySqlConfig.apiBaseUrls.where((u) => u != _workingApiBaseUrl),
+    ];
+
+    for (final baseUrl in urlsToTry) {
+      try {
+        final client = HttpClient();
+        client.connectionTimeout = const Duration(milliseconds: 1500);
+        client.badCertificateCallback = ((X509Certificate cert, String host, int port) => true);
+        final uri = Uri.parse('$baseUrl/quests/get_shared.php?user_id=$userId');
+        final req = await client.getUrl(uri);
+        final resp = await req.close();
+        final respBody = await resp.transform(utf8.decoder).join();
+        client.close();
+        final json = jsonDecode(respBody) as Map<String, dynamic>;
+        if (json['success'] == true) {
+          _workingApiBaseUrl = baseUrl;
+          final incoming = json['incoming_shared'] as List? ?? [];
+          return incoming.map((e) => e as Map<String, dynamic>).toList();
+        }
+      } catch (e) {
+        debugPrint('[QuestUP Get Shared] Error on $baseUrl: $e');
+      }
+    }
+    return [];
   }
 }

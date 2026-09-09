@@ -13,6 +13,7 @@ import 'package:quest_up/features/quests/data/datasources/quest_local_datasource
 import 'package:quest_up/features/quests/data/datasources/quest_mysql_datasource.dart';
 import 'package:quest_up/features/quests/data/repositories/quest_repository_impl.dart';
 import 'package:quest_up/features/quests/domain/entities/quest.dart';
+import 'package:quest_up/features/quests/domain/entities/shared_quest.dart';
 import 'package:quest_up/features/quests/domain/repositories/quest_repository.dart';
 import 'package:quest_up/features/quests/domain/usecases/get_nearby_quests_usecase.dart';
 import 'package:quest_up/features/quests/domain/usecases/get_quest_by_id_usecase.dart';
@@ -491,35 +492,61 @@ final nearbyQuestsProvider = Provider<List<Quest>>((ref) {
   );
 });
 
+// Shared Quests Provider for current user (incoming and outgoing squad co-op assists)
+final sharedQuestsProvider = FutureProvider.autoDispose<List<SharedQuest>>((ref) async {
+  final profile = ref.watch(userProfileNotifierProvider).valueOrNull;
+  if (profile == null || profile.id.isEmpty || profile.id == 'guest_player') return [];
+  final repo = ref.watch(questRepositoryProvider);
+  return await repo.getSharedQuests(userId: profile.id);
+});
+
 // Single Quest Provider by ID
 final singleQuestProvider =
     FutureProvider.family<Quest?, String>((ref, questId) async {
+  Quest? foundQuest;
+
   // 1. Instant check in memory (from questsNotifierProvider where user tapped the quest card)
   final inMemoryQuests = ref.watch(questsNotifierProvider).valueOrNull;
   if (inMemoryQuests != null && inMemoryQuests.isNotEmpty) {
-    final match = inMemoryQuests.where((q) => q.id == questId).firstOrNull;
-    if (match != null) {
-      return match;
-    }
+    foundQuest = inMemoryQuests.where((q) => q.id == questId).firstOrNull;
   }
 
   // 2. Fetch from repository (checks local storage cache first, then MySQL if needed)
-  final getById = ref.watch(getQuestByIdUseCaseProvider);
-  final quest = await getById(questId);
-  if (quest != null) {
-    return quest;
+  if (foundQuest == null) {
+    final getById = ref.watch(getQuestByIdUseCaseProvider);
+    foundQuest = await getById(questId);
   }
 
   // 3. Fallback: Force refresh all quests from repository in case new quest was added recently
+  if (foundQuest == null) {
+    try {
+      final profile = ref.read(userProfileNotifierProvider).value;
+      final userId = (profile != null && profile.id.isNotEmpty && profile.id != 'guest_player') ? profile.id : null;
+      final allQuests = await ref.read(getQuestsUseCaseProvider).call(userId: userId);
+      foundQuest = allQuests.where((q) => q.id == questId).firstOrNull;
+    } catch (_) {}
+  }
+
+  if (foundQuest == null) return null;
+
+  // 4. Augment with Squad Co-Op shared metadata if another player shared it with the current user
   try {
-    final profile = ref.read(userProfileNotifierProvider).value;
-    final userId = (profile != null && profile.id.isNotEmpty && profile.id != 'guest_player') ? profile.id : null;
-    final allQuests = await ref.read(getQuestsUseCaseProvider).call(userId: userId);
-    final refreshedMatch = allQuests.where((q) => q.id == questId).firstOrNull;
-    if (refreshedMatch != null) {
-      return refreshedMatch;
+    final sharedList = ref.watch(sharedQuestsProvider).valueOrNull;
+    if (sharedList != null && sharedList.isNotEmpty) {
+      final myProfile = ref.read(userProfileNotifierProvider).valueOrNull;
+      final myId = myProfile?.id ?? '';
+      final incomingShare = sharedList.where((sq) => sq.questId == questId && sq.receiverId == myId).firstOrNull;
+      if (incomingShare != null) {
+        return foundQuest.copyWith(
+          isSharedQuest: true,
+          sharedByUserId: incomingShare.senderId,
+          sharedByUserName: incomingShare.senderName,
+          sharedByUserTag: incomingShare.senderTag,
+          sharedStatus: incomingShare.status.name,
+        );
+      }
     }
   } catch (_) {}
 
-  return null;
+  return foundQuest;
 });

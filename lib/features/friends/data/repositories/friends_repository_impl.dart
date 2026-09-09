@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'package:quest_up/core/errors/exceptions.dart';
 import 'package:quest_up/features/friends/data/datasources/friends_local_datasource.dart';
@@ -33,6 +34,9 @@ class FriendsRepositoryImpl implements IFriendsRepository {
   @override
   Future<String> getMyPlayerTag() async {
     final profile = await userRepository.getUserProfile();
+    if (profile.playerId.isNotEmpty && RegExp(r'^QST-\d{4}$', caseSensitive: false).hasMatch(profile.playerId)) {
+      return profile.playerId.toUpperCase();
+    }
     return localDataSource.computePlayerTag(profile.id, profile.email);
   }
 
@@ -164,6 +168,9 @@ class FriendsRepositoryImpl implements IFriendsRepository {
         newRequest = await remoteDataSource!.sendFriendRequest(
           senderId: myProfile.id,
           targetTagOrId: targetPlayer.playerTag,
+          senderTag: myTag,
+          senderName: myProfile.name,
+          senderEmail: myProfile.email,
         );
       } catch (e) {
         if (e is AppException) rethrow;
@@ -267,26 +274,74 @@ class FriendsRepositoryImpl implements IFriendsRepository {
   @override
   Future<void> removeFriend(String friendUserId) async {
     final currentFriends = await localDataSource.getFriends();
-    currentFriends.removeWhere((f) => f.userId == friendUserId);
+    currentFriends.removeWhere((f) => f.userId == friendUserId || f.playerTag.toUpperCase() == friendUserId.toUpperCase());
     await localDataSource.saveFriends(currentFriends);
+
+    final myProfile = await userRepository.getUserProfile();
+    if (remoteDataSource != null) {
+      try {
+        await remoteDataSource!.removeFriend(
+          currentUserId: myProfile.id,
+          friendUserId: friendUserId,
+        );
+      } catch (_) {}
+    }
   }
 
   @override
   Future<FriendProfile?> getFriendProfile(String friendUserId) async {
-    final friends = await localDataSource.getFriends();
-    final matchInFriends = friends.where((f) => f.userId == friendUserId).firstOrNull;
-    if (matchInFriends != null) return matchInFriends;
+    final myProfile = await userRepository.getUserProfile();
+    final friends = await getFriends();
+    final matchInFriends = friends.where((f) => f.userId == friendUserId || f.playerTag.toUpperCase() == friendUserId.toUpperCase()).firstOrNull;
 
+    if (matchInFriends != null) {
+      // User is an accepted friend! Fetch verified quest history
+      List<FriendCompletedQuestSummary> history = matchInFriends.completedQuests;
+      if (remoteDataSource != null) {
+        try {
+          final remoteHistory = await remoteDataSource!.getFriendHistory(
+            currentUserId: myProfile.id,
+            targetPlayerIdOrUserId: matchInFriends.playerTag.isNotEmpty ? matchInFriends.playerTag : matchInFriends.userId,
+          );
+          if (remoteHistory.isNotEmpty) {
+            history = remoteHistory;
+          }
+        } catch (_) {}
+      }
+      return matchInFriends.copyWith(
+        isFriend: true,
+        friendshipStatus: 'accepted',
+        completedQuests: history,
+      );
+    }
+
+    // Check sent / incoming requests to know friendshipStatus
+    final pendingIncoming = await getPendingIncomingRequests();
+    final isPendingIncoming = pendingIncoming.any((r) => r.senderId == friendUserId || r.senderTag.toUpperCase() == friendUserId.toUpperCase());
+
+    final pendingSent = await getSentRequests();
+    final isPendingSent = pendingSent.any((r) => r.receiverId == friendUserId || r.receiverTag.toUpperCase() == friendUserId.toUpperCase());
+
+    final status = isPendingIncoming ? 'pending_received' : (isPendingSent ? 'pending_sent' : 'none');
+
+    // Not an accepted friend. Check local registry or remote search
+    FriendProfile? profile;
     final registry = await localDataSource.getPlayerRegistry();
-    final matchInRegistry = registry.where((p) => p.userId == friendUserId || p.playerTag == friendUserId).firstOrNull;
-    if (matchInRegistry != null) return matchInRegistry;
+    profile = registry.where((p) => p.userId == friendUserId || p.playerTag.toUpperCase() == friendUserId.toUpperCase()).firstOrNull;
 
-    // Search via remote
-    if (remoteDataSource != null) {
+    if (profile == null && remoteDataSource != null) {
       try {
-        final remoteMatch = await remoteDataSource!.searchPlayer(friendUserId);
-        if (remoteMatch != null) return remoteMatch;
+        profile = await remoteDataSource!.searchPlayer(friendUserId, currentUserId: myProfile.id);
       } catch (_) {}
+    }
+
+    if (profile != null) {
+      // STRICT PRIVACY: For non-friends, completed quests must NEVER be shown!
+      return profile.copyWith(
+        isFriend: false,
+        friendshipStatus: status,
+        completedQuests: const [],
+      );
     }
 
     return null;
@@ -353,10 +408,40 @@ class FriendsRepositoryImpl implements IFriendsRepository {
     final friends = await localDataSource.getFriends();
     final friendIds = friends.map((f) => f.userId).toSet();
     final myProfile = await userRepository.getUserProfile();
+    final myTag = await getMyPlayerTag();
 
+    final result = <FriendProfile>[];
+    final seenIds = <String>{myProfile.id, ...friendIds};
+    final seenTags = <String>{myTag.toUpperCase()};
+
+    // 1. Fetch real players from MySQL database via REST API or direct service
+    if (remoteDataSource != null) {
+      try {
+        final remote = await remoteDataSource!.getSuggestedPlayers(currentUserId: myProfile.id);
+        for (final p in remote) {
+          final tagUpper = p.playerTag.toUpperCase();
+          if (!seenIds.contains(p.userId) && !seenTags.contains(tagUpper)) {
+            seenIds.add(p.userId);
+            seenTags.add(tagUpper);
+            result.add(p);
+          }
+        }
+      } catch (e) {
+        debugPrint('[FriendsRepo] Remote suggested players notice: $e');
+      }
+    }
+
+    // 2. Add local registry players if needed
     final registry = await localDataSource.getPlayerRegistry();
-    return registry
-        .where((p) => p.userId != myProfile.id && !friendIds.contains(p.userId))
-        .toList();
+    for (final p in registry) {
+      final tagUpper = p.playerTag.toUpperCase();
+      if (!seenIds.contains(p.userId) && !seenTags.contains(tagUpper)) {
+        seenIds.add(p.userId);
+        seenTags.add(tagUpper);
+        result.add(p);
+      }
+    }
+
+    return result;
   }
 }

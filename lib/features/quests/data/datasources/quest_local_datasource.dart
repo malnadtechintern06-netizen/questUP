@@ -14,6 +14,8 @@ abstract class IQuestLocalDataSource {
   Future<void> saveQuests(List<QuestModel> quests);
   Future<QuestModel?> getQuestById(String id);
   Future<void> markCompleted(String id);
+  Future<List<Map<String, dynamic>>> getLocalSharedQuests();
+  Future<void> saveLocalSharedQuests(List<Map<String, dynamic>> sharedQuests);
 }
 
 class QuestLocalDataSource implements IQuestLocalDataSource {
@@ -180,6 +182,26 @@ class QuestLocalDataSource implements IQuestLocalDataSource {
           await _storage.saveJson(AppConstants.keyUserProfile, profileJson);
         }
       }
+    } catch (_) {}
+  }
+
+  static const _keySharedQuests = 'questup_shared_quests_cache_v1';
+
+  @override
+  Future<List<Map<String, dynamic>>> getLocalSharedQuests() async {
+    try {
+      final raw = await _storage.getJson(_keySharedQuests);
+      if (raw is List) {
+        return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  @override
+  Future<void> saveLocalSharedQuests(List<Map<String, dynamic>> sharedQuests) async {
+    try {
+      await _storage.saveJson(_keySharedQuests, sharedQuests);
     } catch (_) {}
   }
 }

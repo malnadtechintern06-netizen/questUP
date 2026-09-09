@@ -65,11 +65,42 @@ if (empty($passwordHash)) {
     }
 }
 
-if (empty($playerId)) {
-    $playerId = 'QST-' . strtoupper(bin2hex(random_bytes(2)));
+$db = db();
+
+// Helper to generate a unique permanent 4-digit Player ID (QST-XXXX)
+function generateUniquePlayerId(PDO $db, string $seed): string {
+    $hash = hash('sha256', $seed);
+    $num = (hexdec(substr($hash, 0, 4)) % 9000) + 1000;
+    $tag = 'QST-' . $num;
+
+    $stmt = $db->prepare("SELECT 1 FROM users WHERE player_id = :pid LIMIT 1");
+    $stmt->execute(['pid' => $tag]);
+    if (!$stmt->fetch()) {
+        return $tag;
+    }
+
+    for ($i = 0; $i < 50; $i++) {
+        $rndTag = 'QST-' . mt_rand(1000, 9999);
+        $stmt->execute(['pid' => $rndTag]);
+        if (!$stmt->fetch()) {
+            return $rndTag;
+        }
+    }
+
+    for ($n = 1000; $n <= 9999; $n++) {
+        $seqTag = 'QST-' . $n;
+        $stmt->execute(['pid' => $seqTag]);
+        if (!$stmt->fetch()) {
+            return $seqTag;
+        }
+    }
+
+    return 'QST-' . mt_rand(1000, 9999);
 }
 
-$db = db();
+if (empty($playerId) || !preg_match('/^QST-\d{4}$/', $playerId)) {
+    $playerId = generateUniquePlayerId($db, $email);
+}
 
 try {
     // 2. Check if player_id column exists

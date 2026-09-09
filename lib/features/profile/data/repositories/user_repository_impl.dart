@@ -24,7 +24,18 @@ class UserRepositoryImpl implements UserRepository {
     return localProfile;
   }
 
+  DateTime? _lastSyncTime;
+  bool _isSyncing = false;
+
   void _syncRemoteProfile(UserProfile localProfile) {
+    if (_isSyncing) return;
+    final now = DateTime.now();
+    if (_lastSyncTime != null && now.difference(_lastSyncTime!).inSeconds < 30) {
+      return;
+    }
+    _isSyncing = true;
+    _lastSyncTime = now;
+
     Future(() async {
       try {
         final remoteProfile = await _mySqlDataSource.fetchProfileFromMySql(localProfile.id);
@@ -43,7 +54,10 @@ class UserRepositoryImpl implements UserRepository {
         } else {
           await _mySqlDataSource.saveProfileToMySql(UserProfileModel.fromEntity(localProfile));
         }
-      } catch (_) {}
+      } catch (_) {
+      } finally {
+        _isSyncing = false;
+      }
     });
   }
 

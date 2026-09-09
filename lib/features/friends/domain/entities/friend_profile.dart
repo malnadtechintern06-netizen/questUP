@@ -53,6 +53,8 @@ class FriendProfile {
   final DateTime friendshipDate;
   final bool isOnline;
   final String lastActiveText;
+  final bool isFriend;
+  final String friendshipStatus; // 'none', 'pending_sent', 'pending_received', 'accepted'
 
   const FriendProfile({
     required this.userId,
@@ -71,6 +73,8 @@ class FriendProfile {
     required this.friendshipDate,
     required this.isOnline,
     required this.lastActiveText,
+    this.isFriend = false,
+    this.friendshipStatus = 'none',
   });
 
   FriendProfile copyWith({
@@ -90,6 +94,8 @@ class FriendProfile {
     DateTime? friendshipDate,
     bool? isOnline,
     String? lastActiveText,
+    bool? isFriend,
+    String? friendshipStatus,
   }) {
     return FriendProfile(
       userId: userId ?? this.userId,
@@ -108,6 +114,8 @@ class FriendProfile {
       friendshipDate: friendshipDate ?? this.friendshipDate,
       isOnline: isOnline ?? this.isOnline,
       lastActiveText: lastActiveText ?? this.lastActiveText,
+      isFriend: isFriend ?? this.isFriend,
+      friendshipStatus: friendshipStatus ?? this.friendshipStatus,
     );
   }
 }

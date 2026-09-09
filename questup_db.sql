@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   INDEX `idx_users_email` (`email`),
-  INDEX `idx_users_player_id` (`player_id`)
+  UNIQUE KEY `uk_users_player_id` (`player_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 2. User Profiles Table (Game stats, XP, Level, Coins)
@@ -133,7 +133,20 @@ CREATE TABLE IF NOT EXISTS `friend_requests` (
   PRIMARY KEY (`id`),
   INDEX `idx_fr_sender` (`sender_id`),
   INDEX `idx_fr_receiver` (`receiver_id`),
-  INDEX `idx_fr_status` (`status`)
+  INDEX `idx_fr_status` (`status`),
+  INDEX `idx_fr_pair_status` (`sender_id`, `receiver_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 8b. Mutual Accepted Friends Cache Table
+CREATE TABLE IF NOT EXISTS `user_friends` (
+  `id` VARCHAR(64) NOT NULL,
+  `user_id` VARCHAR(64) NOT NULL,
+  `friend_id` VARCHAR(64) NOT NULL,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_friend` (`user_id`, `friend_id`),
+  INDEX `idx_uf_user` (`user_id`),
+  INDEX `idx_uf_friend` (`friend_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 9. Email OTPs Table

@@ -691,11 +691,25 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
 
         // Suggested Explorers to Connect
         if (state.suggestedPlayers.isNotEmpty) ...[
-          Text(
-            'EXPLORER COMMUNITY DISCOVERY',
-            style: AppTypography.badge.copyWith(color: AppColors.secondary, fontSize: 11),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'DISCOVER PLAYERS (REAL IDs)',
+                style: AppTypography.badge.copyWith(color: AppColors.secondary, fontSize: 11, letterSpacing: 0.8),
+              ),
+              Text(
+                '${state.suggestedPlayers.length} Active',
+                style: AppTypography.caption.copyWith(color: AppColors.textMuted, fontSize: 10),
+              ),
+            ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 4),
+          Text(
+            'Explore real players from the database. Tap their Player Tag to copy or ADD to send a friend request.',
+            style: AppTypography.caption.copyWith(color: AppColors.textSecondary, fontSize: 11),
+          ),
+          const SizedBox(height: 12),
           ...state.suggestedPlayers.map((player) => _buildSuggestedPlayerCard(player, state)),
         ],
       ],
@@ -796,61 +810,135 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
   Widget _buildSuggestedPlayerCard(FriendProfile player, FriendsState state) {
     final avatarColor = AvatarSelectorSheet.getColorForAvatar(player.avatarKey);
     final avatarIcon = AvatarSelectorSheet.getIconForAvatar(player.avatarKey);
+    final isAlreadyFriend = state.friends.any((f) => f.userId == player.userId || f.playerTag == player.playerTag);
     final isPending = state.sentRequests.any((r) => r.receiverId == player.userId || r.receiverTag == player.playerTag);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
           Container(
-            width: 44,
-            height: 44,
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: avatarColor.withValues(alpha: 0.2),
-              border: Border.all(color: avatarColor, width: 1.5),
+              border: Border.all(color: avatarColor, width: 1.8),
             ),
-            child: Icon(avatarIcon, color: avatarColor, size: 22),
+            child: Icon(avatarIcon, color: avatarColor, size: 24),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  player.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodyMedium.copyWith(fontWeight: FontWeight.bold),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        player.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.bodyMedium.copyWith(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    // Clickable Player Tag Chip
+                    InkWell(
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: () {
+                        _searchController.text = player.playerTag;
+                        _copyToClipboard(player.playerTag, 'Player ID ${player.playerTag} copied & filled in search! 📋');
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.secondary.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppColors.secondary.withValues(alpha: 0.5)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              player.playerTag,
+                              style: const TextStyle(
+                                color: AppColors.secondary,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 10,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                            const SizedBox(width: 3),
+                            const Icon(Icons.copy_rounded, size: 10, color: AppColors.secondary),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 3),
                 Text(
-                  '${player.playerTag}  •  LVL ${player.level}  •  Rank #${player.rank}',
+                  'LVL ${player.level}  •  ${player.completedQuestsCount} Quests  •  Rank #${player.rank}',
                   style: AppTypography.caption.copyWith(color: AppColors.textSecondary, fontSize: 11),
                 ),
               ],
             ),
           ),
           const SizedBox(width: 8),
-          if (isPending)
-            Text(
-              'Pending',
-              style: AppTypography.caption.copyWith(color: AppColors.textMuted, fontWeight: FontWeight.bold),
+          if (isAlreadyFriend)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.primaryLight,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Text(
+                'SQUAD ✓',
+                style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 10),
+              ),
+            )
+          else if (isPending)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceElevated,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: const Text(
+                'PENDING ⏳',
+                style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.bold, fontSize: 10),
+              ),
             )
           else
             ElevatedButton(
-              onPressed: () => ref.read(friendsNotifierProvider.notifier).sendFriendRequest(player.playerTag),
+              onPressed: state.isLoading
+                  ? null
+                  : () => ref.read(friendsNotifierProvider.notifier).sendFriendRequest(player.playerTag),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                elevation: 3,
               ),
-              child: const Text('ADD +', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 11)),
+              child: const Text(
+                'ADD +',
+                style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 11),
+              ),
             ),
         ],
       ),

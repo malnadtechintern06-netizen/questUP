@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../../../../core/utils/distance_calculator.dart';
 import '../../domain/entities/quest.dart';
+import '../../domain/entities/shared_quest.dart';
 import '../../domain/repositories/quest_repository.dart';
 import '../datasources/quest_local_datasource.dart';
 import '../datasources/quest_mysql_datasource.dart';
@@ -301,5 +302,79 @@ class QuestRepositoryImpl implements QuestRepository {
   @override
   Future<void> markQuestCompleted(String id) async {
     await localDataSource.markCompleted(id);
+  }
+
+  @override
+  Future<bool> shareQuestWithFriend({
+    required String questId,
+    required String questTitle,
+    required String senderId,
+    required String senderName,
+    required String senderTag,
+    required String receiverId,
+  }) async {
+    // 1. Send via remote MySQL / REST API
+    final remoteSuccess = await mySqlDataSource.shareQuestWithFriend(
+      questId: questId,
+      questTitle: questTitle,
+      senderId: senderId,
+      senderName: senderName,
+      senderTag: senderTag,
+      receiverId: receiverId,
+    );
+
+    // 2. Cache locally
+    try {
+      final localList = await localDataSource.getLocalSharedQuests();
+      localList.add({
+        'id': 'sq_${DateTime.now().millisecondsSinceEpoch}',
+        'quest_id': questId,
+        'quest_title': questTitle,
+        'sender_id': senderId,
+        'sender_name': senderName,
+        'sender_tag': senderTag,
+        'receiver_id': receiverId,
+        'status': 'pending',
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      await localDataSource.saveLocalSharedQuests(localList);
+    } catch (_) {}
+
+    return remoteSuccess;
+  }
+
+  @override
+  Future<List<SharedQuest>> getSharedQuests({required String userId}) async {
+    final result = <SharedQuest>[];
+    final seenIds = <String>{};
+
+    // 1. Fetch remote shared quests from MySQL
+    try {
+      final remoteList = await mySqlDataSource.fetchSharedQuests(userId);
+      for (final json in remoteList) {
+        final sq = SharedQuest.fromJson(json);
+        if (!seenIds.contains(sq.id)) {
+          seenIds.add(sq.id);
+          result.add(sq);
+        }
+      }
+      if (remoteList.isNotEmpty) {
+        await localDataSource.saveLocalSharedQuests(remoteList);
+      }
+    } catch (_) {}
+
+    // 2. Add from local cache
+    try {
+      final localList = await localDataSource.getLocalSharedQuests();
+      for (final json in localList) {
+        final sq = SharedQuest.fromJson(json);
+        if (!seenIds.contains(sq.id)) {
+          seenIds.add(sq.id);
+          result.add(sq);
+        }
+      }
+    } catch (_) {}
+
+    return result;
   }
 }

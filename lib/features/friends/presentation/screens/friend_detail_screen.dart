@@ -25,6 +25,7 @@ class FriendDetailScreen extends ConsumerStatefulWidget {
 class _FriendDetailScreenState extends ConsumerState<FriendDetailScreen> {
   FriendProfile? _friend;
   bool _isLoading = true;
+  bool _isActionInProgress = false;
 
   @override
   void initState() {
@@ -42,6 +43,56 @@ class _FriendDetailScreenState extends ConsumerState<FriendDetailScreen> {
         _friend = profile;
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _sendFriendRequest() async {
+    if (_friend == null || _isActionInProgress) return;
+    setState(() => _isActionInProgress = true);
+
+    final success = await ref
+        .read(friendsNotifierProvider.notifier)
+        .sendFriendRequest(_friend!.playerTag);
+
+    if (mounted) {
+      setState(() => _isActionInProgress = false);
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Friend request sent to ${_friend!.name} (${_friend!.playerTag})! 🚀'),
+            backgroundColor: AppColors.accentSuccess,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        _fetchFriend();
+      }
+    }
+  }
+
+  Future<void> _acceptFriendRequest() async {
+    if (_friend == null || _isActionInProgress) return;
+    setState(() => _isActionInProgress = true);
+
+    final pending = ref.read(friendsNotifierProvider).pendingRequests;
+    final match = pending.where((r) =>
+        r.senderId == _friend!.userId ||
+        r.senderTag.toUpperCase() == _friend!.playerTag.toUpperCase()).firstOrNull;
+
+    if (match != null) {
+      await ref.read(friendsNotifierProvider.notifier).acceptFriendRequest(match.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${_friend!.name} added to your squad! History unlocked. 🔓'),
+            backgroundColor: AppColors.accentSuccess,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        _fetchFriend();
+      }
+    }
+    if (mounted) {
+      setState(() => _isActionInProgress = false);
     }
   }
 
@@ -103,7 +154,7 @@ class _FriendDetailScreenState extends ConsumerState<FriendDetailScreen> {
           style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.bold),
         ),
         content: Text(
-          'Are you sure you want to remove ${_friend?.name ?? 'this player'} from your friends list?',
+          'Are you sure you want to remove ${_friend?.name ?? 'this player'} from your friends list? Their private quest history will no longer be visible.',
           style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
         ),
         actions: [
@@ -160,6 +211,7 @@ class _FriendDetailScreenState extends ConsumerState<FriendDetailScreen> {
     }
 
     final friend = _friend!;
+    final isFriend = friend.isFriend;
     final avatarColor = AvatarSelectorSheet.getColorForAvatar(friend.avatarKey);
     final avatarIcon = AvatarSelectorSheet.getIconForAvatar(friend.avatarKey);
 
@@ -169,15 +221,16 @@ class _FriendDetailScreenState extends ConsumerState<FriendDetailScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: Text(
-          'Friend Game Profile',
+          isFriend ? 'Friend Game Profile' : 'Player Profile',
           style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.w800),
         ),
         actions: [
-          IconButton(
-            tooltip: 'Remove Friend',
-            icon: const Icon(Icons.person_remove_rounded, color: AppColors.textMuted),
-            onPressed: () => _showRemoveFriendDialog(context),
-          ),
+          if (isFriend)
+            IconButton(
+              tooltip: 'Remove Friend',
+              icon: const Icon(Icons.person_remove_rounded, color: AppColors.textMuted),
+              onPressed: () => _showRemoveFriendDialog(context),
+            ),
         ],
       ),
       body: SingleChildScrollView(
@@ -185,21 +238,29 @@ class _FriendDetailScreenState extends ConsumerState<FriendDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. 3D Hero Profile Header
+            // 1. Hero Profile Header
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: AppColors.surface,
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: AppColors.borderBright, width: 1.2),
-                gradient: const RadialGradient(
-                  center: Alignment(-0.6, -0.6),
+                border: Border.all(
+                  color: isFriend ? AppColors.borderBright : AppColors.border,
+                  width: 1.2,
+                ),
+                gradient: RadialGradient(
+                  center: const Alignment(-0.6, -0.6),
                   radius: 1.2,
-                  colors: [
-                    Color(0xFF241C3E),
-                    Color(0xFF0F1523),
-                  ],
+                  colors: isFriend
+                      ? [
+                          const Color(0xFF241C3E),
+                          const Color(0xFF0F1523),
+                        ]
+                      : [
+                          const Color(0xFF1E2235),
+                          const Color(0xFF0C101C),
+                        ],
                 ),
                 boxShadow: [
                   BoxShadow(
@@ -213,7 +274,7 @@ class _FriendDetailScreenState extends ConsumerState<FriendDetailScreen> {
                 children: [
                   Row(
                     children: [
-                      // 3D Avatar
+                      // Avatar
                       Container(
                         width: 70,
                         height: 70,
@@ -233,7 +294,7 @@ class _FriendDetailScreenState extends ConsumerState<FriendDetailScreen> {
                       ),
                       const SizedBox(width: 16),
 
-                      // Name, Tag & Rank Title
+                      // Name, Tag & Relationship Badge
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -246,26 +307,44 @@ class _FriendDetailScreenState extends ConsumerState<FriendDetailScreen> {
                               ),
                             ),
                             const SizedBox(height: 2),
-                            Text(
-                              'Unique ID: ${friend.playerTag}',
-                              style: AppTypography.caption.copyWith(
-                                color: AppColors.secondary,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 12,
-                              ),
+                            Row(
+                              children: [
+                                Text(
+                                  'Player ID: ',
+                                  style: AppTypography.caption.copyWith(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                Text(
+                                  friend.playerTag,
+                                  style: AppTypography.caption.copyWith(
+                                    color: AppColors.secondary,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12,
+                                    letterSpacing: 0.8,
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryLight,
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: AppColors.primary.withValues(alpha: 0.4)),
-                              ),
-                              child: Text(
-                                friend.rankTitle.toUpperCase(),
-                                style: AppTypography.badge.copyWith(color: AppColors.primary, fontSize: 9),
-                              ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryLight,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.4)),
+                                  ),
+                                  child: Text(
+                                    friend.rankTitle.toUpperCase(),
+                                    style: AppTypography.badge.copyWith(color: AppColors.primary, fontSize: 9),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                _buildFriendshipStatusChip(friend),
+                              ],
                             ),
                           ],
                         ),
@@ -306,7 +385,7 @@ class _FriendDetailScreenState extends ConsumerState<FriendDetailScreen> {
 
             const SizedBox(height: 18),
 
-            // 2. 4 Key Game Metric Cards
+            // 2. Key Game Metric Cards
             Row(
               children: [
                 Expanded(
@@ -357,27 +436,32 @@ class _FriendDetailScreenState extends ConsumerState<FriendDetailScreen> {
 
             const SizedBox(height: 24),
 
-            // 3. Completed Games & Quest History Section
+            // 3. Completed Games & Quest History Section (Strict Privacy Rule)
             _buildSectionHeader('COMPLETED GAMES & QUEST HISTORY', Icons.history_edu_rounded),
             const SizedBox(height: 10),
 
-            if (friend.completedQuests.isEmpty)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Text(
-                  'No completed quests recorded yet.',
-                  textAlign: TextAlign.center,
-                  style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
-                ),
-              )
-            else
-              ...friend.completedQuests.map((quest) => _buildQuestHistoryCard(quest)),
+            if (isFriend) ...[
+              if (friend.completedQuests.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Text(
+                    'No verified completed quests recorded yet.',
+                    textAlign: TextAlign.center,
+                    style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+                  ),
+                )
+              else
+                ...friend.completedQuests.map((quest) => _buildQuestHistoryCard(quest)),
+            ] else ...[
+              // PRIVACY LOCKED STATE
+              _buildPrivacyLockedHistoryCard(friend),
+            ],
 
             const SizedBox(height: 24),
 
@@ -385,44 +469,265 @@ class _FriendDetailScreenState extends ConsumerState<FriendDetailScreen> {
             _buildSectionHeader('EARNED TROPHY BADGES', Icons.military_tech_rounded),
             const SizedBox(height: 10),
 
-            if (friend.earnedBadges.isEmpty)
+            if (isFriend) ...[
+              if (friend.earnedBadges.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Text(
+                    'No badges unlocked yet.',
+                    textAlign: TextAlign.center,
+                    style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+                  ),
+                )
+              else
+                ...friend.earnedBadges.map((badge) => _buildBadgeCard(badge)),
+            ] else ...[
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
                   color: AppColors.surface,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: AppColors.border),
                 ),
-                child: Text(
-                  'No badges unlocked yet.',
-                  textAlign: TextAlign.center,
-                  style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+                child: Row(
+                  children: [
+                    const Icon(Icons.lock_outline_rounded, size: 20, color: AppColors.textMuted),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Badges and trophy vault are private. Connect as friends to view.',
+                        style: AppTypography.caption.copyWith(color: AppColors.textSecondary),
+                      ),
+                    ),
+                  ],
                 ),
-              )
-            else
-              ...friend.earnedBadges.map((badge) => _buildBadgeCard(badge)),
+              ),
+            ],
 
             const SizedBox(height: 24),
 
-            // 5. Action Button
-            Premium3DButton(
-              text: 'CHALLENGE FRIEND ON RADAR',
-              icon: Icons.sports_esports_rounded,
-              color: AppColors.primary,
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Radar Quest Challenge invitation sent to ${friend.name}! 🎯'),
-                    backgroundColor: AppColors.surfaceElevated,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              },
-            ),
+            // 5. Dynamic Action Button based on Friendship Status
+            _buildBottomActionButton(friend),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildFriendshipStatusChip(FriendProfile friend) {
+    if (friend.isFriend) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: AppColors.accentSuccess.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppColors.accentSuccess.withValues(alpha: 0.4)),
+        ),
+        child: Text(
+          'SQUAD FRIEND',
+          style: AppTypography.badge.copyWith(color: AppColors.accentSuccess, fontSize: 9),
+        ),
+      );
+    }
+
+    if (friend.friendshipStatus == 'pending_sent') {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: AppColors.secondary.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppColors.secondary.withValues(alpha: 0.4)),
+        ),
+        child: Text(
+          'REQUEST PENDING',
+          style: AppTypography.badge.copyWith(color: AppColors.secondary, fontSize: 9),
+        ),
+      );
+    }
+
+    if (friend.friendshipStatus == 'pending_received') {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.4)),
+        ),
+        child: Text(
+          'REQUEST RECEIVED',
+          style: AppTypography.badge.copyWith(color: AppColors.primary, fontSize: 9),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Text(
+        'NOT IN SQUAD',
+        style: AppTypography.badge.copyWith(color: AppColors.textMuted, fontSize: 9),
+      ),
+    );
+  }
+
+  Widget _buildPrivacyLockedHistoryCard(FriendProfile friend) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: const Color(0xFF161928),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.secondary.withValues(alpha: 0.35), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.secondary.withValues(alpha: 0.15),
+              border: Border.all(color: AppColors.secondary, width: 1.5),
+            ),
+            child: const Icon(
+              Icons.lock_person_rounded,
+              color: AppColors.secondary,
+              size: 28,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Player History is Private',
+            style: AppTypography.titleMedium.copyWith(
+              fontWeight: FontWeight.w900,
+              fontSize: 16,
+              letterSpacing: 0.3,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Completed quest history, routes, and achievements are strictly confidential. Become friends with ${friend.name} to view their game records.',
+            textAlign: TextAlign.center,
+            style: AppTypography.bodyMedium.copyWith(
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (friend.friendshipStatus == 'pending_sent')
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceElevated,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.secondary.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.schedule_rounded, size: 16, color: AppColors.secondary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Friend request pending approval',
+                    style: AppTypography.caption.copyWith(
+                      color: AppColors.secondary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (friend.friendshipStatus == 'pending_received')
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accentSuccess,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: const Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 18),
+              label: const Text('ACCEPT FRIEND REQUEST', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              onPressed: _isActionInProgress ? null : _acceptFriendRequest,
+            )
+          else
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: const Icon(Icons.person_add_rounded, color: Colors.white, size: 18),
+              label: const Text('ADD FRIEND TO UNLOCK', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              onPressed: _isActionInProgress ? null : _sendFriendRequest,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomActionButton(FriendProfile friend) {
+    if (friend.isFriend) {
+      return Premium3DButton(
+        text: 'CHALLENGE FRIEND ON RADAR',
+        icon: Icons.sports_esports_rounded,
+        color: AppColors.primary,
+        onPressed: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Radar Quest Challenge invitation sent to ${friend.name}! 🎯'),
+              backgroundColor: AppColors.surfaceElevated,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        },
+      );
+    }
+
+    if (friend.friendshipStatus == 'pending_sent') {
+      return Premium3DButton(
+        text: 'FRIEND REQUEST PENDING',
+        icon: Icons.schedule_rounded,
+        color: AppColors.textMuted,
+        onPressed: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Friend request has been sent. Awaiting player response.'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        },
+      );
+    }
+
+    if (friend.friendshipStatus == 'pending_received') {
+      return Premium3DButton(
+        text: 'ACCEPT FRIEND REQUEST',
+        icon: Icons.check_circle_rounded,
+        color: AppColors.accentSuccess,
+        onPressed: _isActionInProgress ? () {} : _acceptFriendRequest,
+      );
+    }
+
+    return Premium3DButton(
+      text: 'SEND FRIEND REQUEST',
+      icon: Icons.person_add_rounded,
+      color: AppColors.primary,
+      onPressed: _isActionInProgress ? () {} : _sendFriendRequest,
     );
   }
 

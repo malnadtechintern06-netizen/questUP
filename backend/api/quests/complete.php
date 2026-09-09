@@ -87,6 +87,52 @@ try {
         'uid' => $userId,
     ]);
 
+    // 4. Check if this quest was part of an active squad co-op assist
+    try {
+        $sqStmt = $db->prepare("
+            SELECT id, quest_title, sender_id, receiver_id, sender_name 
+            FROM shared_quests
+            WHERE quest_id = :qid AND (receiver_id = :uid1 OR sender_id = :uid2)
+            LIMIT 1
+        ");
+        $sqStmt->execute(['qid' => $questId, 'uid1' => $userId, 'uid2' => $userId]);
+        $sharedQuest = $sqStmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($sharedQuest) {
+            $db->prepare("UPDATE shared_quests SET status = 'completed', updated_at = NOW() WHERE id = :id")
+               ->execute(['id' => $sharedQuest['id']]);
+
+            // Notify partner
+            $partnerId = ($sharedQuest['receiver_id'] === $userId) ? $sharedQuest['sender_id'] : $sharedQuest['receiver_id'];
+            
+            // Get completer name
+            $cNameStmt = $db->prepare("SELECT name FROM users WHERE id = :uid LIMIT 1");
+            $cNameStmt->execute(['uid' => $userId]);
+            $cUser = $cNameStmt->fetch(PDO::FETCH_ASSOC);
+            $completerName = $cUser ? $cUser['name'] : 'Squad Explorer';
+
+            $notifId = sprintf(
+                '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+                mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+                mt_rand(0, 0xffff),
+                mt_rand(0, 0x0fff) | 0x4000,
+                mt_rand(0, 0x3fff) | 0x8000,
+                mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+            );
+
+            $db->prepare("
+                INSERT INTO notifications (id, user_id, title, message, type, is_read, route_target, action_label, created_at)
+                VALUES (:id, :uid, :title, :msg, 'quest', 0, :route, 'View Squad', NOW())
+            ")->execute([
+                'id'    => $notifId,
+                'uid'   => $partnerId,
+                'title' => '🎉 Squad Co-op Mission Accomplished!',
+                'msg'   => "{$completerName} helped complete '{$sharedQuest['quest_title']}'! Squad assist rewards awarded!",
+                'route' => "/quest/{$questId}",
+            ]);
+        }
+    } catch (Throwable $e) {}
+
     echo json_encode([
         'success' => true,
         'message' => 'Quest completed successfully!',

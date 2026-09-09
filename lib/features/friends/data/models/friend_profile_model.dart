@@ -13,15 +13,17 @@ class FriendCompletedQuestSummaryModel extends FriendCompletedQuestSummary {
 
   factory FriendCompletedQuestSummaryModel.fromJson(Map<String, dynamic> json) {
     return FriendCompletedQuestSummaryModel(
-      questId: json['questId'] as String? ?? '',
+      questId: json['questId'] as String? ?? json['quest_id'] as String? ?? '',
       title: json['title'] as String? ?? 'Adventure Quest',
       category: json['category'] as String? ?? 'Exploration',
-      xpEarned: json['xpEarned'] as int? ?? 50,
-      coinsEarned: json['coinsEarned'] as int? ?? 25,
+      xpEarned: int.tryParse(json['xpEarned']?.toString() ?? json['xp_earned']?.toString() ?? '') ?? 50,
+      coinsEarned: int.tryParse(json['coinsEarned']?.toString() ?? json['coins_earned']?.toString() ?? '') ?? 25,
       completedAt: json['completedAt'] != null
           ? (DateTime.tryParse(json['completedAt'] as String) ?? DateTime.now())
-          : DateTime.now(),
-      locationName: json['locationName'] as String? ?? 'Landmark',
+          : (json['completed_at'] != null
+              ? (DateTime.tryParse(json['completed_at'] as String) ?? DateTime.now())
+              : DateTime.now()),
+      locationName: json['locationName'] as String? ?? json['location_name'] as String? ?? 'Landmark',
     );
   }
 
@@ -91,21 +93,23 @@ class FriendProfileModel extends FriendProfile {
     required super.friendshipDate,
     required super.isOnline,
     required super.lastActiveText,
+    super.isFriend = false,
+    super.friendshipStatus = 'none',
   });
 
   factory FriendProfileModel.fromJson(Map<String, dynamic> json) {
     return FriendProfileModel(
-      userId: json['userId'] as String? ?? '',
-      playerTag: json['playerTag'] as String? ?? 'QST-0000',
-      name: json['name'] as String? ?? 'Explorer',
-      avatarKey: json['avatarKey'] as String? ?? 'avatar_1',
+      userId: json['userId'] as String? ?? json['user_id'] as String? ?? '',
+      playerTag: json['playerTag'] as String? ?? json['player_id'] as String? ?? 'QST-0000',
+      name: json['name'] as String? ?? json['username'] as String? ?? 'Explorer',
+      avatarKey: json['avatarKey'] as String? ?? json['avatar_key'] as String? ?? 'avatar_1',
       level: json['level'] as int? ?? 1,
-      currentXp: json['currentXp'] as int? ?? 0,
+      currentXp: json['currentXp'] as int? ?? json['current_xp'] as int? ?? 0,
       coins: json['coins'] as int? ?? 0,
       rank: json['rank'] as int? ?? 99,
-      rankTitle: json['rankTitle'] as String? ?? 'Scout',
-      completedQuestsCount: json['completedQuestsCount'] as int? ?? 0,
-      gamesPlayedCount: json['gamesPlayedCount'] as int? ?? 0,
+      rankTitle: json['rankTitle'] as String? ?? json['rank_title'] as String? ?? 'Scout',
+      completedQuestsCount: json['completedQuestsCount'] as int? ?? json['completed_quests_count'] as int? ?? 0,
+      gamesPlayedCount: json['gamesPlayedCount'] as int? ?? json['games_played_count'] as int? ?? 0,
       completedQuests: (json['completedQuests'] as List<dynamic>?)
               ?.map((e) => FriendCompletedQuestSummaryModel.fromJson(e as Map<String, dynamic>))
               .toList() ??
@@ -116,9 +120,13 @@ class FriendProfileModel extends FriendProfile {
           [],
       friendshipDate: json['friendshipDate'] != null
           ? (DateTime.tryParse(json['friendshipDate'] as String) ?? DateTime.now())
-          : DateTime.now(),
-      isOnline: json['isOnline'] as bool? ?? false,
-      lastActiveText: json['lastActiveText'] as String? ?? 'Recently active',
+          : (json['friendship_date'] != null
+              ? (DateTime.tryParse(json['friendship_date'] as String) ?? DateTime.now())
+              : DateTime.now()),
+      isOnline: json['isOnline'] as bool? ?? (json['is_online'] == 1 || json['is_online'] == true),
+      lastActiveText: json['lastActiveText'] as String? ?? json['last_active'] as String? ?? 'Recently active',
+      isFriend: json['isFriend'] as bool? ?? (json['friendship_status'] == 'accepted' || json['is_friend'] == true),
+      friendshipStatus: json['friendshipStatus'] as String? ?? json['friendship_status'] as String? ?? (json['isFriend'] == true ? 'accepted' : 'none'),
     );
   }
 
@@ -163,6 +171,51 @@ class FriendProfileModel extends FriendProfile {
       'friendshipDate': friendshipDate.toIso8601String(),
       'isOnline': isOnline,
       'lastActiveText': lastActiveText,
+      'isFriend': isFriend,
+      'friendshipStatus': friendshipStatus,
     };
+  }
+
+  @override
+  FriendProfileModel copyWith({
+    String? userId,
+    String? playerTag,
+    String? name,
+    String? avatarKey,
+    int? level,
+    int? currentXp,
+    int? coins,
+    int? rank,
+    String? rankTitle,
+    int? completedQuestsCount,
+    int? gamesPlayedCount,
+    List<FriendCompletedQuestSummary>? completedQuests,
+    List<FriendBadgeSummary>? earnedBadges,
+    DateTime? friendshipDate,
+    bool? isOnline,
+    String? lastActiveText,
+    bool? isFriend,
+    String? friendshipStatus,
+  }) {
+    return FriendProfileModel(
+      userId: userId ?? this.userId,
+      playerTag: playerTag ?? this.playerTag,
+      name: name ?? this.name,
+      avatarKey: avatarKey ?? this.avatarKey,
+      level: level ?? this.level,
+      currentXp: currentXp ?? this.currentXp,
+      coins: coins ?? this.coins,
+      rank: rank ?? this.rank,
+      rankTitle: rankTitle ?? this.rankTitle,
+      completedQuestsCount: completedQuestsCount ?? this.completedQuestsCount,
+      gamesPlayedCount: gamesPlayedCount ?? this.gamesPlayedCount,
+      completedQuests: completedQuests ?? this.completedQuests,
+      earnedBadges: earnedBadges ?? this.earnedBadges,
+      friendshipDate: friendshipDate ?? this.friendshipDate,
+      isOnline: isOnline ?? this.isOnline,
+      lastActiveText: lastActiveText ?? this.lastActiveText,
+      isFriend: isFriend ?? this.isFriend,
+      friendshipStatus: friendshipStatus ?? this.friendshipStatus,
+    );
   }
 }

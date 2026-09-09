@@ -10,6 +10,9 @@ import 'package:quest_up/core/widgets/error_state_widget.dart';
 import 'package:quest_up/core/widgets/premium_3d_button.dart';
 import 'package:quest_up/core/widgets/quest_rarity_badge.dart';
 import 'package:quest_up/core/widgets/shimmer_loading.dart';
+import 'package:quest_up/features/friends/domain/entities/friend_profile.dart';
+import 'package:quest_up/features/friends/presentation/providers/friends_providers.dart';
+import 'package:quest_up/features/profile/presentation/providers/user_providers.dart';
 import 'package:quest_up/features/quests/domain/entities/quest.dart';
 import 'package:quest_up/features/quests/presentation/providers/quest_providers.dart';
 import 'package:quest_up/features/quests/presentation/widgets/google_maps_marker_card_widget.dart';
@@ -131,13 +134,28 @@ class QuestDetailScreen extends ConsumerWidget {
                           shape: BoxShape.circle,
                         ),
                         child: IconButton(
-                          icon: const Icon(Icons.share_rounded, color: Colors.white, size: 18),
+                          icon: const Icon(Icons.map_outlined, color: Colors.white, size: 18),
+                          tooltip: 'Open in Google Maps',
                           onPressed: () {
                             ref.read(mapsLauncherServiceProvider).openGoogleMapsLocation(
                                   quest.latitude,
                                   quest.longitude,
                                   label: quest.locationName,
                                 );
+                          },
+                        ),
+                      ),
+                      Container(
+                        margin: const EdgeInsets.only(top: 8, bottom: 8, right: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.6),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: const Icon(Icons.share_rounded, color: Colors.white, size: 18),
+                          tooltip: 'Share with Squad Friend',
+                          onPressed: () {
+                            _showShareWithSquadSheet(context, ref, quest);
                           },
                         ),
                       ),
@@ -240,6 +258,10 @@ class QuestDetailScreen extends ConsumerWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          if (quest.isSharedQuest) ...[
+                            _buildSquadCoOpBanner(quest),
+                            const SizedBox(height: 16),
+                          ],
                           // Mission Title
                           Text(
                             quest.title,
@@ -350,13 +372,23 @@ class QuestDetailScreen extends ConsumerWidget {
                   child: Premium3DButton(
                     text: quest.isCompleted
                         ? 'MISSION ACCOMPLISHED'
-                        : (isWithinRadius ? 'START VERIFICATION (DESTINATION REACHED)' : 'APPROACH LOCATION & VERIFY'),
+                        : (quest.isSharedQuest
+                            ? (isWithinRadius
+                                ? '🤝 HELP ${(quest.sharedByUserName ?? "SQUAD").toUpperCase()} & VERIFY'
+                                : '🤝 APPROACH & HELP ${(quest.sharedByUserName ?? "SQUAD").toUpperCase()}')
+                            : (isWithinRadius
+                                ? 'START VERIFICATION (DESTINATION REACHED)'
+                                : 'APPROACH LOCATION & VERIFY')),
                     icon: quest.isCompleted
                         ? Icons.verified_rounded
-                        : (isWithinRadius ? Icons.check_circle_rounded : Icons.near_me_rounded),
+                        : (quest.isSharedQuest
+                            ? Icons.handshake_rounded
+                            : (isWithinRadius ? Icons.check_circle_rounded : Icons.near_me_rounded)),
                     color: quest.isCompleted
                         ? AppColors.accentSuccess
-                        : (isWithinRadius ? AppColors.primary : AppColors.secondary),
+                        : (quest.isSharedQuest
+                            ? const Color(0xFF00E5FF)
+                            : (isWithinRadius ? AppColors.primary : AppColors.secondary)),
                     onPressed: () {
                       if (quest.isCompleted) {
                         _showAlreadyCompletedDialog(context, quest);
@@ -1061,6 +1093,573 @@ class QuestDetailScreen extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSquadCoOpBanner(Quest quest) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF0C2B3A),
+            Color(0xFF091C26),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFF00E5FF).withValues(alpha: 0.6), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF00E5FF).withValues(alpha: 0.15),
+            blurRadius: 16,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00E5FF).withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFF00E5FF).withValues(alpha: 0.8)),
+                ),
+                child: const Icon(
+                  Icons.handshake_rounded,
+                  color: Color(0xFF00E5FF),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'SQUAD CO-OP ASSIST MISSION',
+                      style: AppTypography.badge.copyWith(
+                        color: const Color(0xFF00E5FF),
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.1,
+                        fontSize: 10.5,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Shared by ${quest.sharedByUserName ?? "Squad Mate"} (${quest.sharedByUserTag ?? "QST-????"})',
+                      style: AppTypography.titleMedium.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.accentSuccess.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.accentSuccess.withValues(alpha: 0.6)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: AppColors.accentSuccess,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'CO-OP ACTIVE',
+                      style: AppTypography.caption.copyWith(
+                        color: AppColors.accentSuccess,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Help your squad partner complete this objective. Once verified, the quest will be completed and your partner will receive a celebration alert!',
+            style: AppTypography.caption.copyWith(
+              color: Colors.white.withValues(alpha: 0.85),
+              fontSize: 11.5,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showShareWithSquadSheet(BuildContext context, WidgetRef ref, Quest quest) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _ShareWithSquadSheet(quest: quest),
+    );
+  }
+}
+
+class _ShareWithSquadSheet extends ConsumerStatefulWidget {
+  final Quest quest;
+
+  const _ShareWithSquadSheet({required this.quest});
+
+  @override
+  ConsumerState<_ShareWithSquadSheet> createState() => _ShareWithSquadSheetState();
+}
+
+class _ShareWithSquadSheetState extends ConsumerState<_ShareWithSquadSheet> {
+  final TextEditingController _searchController = TextEditingController();
+  final Set<String> _invitedUserIds = {};
+  final Map<String, bool> _loadingMap = {};
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(friendsNotifierProvider.notifier).loadFriendsData();
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleInvite(FriendProfile friend) async {
+    final userProfile = ref.read(userProfileNotifierProvider).valueOrNull;
+    final myId = userProfile?.id ?? '';
+    final myName = userProfile?.name ?? 'Player';
+    final myTag = userProfile?.playerId ?? 'QST-0000';
+
+    if (myId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please log in to share quests.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _loadingMap[friend.userId] = true;
+    });
+
+    try {
+      final repo = ref.read(questRepositoryProvider);
+      final isSuccess = await repo.shareQuestWithFriend(
+        questId: widget.quest.id,
+        questTitle: widget.quest.title,
+        senderId: myId,
+        senderName: myName,
+        senderTag: myTag,
+        receiverId: friend.userId,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _loadingMap[friend.userId] = false;
+        if (isSuccess) {
+          _invitedUserIds.add(friend.userId);
+        }
+      });
+
+      final msg = isSuccess ? 'Invite sent to ${friend.name}!' : 'Could not share quest';
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: isSuccess ? const Color(0xFF102A24) : AppColors.surfaceElevated,
+          content: Row(
+            children: [
+              Icon(
+                isSuccess ? Icons.check_circle_rounded : Icons.info_outline_rounded,
+                color: isSuccess ? AppColors.accentSuccess : AppColors.primary,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  msg,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          duration: const Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingMap[friend.userId] = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.surfaceElevated,
+          content: Text('Error sharing quest: $e'),
+          duration: const Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final friendsState = ref.watch(friendsNotifierProvider);
+    final allFriends = friendsState.friends;
+    final filteredFriends = allFriends.where((f) {
+      if (_searchQuery.isEmpty) return true;
+      final q = _searchQuery.toLowerCase();
+      return f.name.toLowerCase().contains(q) || f.playerTag.toLowerCase().contains(q);
+    }).toList();
+
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.78,
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        border: Border(
+          top: BorderSide(color: AppColors.borderBright, width: 1.5),
+          left: BorderSide(color: AppColors.borderBright, width: 1),
+          right: BorderSide(color: AppColors.borderBright, width: 1),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Drag handle
+          Center(
+            child: Container(
+              width: 44,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.textMuted.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Header
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.6)),
+                ),
+                child: const Icon(Icons.group_add_rounded, color: AppColors.primary, size: 24),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'SHARE QUEST WITH SQUAD',
+                      style: AppTypography.titleMedium.copyWith(
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.1,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Invite a mutual friend to assist with "${widget.quest.title}"',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.caption.copyWith(color: AppColors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close_rounded, color: AppColors.textMuted),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Search Field (if more than 2 friends)
+          if (allFriends.length > 2) ...[
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.surfaceElevated,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: TextField(
+                controller: _searchController,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: 'Search squad by name or QST-ID...',
+                  hintStyle: AppTypography.caption.copyWith(color: AppColors.textMuted),
+                  prefixIcon: const Icon(Icons.search_rounded, color: AppColors.textMuted, size: 20),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear_rounded, size: 18, color: AppColors.textMuted),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _searchQuery = '');
+                          },
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+                onChanged: (val) => setState(() => _searchQuery = val.trim()),
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+
+          // Friends List or Empty State
+          Expanded(
+            child: friendsState.isLoading && allFriends.isEmpty
+                ? const Center(
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  )
+                : allFriends.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(18),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surfaceElevated,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: AppColors.border),
+                                ),
+                                child: const Icon(
+                                  Icons.people_outline_rounded,
+                                  color: AppColors.textMuted,
+                                  size: 40,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No Squad Friends Found',
+                                style: AppTypography.titleMedium.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Quests can only be shared with mutual squad friends.\nAdd players via their permanent Player ID (e.g. QST-1409).',
+                                textAlign: TextAlign.center,
+                                style: AppTypography.caption.copyWith(
+                                  color: AppColors.textMuted,
+                                  height: 1.4,
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              OutlinedButton.icon(
+                                onPressed: () {
+                                  Navigator.of(context).pop();
+                                  context.push(RoutePaths.friends);
+                                },
+                                icon: const Icon(Icons.person_add_rounded, size: 16),
+                                label: const Text('OPEN SQUAD & FRIENDS'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.primary,
+                                  side: const BorderSide(color: AppColors.primary),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : filteredFriends.isEmpty
+                        ? Center(
+                            child: Text(
+                              'No friends matching "$_searchQuery"',
+                              style: AppTypography.bodyMedium.copyWith(color: AppColors.textMuted),
+                            ),
+                          )
+                        : ListView.separated(
+                            itemCount: filteredFriends.length,
+                            separatorBuilder: (context, index) => const Divider(color: AppColors.divider, height: 16),
+                            itemBuilder: (ctx, index) {
+                              final friend = filteredFriends[index];
+                              final isInvited = _invitedUserIds.contains(friend.userId);
+                              final isLoading = _loadingMap[friend.userId] == true;
+
+                              return Row(
+                                children: [
+                                  // Avatar
+                                  Container(
+                                    width: 44,
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          AppColors.primary.withValues(alpha: 0.6),
+                                          AppColors.secondary.withValues(alpha: 0.6),
+                                        ],
+                                      ),
+                                      border: Border.all(color: AppColors.primary, width: 1.5),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        friend.name.isNotEmpty ? friend.name[0].toUpperCase() : '?',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+
+                                  // Friend Info
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Flexible(
+                                              child: Text(
+                                                friend.name,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: AppTypography.bodyLarge.copyWith(
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.surfaceElevated,
+                                                borderRadius: BorderRadius.circular(6),
+                                                border: Border.all(color: AppColors.border),
+                                              ),
+                                              child: Text(
+                                                'Lvl ${friend.level}',
+                                                style: AppTypography.caption.copyWith(
+                                                  fontSize: 9.5,
+                                                  color: AppColors.secondary,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          friend.playerTag,
+                                          style: AppTypography.caption.copyWith(
+                                            color: AppColors.primary,
+                                            fontWeight: FontWeight.w600,
+                                            letterSpacing: 0.8,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+
+                                  // Invite Action Button
+                                  if (isInvited)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.accentSuccess.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: AppColors.accentSuccess),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.check_rounded, size: 14, color: AppColors.accentSuccess),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'INVITED',
+                                            style: AppTypography.caption.copyWith(
+                                              color: AppColors.accentSuccess,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  else if (isLoading)
+                                    const Padding(
+                                      padding: EdgeInsets.symmetric(horizontal: 16),
+                                      child: SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                                      ),
+                                    )
+                                  else
+                                    ElevatedButton.icon(
+                                      onPressed: () => _handleInvite(friend),
+                                      icon: const Icon(Icons.send_rounded, size: 13),
+                                      label: const Text('INVITE'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.primary,
+                                        foregroundColor: Colors.black,
+                                        elevation: 0,
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        textStyle: AppTypography.caption.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.6,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              );
+                            },
+                          ),
+          ),
+        ],
       ),
     );
   }

@@ -245,6 +245,12 @@ class ProfileScreen extends ConsumerWidget {
                   Consumer(
                     builder: (context, ref, _) {
                       final friendsState = ref.watch(friendsNotifierProvider);
+                      final displayTag = profile.playerId != 'QST-0000'
+                          ? profile.playerId
+                          : (friendsState.myPlayerTag != 'QST-0000'
+                              ? friendsState.myPlayerTag
+                              : 'QST-1001');
+
                       return Wrap(
                         alignment: WrapAlignment.center,
                         crossAxisAlignment: WrapCrossAlignment.center,
@@ -254,10 +260,10 @@ class ProfileScreen extends ConsumerWidget {
                           InkWell(
                             borderRadius: BorderRadius.circular(12),
                             onTap: () {
-                              Clipboard.setData(ClipboardData(text: friendsState.myPlayerTag));
+                              Clipboard.setData(ClipboardData(text: displayTag));
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('Player Tag "${friendsState.myPlayerTag}" copied! 📋'),
+                                  content: Text('Player ID "$displayTag" copied! 📋'),
                                   backgroundColor: AppColors.surfaceElevated,
                                   behavior: SnackBarBehavior.floating,
                                 ),
@@ -273,10 +279,10 @@ class ProfileScreen extends ConsumerWidget {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.tag_rounded, size: 14, color: AppColors.secondary),
-                                  const SizedBox(width: 4),
+                                  const Icon(Icons.badge_rounded, size: 14, color: AppColors.secondary),
+                                  const SizedBox(width: 5),
                                   Text(
-                                    friendsState.myPlayerTag,
+                                    'Player ID  $displayTag',
                                     style: AppTypography.caption.copyWith(
                                       color: AppColors.secondary,
                                       fontWeight: FontWeight.w900,

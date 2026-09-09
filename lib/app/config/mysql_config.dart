@@ -6,12 +6,12 @@ class MySqlConfig {
     final hosts = <String>[];
     try {
       if (Platform.isAndroid) {
-        // 1. Android Emulator virtual gateway
-        hosts.add('10.0.2.2');
-        // 2. Active Wi-Fi LAN IP (Physical Android phone e.g. Realme)
-        hosts.add('192.168.31.125');
-        // 3. Localhost via USB port forwarding (adb reverse tcp:3306 tcp:3306)
+        // 1. Localhost via USB port forwarding (adb reverse tcp:3306 tcp:3306)
         hosts.add('127.0.0.1');
+        // 2. Active Wi-Fi LAN IP (Physical Android phone e.g. Realme / Oppo)
+        hosts.add('192.168.31.125');
+        // 3. Android Emulator virtual gateway
+        hosts.add('10.0.2.2');
         // 4. Localhost alias
         hosts.add('localhost');
       } else {
@@ -29,9 +29,10 @@ class MySqlConfig {
   /// REST API Base URLs: Pure LOCALHOST / XAMPP Development APIs (No Cloud Fallbacks)
   static List<String> get apiBaseUrls {
     return [
-      'http://10.0.2.2/questUP/backend/api',
+      'http://127.0.0.1:8080/questUP/backend/api',
       'http://192.168.31.125/questUP/backend/api',
       'http://127.0.0.1/questUP/backend/api',
+      'http://10.0.2.2/questUP/backend/api',
       'http://localhost/questUP/backend/api',
     ];
   }

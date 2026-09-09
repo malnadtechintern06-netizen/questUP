@@ -147,17 +147,7 @@ class FriendsLocalDataSource implements IFriendsLocalDataSource {
                 rankTitle: 'Scout Adventurer',
                 completedQuestsCount: 2,
                 gamesPlayedCount: 2,
-                completedQuests: [
-                  FriendCompletedQuestSummaryModel(
-                    questId: 'q_local_1',
-                    title: 'Discover Local City Hub',
-                    category: 'Historical Landmark',
-                    xpEarned: 150,
-                    coinsEarned: 80,
-                    completedAt: DateTime.now().subtract(const Duration(days: 1)),
-                    locationName: 'City Center Plaza',
-                  ),
-                ],
+                completedQuests: const [],
                 earnedBadges: [
                   FriendBadgeSummaryModel(
                     badgeId: 'badge_first_quest',
@@ -171,6 +161,8 @@ class FriendsLocalDataSource implements IFriendsLocalDataSource {
                 friendshipDate: DateTime.now(),
                 isOnline: true,
                 lastActiveText: 'Active on Radar',
+                isFriend: false,
+                friendshipStatus: 'none',
               ),
             );
           }
@@ -258,6 +250,8 @@ class FriendsLocalDataSource implements IFriendsLocalDataSource {
       friendshipDate: DateTime.now().subtract(const Duration(days: 5)),
       isOnline: true,
       lastActiveText: 'Active on Radar',
+      isFriend: true,
+      friendshipStatus: 'accepted',
     );
   }
 
@@ -275,35 +269,7 @@ class FriendsLocalDataSource implements IFriendsLocalDataSource {
         rankTitle: 'Apex Mythic Explorer',
         completedQuestsCount: 18,
         gamesPlayedCount: 19,
-        completedQuests: [
-          FriendCompletedQuestSummaryModel(
-            questId: 'quest_fortress_1',
-            title: 'Fortress Citadel Bastion Ascent',
-            category: 'Historical Landmark',
-            xpEarned: 350,
-            coinsEarned: 180,
-            completedAt: DateTime.now().subtract(const Duration(hours: 4)),
-            locationName: 'Ancient Hilltop Citadel',
-          ),
-          FriendCompletedQuestSummaryModel(
-            questId: 'quest_whispering_woods',
-            title: 'Whispering Canopy 10km Endurance Run',
-            category: 'Fitness & Trail',
-            xpEarned: 300,
-            coinsEarned: 150,
-            completedAt: DateTime.now().subtract(const Duration(days: 1)),
-            locationName: 'Whispering Woods Trail',
-          ),
-          FriendCompletedQuestSummaryModel(
-            questId: 'quest_midnight_enigma',
-            title: 'Cyber Enigma Urban Code Decryption',
-            category: 'Urban Mystery',
-            xpEarned: 400,
-            coinsEarned: 220,
-            completedAt: DateTime.now().subtract(const Duration(days: 2)),
-            locationName: 'Neon Plaza Arcade Vault',
-          ),
-        ],
+        completedQuests: const [],
         earnedBadges: [
           FriendBadgeSummaryModel(
             badgeId: 'badge_immortal_mythic',
@@ -333,6 +299,8 @@ class FriendsLocalDataSource implements IFriendsLocalDataSource {
         friendshipDate: DateTime.now().subtract(const Duration(days: 12)),
         isOnline: true,
         lastActiveText: 'Exploring Live Radar',
+        isFriend: false,
+        friendshipStatus: 'none',
       ),
       FriendProfileModel(
         userId: 'comp_2',
@@ -346,26 +314,7 @@ class FriendsLocalDataSource implements IFriendsLocalDataSource {
         rankTitle: 'Master Sky Voyager',
         completedQuestsCount: 14,
         gamesPlayedCount: 15,
-        completedQuests: [
-          FriendCompletedQuestSummaryModel(
-            questId: 'quest_skylight_peak',
-            title: 'Skylight Summit Ridge Recon',
-            category: 'Nature & Outdoors',
-            xpEarned: 280,
-            coinsEarned: 130,
-            completedAt: DateTime.now().subtract(const Duration(hours: 8)),
-            locationName: 'Eagle Crest Lookout',
-          ),
-          FriendCompletedQuestSummaryModel(
-            questId: 'quest_waterfront_run',
-            title: 'Waterfront Promenade Sprint',
-            category: 'Fitness & Trail',
-            xpEarned: 220,
-            coinsEarned: 100,
-            completedAt: DateTime.now().subtract(const Duration(days: 2)),
-            locationName: 'Marina Promenade',
-          ),
-        ],
+        completedQuests: const [],
         earnedBadges: [
           FriendBadgeSummaryModel(
             badgeId: 'badge_iron_legs',
@@ -387,6 +336,8 @@ class FriendsLocalDataSource implements IFriendsLocalDataSource {
         friendshipDate: DateTime.now().subtract(const Duration(days: 8)),
         isOnline: false,
         lastActiveText: '2 hours ago',
+        isFriend: false,
+        friendshipStatus: 'pending_received',
       ),
       FriendProfileModel(
         userId: 'comp_3',
@@ -400,17 +351,7 @@ class FriendsLocalDataSource implements IFriendsLocalDataSource {
         rankTitle: 'Flame Vanguard',
         completedQuestsCount: 11,
         gamesPlayedCount: 12,
-        completedQuests: [
-          FriendCompletedQuestSummaryModel(
-            questId: 'quest_iron_forge',
-            title: 'Old Steam Foundry Industrial History',
-            category: 'Historical Landmark',
-            xpEarned: 240,
-            coinsEarned: 110,
-            completedAt: DateTime.now().subtract(const Duration(days: 1)),
-            locationName: 'Heritage Foundry District',
-          ),
-        ],
+        completedQuests: const [],
         earnedBadges: [
           FriendBadgeSummaryModel(
             badgeId: 'badge_shield',
@@ -424,6 +365,8 @@ class FriendsLocalDataSource implements IFriendsLocalDataSource {
         friendshipDate: DateTime.now().subtract(const Duration(days: 6)),
         isOnline: false,
         lastActiveText: 'Yesterday',
+        isFriend: false,
+        friendshipStatus: 'none',
       ),
       _getAriaSilverleafProfile(),
       FriendProfileModel(
@@ -438,17 +381,7 @@ class FriendsLocalDataSource implements IFriendsLocalDataSource {
         rankTitle: 'Abyssal Scout',
         completedQuestsCount: 4,
         gamesPlayedCount: 5,
-        completedQuests: [
-          FriendCompletedQuestSummaryModel(
-            questId: 'quest_lake_pier',
-            title: 'Emerald Lake Pier Inspection',
-            category: 'Nature & Outdoors',
-            xpEarned: 160,
-            coinsEarned: 70,
-            completedAt: DateTime.now().subtract(const Duration(days: 3)),
-            locationName: 'Emerald Lake Boat Basin',
-          ),
-        ],
+        completedQuests: const [],
         earnedBadges: [
           FriendBadgeSummaryModel(
             badgeId: 'badge_first_quest',
@@ -462,6 +395,8 @@ class FriendsLocalDataSource implements IFriendsLocalDataSource {
         friendshipDate: DateTime.now().subtract(const Duration(days: 4)),
         isOnline: true,
         lastActiveText: 'Active on Radar',
+        isFriend: false,
+        friendshipStatus: 'none',
       ),
     ];
   }

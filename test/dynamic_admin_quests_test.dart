@@ -19,6 +19,10 @@ class MockLocalDataSource implements IQuestLocalDataSource {
   Future<QuestModel?> getQuestById(String id) async => null;
   @override
   Future<void> markCompleted(String id) async {}
+  @override
+  Future<List<Map<String, dynamic>>> getLocalSharedQuests() async => [];
+  @override
+  Future<void> saveLocalSharedQuests(List<Map<String, dynamic>> sharedQuests) async {}
 }
 
 class MockDynamicAdminDataSource implements IQuestMySqlDataSource {
@@ -46,6 +50,17 @@ class MockDynamicAdminDataSource implements IQuestMySqlDataSource {
   Future<bool> saveCompletionToMySql(dynamic completion) async => true;
   @override
   Future<bool> isQuestCompletedByUserInMySql(String questId, String userId) async => false;
+  @override
+  Future<bool> shareQuestWithFriend({
+    required String questId,
+    required String questTitle,
+    required String senderId,
+    required String senderName,
+    required String senderTag,
+    required String receiverId,
+  }) async => true;
+  @override
+  Future<List<Map<String, dynamic>>> fetchSharedQuests(String userId) async => [];
 }
 
 void main() {

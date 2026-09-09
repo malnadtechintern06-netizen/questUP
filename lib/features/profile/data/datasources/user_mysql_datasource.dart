@@ -28,7 +28,12 @@ class UserMySqlDataSource implements IUserMySqlDataSource {
 
     try {
       final result = await _dbService.execute(
-        'SELECT * FROM user_profiles WHERE user_id = :user_id LIMIT 1',
+        '''
+        SELECT up.*, u.player_id
+        FROM user_profiles up
+        LEFT JOIN users u ON u.id = up.user_id
+        WHERE up.user_id = :user_id LIMIT 1
+        ''',
         {'user_id': userId},
       );
 
@@ -36,6 +41,7 @@ class UserMySqlDataSource implements IUserMySqlDataSource {
         final row = result.rows.first.assoc();
         final model = UserProfileModel(
           id: row['user_id'] ?? userId,
+          playerId: row['player_id'] ?? 'QST-0000',
           name: row['name'] ?? 'Explorer',
           email: row['email'] ?? 'explorer@questup.com',
           avatarKey: row['avatar_key'] ?? 'avatar_ranger',
@@ -49,7 +55,7 @@ class UserMySqlDataSource implements IUserMySqlDataSource {
               ? (DateTime.tryParse(row['joined_at']!) ?? DateTime.now())
               : DateTime.now(),
         );
-        debugPrint('[MySQL] Fetched user profile from MySQL: ${model.name} (Lvl ${model.level}, ${model.currentXp} XP, ${model.coins} Coins)');
+        debugPrint('[MySQL] Fetched user profile from MySQL: ${model.name} (${model.playerId}, Lvl ${model.level})');
         return model;
       }
     } catch (e) {

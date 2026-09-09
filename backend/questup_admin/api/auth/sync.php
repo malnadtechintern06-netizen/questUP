@@ -52,9 +52,11 @@ foreach ($users as $u) {
     $id = trim($u['id'] ?? '') ?: ('usr_' . bin2hex(random_bytes(16)));
     $name = trim($u['name'] ?? '') ?: ucfirst(explode('@', $email)[0]);
     $passwordHash = trim($u['password_hash'] ?? '') ?: hash('sha256', 'secret');
-    $salt = trim($u['salt'] ?? '') ?: bin2hex(random_bytes(8));
-    $playerId = trim($u['player_id'] ?? '') ?: ('QST-' . strtoupper(bin2hex(random_bytes(2))));
-    $avatarKey = trim($u['avatar_key'] ?? 'avatar_1');
+    $playerId = trim((string)($u['player_id'] ?? ''));
+    if ($playerId === '' || !preg_match('/^QST-\d{4}$/', $playerId)) {
+        $num = (hexdec(substr(hash('sha256', $email ?: $id), 0, 4)) % 9000) + 1000;
+        $playerId = 'QST-' . $num;
+    }
     $level = max(1, (int)($u['level'] ?? 1));
     $currentXp = max(0, (int)($u['current_xp'] ?? 0));
     $coins = max(0, (int)($u['coins'] ?? 100));

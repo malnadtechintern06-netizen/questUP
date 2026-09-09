@@ -128,6 +128,13 @@ class Quest {
   final double? generationLongitude;
   final String? userId;
 
+  // Squad Co-op Assist Attributes
+  final String? sharedByUserName;
+  final String? sharedByUserTag;
+  final String? sharedByUserId;
+  final bool isSharedQuest;
+  final String? sharedStatus;
+
   const Quest({
     required this.id,
     required this.title,
@@ -182,6 +189,11 @@ class Quest {
     this.generationLatitude,
     this.generationLongitude,
     this.userId,
+    this.sharedByUserName,
+    this.sharedByUserTag,
+    this.sharedByUserId,
+    this.isSharedQuest = false,
+    this.sharedStatus,
   });
 
   double get allowedRadius => radiusMeters;
@@ -255,6 +267,11 @@ class Quest {
     double? generationLatitude,
     double? generationLongitude,
     String? userId,
+    String? sharedByUserName,
+    String? sharedByUserTag,
+    String? sharedByUserId,
+    bool? isSharedQuest,
+    String? sharedStatus,
   }) {
     return Quest(
       id: id ?? this.id,
@@ -314,6 +331,11 @@ class Quest {
       generationLatitude: generationLatitude ?? this.generationLatitude,
       generationLongitude: generationLongitude ?? this.generationLongitude,
       userId: userId ?? this.userId,
+      sharedByUserName: sharedByUserName ?? this.sharedByUserName,
+      sharedByUserTag: sharedByUserTag ?? this.sharedByUserTag,
+      sharedByUserId: sharedByUserId ?? this.sharedByUserId,
+      isSharedQuest: isSharedQuest ?? this.isSharedQuest,
+      sharedStatus: sharedStatus ?? this.sharedStatus,
     );
   }
 }
