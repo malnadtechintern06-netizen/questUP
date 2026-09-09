@@ -60,20 +60,22 @@ class _FloatingParticlesWidgetState extends State<FloatingParticlesWidget>
     return Stack(
       fit: StackFit.passthrough,
       children: [
-        AnimatedBuilder(
-          animation: _controller,
-          builder: (context, _) {
-            for (var p in _particles) {
-              p.update();
-            }
-            return CustomPaint(
-              painter: _FloatingParticlesPainter(
-                particles: _particles,
-                color: widget.color,
-              ),
-              size: Size.infinite,
-            );
-          },
+        RepaintBoundary(
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) {
+              for (var p in _particles) {
+                p.update();
+              }
+              return CustomPaint(
+                painter: _FloatingParticlesPainter(
+                  particles: _particles,
+                  color: widget.color,
+                ),
+                size: Size.infinite,
+              );
+            },
+          ),
         ),
         if (widget.child != null) widget.child!,
       ],

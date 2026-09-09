@@ -32,6 +32,8 @@ if ($query === '') {
     exit;
 }
 
+$query = trim(str_replace('#', '', $query));
+
 // Normalize player tag: e.g. "QST-2794", "qst-2794", "2794" -> "QST-2794"
 $normalizedTag = strtoupper($query);
 if (preg_match('/^(?:QST[\s\-_]*)?(\d+)$/i', $query, $matches)) {

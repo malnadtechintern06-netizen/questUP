@@ -71,7 +71,7 @@ class LocationService implements ILocationService {
       return Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
-          distanceFilter: 5, // Fire stream when moving >= 5 meters
+          distanceFilter: 15, // Fire stream when moving >= 15 meters (smooth tracking without micro-jitter floods)
         ),
       ).map((pos) => LocationCoordinates(
             latitude: pos.latitude,

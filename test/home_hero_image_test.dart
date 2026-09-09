@@ -23,9 +23,17 @@ void main() {
     // Pump frames
     await tester.pumpAndSettle();
 
-    // Verify Image.asset with assets/images/hero_card.png exists
+    // Verify Image.asset with assets/images/hero_card.png exists (handles direct AssetImage or optimized ResizeImage)
     final imageFinder = find.byWidgetPredicate(
-      (widget) => widget is Image && widget.image is AssetImage && (widget.image as AssetImage).assetName == 'assets/images/hero_card.png',
+      (widget) {
+        if (widget is! Image) return false;
+        final img = widget.image;
+        if (img is AssetImage) return img.assetName == 'assets/images/hero_card.png';
+        if (img is ResizeImage && img.imageProvider is AssetImage) {
+          return (img.imageProvider as AssetImage).assetName == 'assets/images/hero_card.png';
+        }
+        return false;
+      },
     );
 
     expect(imageFinder, findsOneWidget);

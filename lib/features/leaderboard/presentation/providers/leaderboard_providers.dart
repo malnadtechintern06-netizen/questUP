@@ -6,6 +6,9 @@ import 'package:quest_up/features/leaderboard/domain/repositories/leaderboard_re
 import 'package:quest_up/features/leaderboard/domain/usecases/get_leaderboard_usecase.dart';
 import 'package:quest_up/features/profile/presentation/providers/user_providers.dart';
 
+import 'package:quest_up/features/friends/presentation/providers/friends_providers.dart';
+import 'package:quest_up/features/verification/presentation/providers/verification_providers.dart';
+
 final leaderboardLocalDataSourceProvider = Provider<ILeaderboardLocalDataSource>((ref) {
   final storage = ref.watch(localStorageServiceProvider);
   return LeaderboardLocalDataSource(storage);
@@ -13,7 +16,13 @@ final leaderboardLocalDataSourceProvider = Provider<ILeaderboardLocalDataSource>
 
 final leaderboardRepositoryProvider = Provider<LeaderboardRepository>((ref) {
   final dataSource = ref.watch(leaderboardLocalDataSourceProvider);
-  return LeaderboardRepositoryImpl(dataSource);
+  final friendsRepo = ref.watch(friendsRepositoryProvider);
+  final verificationData = ref.watch(verificationLocalDataSourceProvider);
+  return LeaderboardRepositoryImpl(
+    localDataSource: dataSource,
+    friendsRepository: friendsRepo,
+    verificationLocalDataSource: verificationData,
+  );
 });
 
 final getLeaderboardUseCaseProvider = Provider<GetLeaderboardUseCase>((ref) {

@@ -241,8 +241,6 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen>
     final filteredQuests = ref.watch(filteredQuestsProvider);
     final activeGps = ref.watch(activeGpsCoordinatesProvider);
     final isSimulated = ref.watch(locationServiceProvider).isSimulated;
-    final locationDetailsAsync = ref.watch(liveLocationDetailsProvider);
-    final unreadNotifsCount = ref.watch(unreadNotificationsCountProvider);
 
     final rawUserName = userProfileAsync.valueOrNull?.name ?? 'Explorer';
     final userName = _formatDisplayName(rawUserName);
@@ -322,44 +320,49 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen>
             ),
             onPressed: () => _showGpsSimulatorDialog(context, ref),
           ),
-          Stack(
-            alignment: Alignment.topRight,
-            children: [
-              IconButton(
-                padding: const EdgeInsets.all(4),
-                constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-                tooltip: 'Notifications',
-                icon: const Icon(Icons.notifications_outlined, color: AppColors.textPrimary, size: 21),
-                onPressed: () => NotificationsSheet.show(context),
-              ),
-              if (unreadNotifsCount > 0)
-                Positioned(
-                  right: 2,
-                  top: 2,
-                  child: Container(
-                    padding: const EdgeInsets.all(3),
-                    decoration: const BoxDecoration(
-                      color: AppColors.accentDanger,
-                      shape: BoxShape.circle,
-                    ),
-                    constraints: const BoxConstraints(
-                      minWidth: 15,
-                      minHeight: 15,
-                    ),
-                    child: Center(
-                      child: Text(
-                        '$unreadNotifsCount',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.bold,
-                          height: 1.0,
+          Consumer(
+            builder: (context, ref, _) {
+              final unreadNotifsCount = ref.watch(unreadNotificationsCountProvider);
+              return Stack(
+                alignment: Alignment.topRight,
+                children: [
+                  IconButton(
+                    padding: const EdgeInsets.all(4),
+                    constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                    tooltip: 'Notifications',
+                    icon: const Icon(Icons.notifications_outlined, color: AppColors.textPrimary, size: 21),
+                    onPressed: () => NotificationsSheet.show(context),
+                  ),
+                  if (unreadNotifsCount > 0)
+                    Positioned(
+                      right: 2,
+                      top: 2,
+                      child: Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: const BoxDecoration(
+                          color: AppColors.accentDanger,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 15,
+                          minHeight: 15,
+                        ),
+                        child: Center(
+                          child: Text(
+                            '$unreadNotifsCount',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.bold,
+                              height: 1.0,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-            ],
+                ],
+              );
+            },
           ),
           const SizedBox(width: 6),
         ],
@@ -408,7 +411,7 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen>
               const SizedBox(height: 18),
 
               // 2. Quest Activity Calendar Widget
-              const HomeCalendarWidget(),
+              const RepaintBoundary(child: HomeCalendarWidget()),
 
               const SizedBox(height: 22),
 
@@ -522,7 +525,7 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen>
                         itemCount: activeQuests.length,
                         itemBuilder: (context, index) {
                           final quest = activeQuests[index];
-                          return _buildAdventure3DCard(context, quest);
+                          return RepaintBoundary(child: _buildAdventure3DCard(context, quest));
                         },
                       ),
                     );
@@ -539,7 +542,7 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen>
                           itemCount: activeQuests.length,
                           itemBuilder: (context, index) {
                             final quest = activeQuests[index];
-                            return _buildAdventure3DCard(context, quest);
+                            return RepaintBoundary(child: _buildAdventure3DCard(context, quest));
                           },
                         ),
                       );
@@ -617,114 +620,121 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen>
 
                 const SizedBox(height: 10),
 
-                // Location Details Bar (Current Location HUD)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.borderBright, width: 1.1),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.25),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
+                // Location Details Bar (Current Location HUD with localized rebuild)
+                Consumer(
+                  builder: (context, ref, _) {
+                    final locationDetailsAsync = ref.watch(liveLocationDetailsProvider);
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.borderBright, width: 1.1),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.25),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppColors.accentSuccess.withValues(alpha: 0.15),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.accentSuccess.withValues(alpha: 0.4)),
-                        ),
-                        child: const Icon(Icons.my_location_rounded,
-                            size: 18, color: AppColors.accentSuccess),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppColors.accentSuccess.withValues(alpha: 0.15),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: AppColors.accentSuccess.withValues(alpha: 0.4)),
+                            ),
+                            child: const Icon(Icons.my_location_rounded,
+                                size: 18, color: AppColors.accentSuccess),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      'CURRENT LOCATION',
+                                      style: AppTypography.caption.copyWith(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.accentSuccess,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primaryLight,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        'LIVE GPS',
+                                        style: AppTypography.caption.copyWith(
+                                          fontSize: 8,
+                                          fontWeight: FontWeight.w900,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 1),
                                 Text(
-                                  'CURRENT LOCATION',
-                                  style: AppTypography.caption.copyWith(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.accentSuccess,
-                                    letterSpacing: 0.5,
+                                  locationDetailsAsync.valueOrNull?.areaName ?? 'Current Location',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTypography.titleMedium.copyWith(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                                const SizedBox(width: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primaryLight,
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    'LIVE GPS',
-                                    style: AppTypography.caption.copyWith(
-                                      fontSize: 8,
-                                      fontWeight: FontWeight.w900,
-                                      color: AppColors.primary,
-                                    ),
+                                Text(
+                                  locationDetailsAsync.valueOrNull?.formattedAddress ??
+                                      'GPS: ${activeGps.latitude.toStringAsFixed(4)}°, ${activeGps.longitude.toStringAsFixed(4)}°',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTypography.caption.copyWith(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 11,
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 1),
-                            Text(
-                              locationDetailsAsync.valueOrNull?.areaName ?? 'Current Location',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTypography.titleMedium.copyWith(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            Text(
-                              locationDetailsAsync.valueOrNull?.formattedAddress ??
-                                  'GPS: ${activeGps.latitude.toStringAsFixed(4)}°, ${activeGps.longitude.toStringAsFixed(4)}°',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTypography.caption.copyWith(
-                                color: AppColors.textSecondary,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.map_rounded, color: AppColors.primary, size: 20),
+                            tooltip: 'View in Google Maps',
+                            onPressed: () {
+                              ref.read(mapsLauncherServiceProvider).openGoogleMapsLocation(
+                                    activeGps.latitude,
+                                    activeGps.longitude,
+                                    label: locationDetailsAsync.valueOrNull?.areaName ?? 'My Location',
+                                  );
+                            },
+                          ),
+                        ],
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.map_rounded, color: AppColors.primary, size: 20),
-                        tooltip: 'View in Google Maps',
-                        onPressed: () {
-                          ref.read(mapsLauncherServiceProvider).openGoogleMapsLocation(
-                                activeGps.latitude,
-                                activeGps.longitude,
-                                label: locationDetailsAsync.valueOrNull?.areaName ?? 'My Location',
-                              );
-                        },
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 12),
 
-                // Radar Display
+                // Radar Display (isolated repaint boundary)
                 questsAsync.when(
-                  data: (quests) => RadarDisplayWidget(
-                    quests: quests,
-                    userCoordinates: activeGps,
-                    onSelectQuest: (quest) {
-                      context.push(RoutePaths.questDetailPath(quest.id));
-                    },
+                  data: (quests) => RepaintBoundary(
+                    child: RadarDisplayWidget(
+                      quests: quests,
+                      userCoordinates: activeGps,
+                      onSelectQuest: (quest) {
+                        context.push(RoutePaths.questDetailPath(quest.id));
+                      },
+                    ),
                   ),
                   loading: () =>
                       const ShimmerBox(width: double.infinity, height: 250, borderRadius: 24),
@@ -743,13 +753,21 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen>
                 ),
                 const SizedBox(height: 12),
 
-                ...filteredQuests.map(
-                  (quest) => QuestCardWidget(
-                    quest: quest,
-                    onTap: () {
-                      context.push(RoutePaths.questDetailPath(quest.id));
-                    },
-                  ),
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: filteredQuests.length,
+                  itemBuilder: (context, index) {
+                    final quest = filteredQuests[index];
+                    return RepaintBoundary(
+                      child: QuestCardWidget(
+                        quest: quest,
+                        onTap: () {
+                          context.push(RoutePaths.questDetailPath(quest.id));
+                        },
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 80),
               ] else ...[
@@ -881,40 +899,43 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen>
   }
 
   Widget _buildHeroGamerCard(BuildContext context, dynamic profile) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(26),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.45),
-            blurRadius: 18,
-            offset: const Offset(0, 6),
-          ),
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.22),
-            blurRadius: 24,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(26),
-        child: AspectRatio(
-          aspectRatio: 459 / 874,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // 1. Hero Vertical Adventure Artwork (Clean, unmarred, perfect fit)
-              Image.asset(
-                'assets/images/hero_card.png',
-                fit: BoxFit.cover,
-                gaplessPlayback: true,
-                errorBuilder: (context, error, stackTrace) => Image.asset(
-                  'assets/images/hero_poster.jpg',
+    return RepaintBoundary(
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(26),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.45),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            ),
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.22),
+              blurRadius: 24,
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(26),
+          child: AspectRatio(
+            aspectRatio: 459 / 874,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // 1. Hero Vertical Adventure Artwork (Clean, unmarred, perfect fit, decoded with cacheWidth)
+                Image.asset(
+                  'assets/images/hero_card.png',
                   fit: BoxFit.cover,
+                  cacheWidth: 800,
+                  gaplessPlayback: true,
+                  errorBuilder: (context, error, stackTrace) => Image.asset(
+                    'assets/images/hero_poster.jpg',
+                    fit: BoxFit.cover,
+                    cacheWidth: 800,
+                  ),
                 ),
-              ),
 
               // 2. Live Dynamic Coins Overlay (aligned with QuestUP logo at top right)
               Positioned(
@@ -1077,7 +1098,7 @@ class _HomeRadarScreenState extends ConsumerState<HomeRadarScreen>
           ),
         ),
       ),
-    );
+    ));
   }
 
   Widget _buildAdventure3DCard(BuildContext context, Quest quest) {

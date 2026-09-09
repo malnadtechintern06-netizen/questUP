@@ -45,7 +45,10 @@ class FriendsRemoteDataSource implements IFriendsRemoteDataSource {
       : _dbService = dbService ?? MySqlDatabaseService.instance;
 
   String _normalizeTag(String query) {
-    final trimmed = query.trim().toUpperCase();
+    var trimmed = query.trim().toUpperCase();
+    if (trimmed.startsWith('#')) {
+      trimmed = trimmed.substring(1).trim();
+    }
     final numericOnly = RegExp(r'^(?:QST[\s\-_]*)?(\d+)$', caseSensitive: false);
     final match = numericOnly.firstMatch(trimmed);
     if (match != null) {

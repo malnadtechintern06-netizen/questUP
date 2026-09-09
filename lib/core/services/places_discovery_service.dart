@@ -107,12 +107,33 @@ class PlacesDiscoveryService implements IPlacesDiscoveryService {
     // Allows admin-curated specific internal targets when known
   };
 
+  // In-memory cache for live location reverse geocode with distance-based threshold
+  static LocationAddressDetails? _cachedLiveLocationDetails;
+  static DateTime? _lastLiveLocationDetailsTime;
+
   @override
   Future<LocationAddressDetails?> getLiveLocationDetails(
     double lat,
     double lon, {
     double? accuracy,
   }) async {
+    // Fast in-memory cache check: if within 150m of last geocode and under 5 minutes old, return cached details immediately
+    if (_cachedLiveLocationDetails != null && _lastLiveLocationDetailsTime != null) {
+      if (DateTime.now().difference(_lastLiveLocationDetailsTime!).inMinutes < 5) {
+        final dist = DistanceCalculator.calculateDistanceMeters(
+          lat1: _cachedLiveLocationDetails!.latitude,
+          lon1: _cachedLiveLocationDetails!.longitude,
+          lat2: lat,
+          lon2: lon,
+        );
+        if (dist < 150.0) {
+          return _cachedLiveLocationDetails;
+        }
+      }
+    }
+
+    LocationAddressDetails? resolvedDetails;
+
     // 1. Google Geocoding API if key configured
     if (AppConstants.googleMapsApiKey.isNotEmpty) {
       try {
@@ -154,7 +175,7 @@ class PlacesDiscoveryService implements IPlacesDiscoveryService {
               }
             }
 
-            return LocationAddressDetails(
+            resolvedDetails = LocationAddressDetails(
               formattedAddress: formatted,
               areaName: area ?? city ?? 'Current Location',
               city: city,
@@ -165,6 +186,9 @@ class PlacesDiscoveryService implements IPlacesDiscoveryService {
               longitude: lon,
               accuracy: accuracy,
             );
+            _cachedLiveLocationDetails = resolvedDetails;
+            _lastLiveLocationDetailsTime = DateTime.now();
+            return resolvedDetails;
           }
         }
       } catch (e) {
@@ -201,7 +225,7 @@ class PlacesDiscoveryService implements IPlacesDiscoveryService {
         final country = address?['country'];
         final postal = address?['postcode'];
 
-        return LocationAddressDetails(
+        resolvedDetails = LocationAddressDetails(
           formattedAddress: displayName,
           areaName: area?.toString() ?? city?.toString() ?? 'Current Location',
           city: city?.toString(),
@@ -212,18 +236,24 @@ class PlacesDiscoveryService implements IPlacesDiscoveryService {
           longitude: lon,
           accuracy: accuracy,
         );
+        _cachedLiveLocationDetails = resolvedDetails;
+        _lastLiveLocationDetailsTime = DateTime.now();
+        return resolvedDetails;
       }
     } catch (e) {
       debugPrint('Location details geocode notice: $e');
     }
 
-    return LocationAddressDetails(
+    resolvedDetails = LocationAddressDetails(
       formattedAddress: 'GPS: ${lat.toStringAsFixed(4)}, ${lon.toStringAsFixed(4)}',
       areaName: 'Current Sector',
       latitude: lat,
       longitude: lon,
       accuracy: accuracy,
     );
+    _cachedLiveLocationDetails = resolvedDetails;
+    _lastLiveLocationDetailsTime = DateTime.now();
+    return resolvedDetails;
   }
 
   @override

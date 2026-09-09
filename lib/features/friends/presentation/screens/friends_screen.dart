@@ -950,22 +950,58 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
   // -------------------------------------------------------------
   Widget _buildRequestsTab(FriendsState state) {
     if (state.pendingRequests.isEmpty && state.sentRequests.isEmpty) {
-      return const EmptyStateWidget(
-        title: 'No Pending Requests',
-        description: 'You have no incoming or outgoing friend requests at the moment.',
+      return Column(
+        children: [
+          if (state.errorMessage != null) ...[
+            _buildFeedbackBanner(
+              message: state.errorMessage!,
+              isError: true,
+              onDismiss: () => ref.read(friendsNotifierProvider.notifier).clearMessages(),
+            ),
+            const SizedBox(height: 12),
+          ],
+          if (state.successMessage != null) ...[
+            _buildFeedbackBanner(
+              message: state.successMessage!,
+              isError: false,
+              onDismiss: () => ref.read(friendsNotifierProvider.notifier).clearMessages(),
+            ),
+            const SizedBox(height: 12),
+          ],
+          const EmptyStateWidget(
+            title: 'No Pending Requests',
+            description: 'You have no incoming or outgoing friend requests at the moment.',
+          ),
+        ],
       );
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (state.errorMessage != null) ...[
+          _buildFeedbackBanner(
+            message: state.errorMessage!,
+            isError: true,
+            onDismiss: () => ref.read(friendsNotifierProvider.notifier).clearMessages(),
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (state.successMessage != null) ...[
+          _buildFeedbackBanner(
+            message: state.successMessage!,
+            isError: false,
+            onDismiss: () => ref.read(friendsNotifierProvider.notifier).clearMessages(),
+          ),
+          const SizedBox(height: 12),
+        ],
         if (state.pendingRequests.isNotEmpty) ...[
           Text(
             'INCOMING SQUAD INVITATIONS (${state.pendingRequests.length})',
             style: AppTypography.badge.copyWith(color: AppColors.primary, fontSize: 11),
           ),
           const SizedBox(height: 10),
-          ...state.pendingRequests.map((req) => _buildIncomingRequestCard(req)),
+          ...state.pendingRequests.map((req) => _buildIncomingRequestCard(req, state)),
           const SizedBox(height: 20),
         ],
         if (state.sentRequests.isNotEmpty) ...[
@@ -980,7 +1016,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
     );
   }
 
-  Widget _buildIncomingRequestCard(FriendRequest req) {
+  Widget _buildIncomingRequestCard(FriendRequest req, FriendsState state) {
     final avatarColor = AvatarSelectorSheet.getColorForAvatar(req.senderAvatarKey);
     final avatarIcon = AvatarSelectorSheet.getIconForAvatar(req.senderAvatarKey);
 
@@ -1035,7 +1071,9 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () => ref.read(friendsNotifierProvider.notifier).rejectFriendRequest(req.id),
+                  onPressed: state.isLoading
+                      ? null
+                      : () => ref.read(friendsNotifierProvider.notifier).rejectFriendRequest(req.id),
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: AppColors.accentDanger),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1046,12 +1084,20 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () => ref.read(friendsNotifierProvider.notifier).acceptFriendRequest(req.id),
+                  onPressed: state.isLoading
+                      ? null
+                      : () => ref.read(friendsNotifierProvider.notifier).acceptFriendRequest(req.id),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.accentSuccess,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('ACCEPT', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 11)),
+                  child: state.isLoading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                        )
+                      : const Text('ACCEPT', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 11)),
                 ),
               ),
             ],

@@ -327,8 +327,23 @@ class _QuestListScreenState extends ConsumerState<QuestListScreen>
                 data: (quests) {
                   final filtered = quests.where((q) {
                     if (!q.isActive) return false;
-                    final matchesCat =
-                        selectedCategory == null || q.category == selectedCategory;
+                    final bool matchesCat;
+                    if (selectedCategory == null) {
+                      matchesCat = true;
+                    } else if (selectedCategory == QuestCategory.landmark ||
+                        selectedCategory == QuestCategory.location) {
+                      matchesCat = q.category == QuestCategory.landmark ||
+                          q.category == QuestCategory.location ||
+                          q.requiresGPS == true ||
+                          q.verificationType == QuestVerificationType.locationGps ||
+                          (q.latitude != 0.0 && q.longitude != 0.0);
+                    } else if (selectedCategory == QuestCategory.exercise ||
+                        selectedCategory == QuestCategory.fitness) {
+                      matchesCat = q.category == QuestCategory.exercise ||
+                          q.category == QuestCategory.fitness;
+                    } else {
+                      matchesCat = q.category == selectedCategory;
+                    }
                     final matchesQuery = _matchesQuestSearch(q, query);
                     final matchesStatus = statusFilter == 'all'
                         ? true
@@ -373,9 +388,11 @@ class _QuestListScreenState extends ConsumerState<QuestListScreen>
                       AppColors.accentLocation,
                     ));
                     for (final q in locationQuests) {
-                      listChildren.add(QuestCardWidget(
-                        quest: q,
-                        onTap: () => context.push(RoutePaths.questDetailPath(q.id)),
+                      listChildren.add(RepaintBoundary(
+                        child: QuestCardWidget(
+                          quest: q,
+                          onTap: () => context.push(RoutePaths.questDetailPath(q.id)),
+                        ),
                       ));
                     }
                   }
@@ -388,9 +405,11 @@ class _QuestListScreenState extends ConsumerState<QuestListScreen>
                       AppColors.secondary,
                     ));
                     for (final q in adminQuests) {
-                      listChildren.add(QuestCardWidget(
-                        quest: q,
-                        onTap: () => context.push(RoutePaths.questDetailPath(q.id)),
+                      listChildren.add(RepaintBoundary(
+                        child: QuestCardWidget(
+                          quest: q,
+                          onTap: () => context.push(RoutePaths.questDetailPath(q.id)),
+                        ),
                       ));
                     }
                   }

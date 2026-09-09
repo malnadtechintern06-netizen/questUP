@@ -101,51 +101,52 @@ class _RadarDisplayWidgetState extends State<RadarDisplayWidget>
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Container(
-          height: 250,
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.borderBright, width: 1.2),
-            gradient: const RadialGradient(
-              center: Alignment.center,
-              radius: 0.95,
-              colors: [
-                Color(0xFF132035),
-                Color(0xFF090D15),
+        RepaintBoundary(
+          child: Container(
+            height: 250,
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppColors.borderBright, width: 1.2),
+              gradient: const RadialGradient(
+                center: Alignment.center,
+                radius: 0.95,
+                colors: [
+                  Color(0xFF132035),
+                  Color(0xFF090D15),
+                ],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
+                ),
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  blurRadius: 20,
+                  spreadRadius: 1,
+                ),
               ],
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.4),
-                blurRadius: 18,
-                offset: const Offset(0, 6),
-              ),
-              BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.1),
-                blurRadius: 20,
-                spreadRadius: 1,
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // Concentric tactical grid & crosshairs
-                CustomPaint(
-                  size: const Size(250, 250),
-                  painter: _RadarGridPainter(),
-                ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // Concentric tactical grid & crosshairs
+                  RepaintBoundary(
+                    child: CustomPaint(
+                      size: const Size(250, 250),
+                      painter: _RadarGridPainter(),
+                    ),
+                  ),
 
-                // Rotating sweeping beam with gradient trail
-                AnimatedBuilder(
-                  animation: _sweepController,
-                  builder: (context, child) {
-                    return Transform.rotate(
-                      angle: _sweepController.value * 2 * math.pi,
+                  // Rotating sweeping beam with gradient trail (cached child & isolated repaint)
+                  RepaintBoundary(
+                    child: AnimatedBuilder(
+                      animation: _sweepController,
                       child: Container(
                         width: 240,
                         height: 240,
@@ -161,26 +162,33 @@ class _RadarDisplayWidgetState extends State<RadarDisplayWidget>
                           ),
                         ),
                       ),
-                    );
-                  },
-                ),
+                      builder: (context, child) {
+                        return Transform.rotate(
+                          angle: _sweepController.value * 2 * math.pi,
+                          child: child,
+                        );
+                      },
+                    ),
+                  ),
 
-                // Center Pulsing GPS Marker (Player)
-                AnimatedBuilder(
-                  animation: _pulseAnimation,
-                  builder: (context, _) {
-                    return Container(
-                      width: 28 * _pulseAnimation.value,
-                      height: 28 * _pulseAnimation.value,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: AppColors.primary.withValues(
-                          alpha: (1.0 - (_pulseAnimation.value - 1.0) / 0.6).clamp(0.0, 0.4),
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                  // Center Pulsing GPS Marker (Player - isolated repaint)
+                  RepaintBoundary(
+                    child: AnimatedBuilder(
+                      animation: _pulseAnimation,
+                      builder: (context, _) {
+                        return Container(
+                          width: 28 * _pulseAnimation.value,
+                          height: 28 * _pulseAnimation.value,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: AppColors.primary.withValues(
+                              alpha: (1.0 - (_pulseAnimation.value - 1.0) / 0.6).clamp(0.0, 0.4),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
                 Container(
                   width: 22,
                   height: 22,
@@ -300,6 +308,7 @@ class _RadarDisplayWidgetState extends State<RadarDisplayWidget>
             ),
           ),
         ),
+      ),
 
         // Floating 3D Quest Preview Card when marker tapped
         if (_selectedPreviewQuest != null) ...[

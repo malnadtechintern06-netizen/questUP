@@ -16,82 +16,135 @@ class LeaderboardPodiumWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     if (topThree.isEmpty) return const SizedBox.shrink();
 
-    final first = topThree.isNotEmpty ? topThree[0] : null;
-    final second = topThree.length > 1 ? topThree[1] : null;
-    final third = topThree.length > 2 ? topThree[2] : null;
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.fromLTRB(12, 18, 12, 0),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.borderBright, width: 1.2),
-        gradient: const RadialGradient(
-          center: Alignment(0, -0.7),
-          radius: 1.2,
-          colors: [
-            Color(0xFF221A3D),
-            Color(0xFF0F1523),
-          ],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.4),
-            blurRadius: 18,
-            offset: const Offset(0, 6),
-          ),
+    final boxDecoration = BoxDecoration(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(24),
+      border: Border.all(color: AppColors.borderBright, width: 1.2),
+      gradient: const RadialGradient(
+        center: Alignment(0, -0.7),
+        radius: 1.2,
+        colors: [
+          Color(0xFF221A3D),
+          Color(0xFF0F1523),
         ],
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          // 2nd Place (Silver Podium)
-          if (second != null)
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.4),
+          blurRadius: 18,
+          offset: const Offset(0, 6),
+        ),
+      ],
+    );
+
+    // Single champion case (e.g. user alone in Friends tab)
+    if (topThree.length == 1) {
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+        decoration: boxDecoration,
+        child: Center(
+          child: SizedBox(
+            width: 140,
+            child: _buildPodiumStep(
+              entry: topThree[0],
+              rankColor: AppColors.secondary,
+              crownIcon: Icons.workspace_premium_rounded,
+              height: 120,
+              badgeText: '1ST 👑',
+              isWinner: true,
+              glowColor: AppColors.secondary,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Two champions case (e.g. user and 1 friend)
+    if (topThree.length == 2) {
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+        decoration: boxDecoration,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
             Expanded(
               child: _buildPodiumStep(
-                entry: second,
+                entry: topThree[0],
+                rankColor: AppColors.secondary,
+                crownIcon: Icons.workspace_premium_rounded,
+                height: 125,
+                badgeText: '1ST 👑',
+                isWinner: true,
+                glowColor: AppColors.secondary,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildPodiumStep(
+                entry: topThree[1],
                 rankColor: const Color(0xFFE2E8F0),
                 crownIcon: Icons.military_tech_rounded,
                 height: 95,
                 badgeText: '2ND',
                 glowColor: const Color(0xFF94A3B8),
               ),
-            )
-          else
-            const Expanded(child: SizedBox()),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final first = topThree[0];
+    final second = topThree[1];
+    final third = topThree[2];
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(12, 18, 12, 0),
+      decoration: boxDecoration,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // 2nd Place (Silver Podium)
+          Expanded(
+            child: _buildPodiumStep(
+              entry: second,
+              rankColor: const Color(0xFFE2E8F0),
+              crownIcon: Icons.military_tech_rounded,
+              height: 95,
+              badgeText: '2ND',
+              glowColor: const Color(0xFF94A3B8),
+            ),
+          ),
 
           // 1st Place (Gold Champion Podium)
-          if (first != null)
-            Expanded(
-              child: _buildPodiumStep(
-                entry: first,
-                rankColor: AppColors.secondary,
-                crownIcon: Icons.workspace_premium_rounded,
-                height: 130,
-                badgeText: '1ST 👑',
-                isWinner: true,
-                glowColor: AppColors.secondary,
-              ),
-            )
-          else
-            const Expanded(child: SizedBox()),
+          Expanded(
+            child: _buildPodiumStep(
+              entry: first,
+              rankColor: AppColors.secondary,
+              crownIcon: Icons.workspace_premium_rounded,
+              height: 130,
+              badgeText: '1ST 👑',
+              isWinner: true,
+              glowColor: AppColors.secondary,
+            ),
+          ),
 
           // 3rd Place (Bronze Podium)
-          if (third != null)
-            Expanded(
-              child: _buildPodiumStep(
-                entry: third,
-                rankColor: const Color(0xFFF97316),
-                crownIcon: Icons.shield_rounded,
-                height: 80,
-                badgeText: '3RD',
-                glowColor: const Color(0xFFEA580C),
-              ),
-            )
-          else
-            const Expanded(child: SizedBox()),
+          Expanded(
+            child: _buildPodiumStep(
+              entry: third,
+              rankColor: const Color(0xFFF97316),
+              crownIcon: Icons.shield_rounded,
+              height: 80,
+              badgeText: '3RD',
+              glowColor: const Color(0xFFEA580C),
+            ),
+          ),
         ],
       ),
     );
@@ -148,16 +201,39 @@ class LeaderboardPodiumWidget extends StatelessWidget {
 
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4.0),
-          child: Text(
-            entry.userName,
-            maxLines: 1,
-            textAlign: TextAlign.center,
-            overflow: TextOverflow.ellipsis,
-            style: AppTypography.caption.copyWith(
-              color: entry.isCurrentUser ? AppColors.primary : AppColors.textPrimary,
-              fontWeight: FontWeight.w800,
-              fontSize: 12,
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                entry.userName,
+                maxLines: 1,
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.caption.copyWith(
+                  color: entry.isCurrentUser ? AppColors.primary : AppColors.textPrimary,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
+                ),
+              ),
+              if (entry.isCurrentUser) ...[
+                const SizedBox(height: 2),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: const Text(
+                    'YOU',
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
         Text(

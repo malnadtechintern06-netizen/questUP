@@ -22,39 +22,57 @@ class QuestRepositoryImpl implements QuestRepository {
     double? userLon,
     String? userId,
   }) async {
-    // 1. Fetch cached local quests (base activity + landmark presets)
-    final localQuests = await localDataSource.getQuests();
+    // 1. Fetch cached local quests (base activity + dynamic proximity landmarks if coordinates present)
+    final List<QuestModel> localQuests;
+    if (userLat != null && userLon != null) {
+      localQuests = await localDataSource.getQuestsForLocation(
+        userLat,
+        userLon,
+        maxRadiusMeters: 10000.0,
+      );
+    } else {
+      localQuests = await localDataSource.getQuests();
+    }
     final localCount = localQuests.length;
     debugPrint('[QuestUP] Cache count: $localCount');
 
-    // 2. Trigger dynamic location quest generation if user coordinates are provided
-    if (userLat != null && userLon != null) {
-      try {
-        await mySqlDataSource.generateLocationQuests(
-          latitude: userLat,
-          longitude: userLon,
-          userId: userId,
-        ).timeout(
-          const Duration(seconds: 10),
-          onTimeout: () => [],
-        );
-      } catch (e) {
-        debugPrint('[QuestUP Location Quest] Generation request error: $e');
-      }
-    }
-
-    // 3. Fetch fresh remote Cloud / REST API quests from MySQL (admin + location-generated)
+    // 2 & 3. Concurrently fetch remote Cloud / REST API quests and generate location quests
     List<QuestModel> remoteQuests = [];
     try {
-      final fetched = await mySqlDataSource.fetchQuestsFromMySql(
-        userId: userId,
-        userLat: userLat,
-        userLon: userLon,
-      ).timeout(
-        const Duration(seconds: 8),
-        onTimeout: () => [],
-      );
-      remoteQuests = fetched.where((q) => q.isActive).toList();
+      final futures = <Future<List<QuestModel>>>[
+        mySqlDataSource.fetchQuestsFromMySql(
+          userId: userId,
+          userLat: userLat,
+          userLon: userLon,
+        ).timeout(
+          const Duration(seconds: 4),
+          onTimeout: () => [],
+        ),
+      ];
+
+      if (userLat != null && userLon != null) {
+        futures.add(
+          mySqlDataSource.generateLocationQuests(
+            latitude: userLat,
+            longitude: userLon,
+            userId: userId,
+          ).timeout(
+            const Duration(seconds: 4),
+            onTimeout: () => [],
+          ),
+        );
+      }
+
+      final results = await Future.wait(futures);
+      final fetched = results[0];
+      final generated = results.length > 1 ? results[1] : <QuestModel>[];
+      final combined = <String, QuestModel>{};
+      for (final q in [...fetched, ...generated]) {
+        if (q.isActive) {
+          combined[q.id] = q;
+        }
+      }
+      remoteQuests = combined.values.toList();
     } catch (e) {
       debugPrint('[QuestUP] Error fetching remote quests: $e');
     }

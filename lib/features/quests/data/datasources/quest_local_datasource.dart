@@ -2,6 +2,7 @@ import '../../../../app/config/app_constants.dart';
 import '../../../../core/services/activity_quest_catalog_service.dart';
 import '../../../../core/services/places_discovery_service.dart';
 import '../../../../core/storage/local_storage_service.dart';
+import '../../domain/entities/quest.dart';
 import '../models/quest_model.dart';
 
 abstract class IQuestLocalDataSource {
@@ -84,6 +85,25 @@ class QuestLocalDataSource implements IQuestLocalDataSource {
           } catch (_) {}
         }
       }
+    }
+
+    // 3. Ensure baseline landmark quests exist so location quests are always available
+    final hasLandmark = localQuestsMap.values.any((q) =>
+        q.category == QuestCategory.landmark ||
+        q.category == QuestCategory.location ||
+        q.requiresGPS);
+    if (!hasLandmark) {
+      try {
+        final defaultLandmarks = await _placesDiscoveryService.generateFamousPlaceQuests(
+          userLat: 13.9168,
+          userLon: 75.0739,
+          searchRadiusMeters: 10000.0,
+          completedIds: completedIds,
+        );
+        for (final q in defaultLandmarks) {
+          localQuestsMap[q.id] = q;
+        }
+      } catch (_) {}
     }
 
     return localQuestsMap.values.toList();

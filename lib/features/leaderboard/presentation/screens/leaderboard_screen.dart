@@ -100,6 +100,7 @@ class LeaderboardScreen extends ConsumerWidget {
                 final topThree = entries.take(3).toList();
                 final remaining = entries.length > 3 ? entries.sublist(3) : <LeaderboardEntry>[];
                 final currentUserEntry = entries.where((e) => e.isCurrentUser).firstOrNull;
+                final hasNoFriends = currentFilter == 'friends' && entries.where((e) => !e.isCurrentUser).isEmpty;
 
                 return RefreshIndicator(
                   color: AppColors.primary,
@@ -111,14 +112,17 @@ class LeaderboardScreen extends ConsumerWidget {
                           bottom: currentUserEntry != null ? 100 : 24,
                         ),
                         children: [
-                          // 3D Top 3 Podium
+                          if (hasNoFriends)
+                            _buildNoFriendsBanner(context),
+
+                          // 3D Top Podium
                           if (topThree.isNotEmpty)
                             LeaderboardPodiumWidget(topThree: topThree),
 
                           const SizedBox(height: 10),
 
                           // Rank 4+ List
-                          ...remaining.map((entry) => _buildRankCard(entry)),
+                          ...remaining.map((entry) => _buildRankCard(entry, currentFilter)),
                         ],
                       ),
 
@@ -128,13 +132,80 @@ class LeaderboardScreen extends ConsumerWidget {
                           left: 16,
                           right: 16,
                           bottom: 12,
-                          child: _buildStickyUserCard(currentUserEntry),
+                          child: _buildStickyUserCard(currentUserEntry, currentFilter, entries.length),
                         ),
                     ],
                   ),
                 );
               },
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoFriendsBanner(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.group_add_rounded, color: AppColors.primary, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'No Squad Friends Yet',
+                  style: AppTypography.titleMedium.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Add friends via Player ID to compare your rank and XP here.',
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.textSecondary,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            onPressed: () => appRouter.push(RoutePaths.friends),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              minimumSize: Size.zero,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Add', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11)),
           ),
         ],
       ),
@@ -187,9 +258,10 @@ class LeaderboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildRankCard(LeaderboardEntry entry) {
+  Widget _buildRankCard(LeaderboardEntry entry, String filter) {
     final avatarColor = AvatarSelectorSheet.getColorForAvatar(entry.avatarKey);
     final avatarIcon = AvatarSelectorSheet.getIconForAvatar(entry.avatarKey);
+    final xpSuffix = filter == 'weekly' ? 'XP' : 'XP';
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
@@ -323,10 +395,10 @@ class LeaderboardScreen extends ConsumerWidget {
                       const Icon(Icons.bolt_rounded, size: 14, color: AppColors.accentXp),
                       const SizedBox(width: 3),
                       Text(
-                        '${entry.xp}',
+                        '${entry.xp} $xpSuffix',
                         style: AppTypography.gameNumber.copyWith(
                           color: AppColors.accentXp,
-                          fontSize: 12,
+                          fontSize: 11,
                           fontWeight: FontWeight.w900,
                         ),
                       ),
@@ -341,8 +413,20 @@ class LeaderboardScreen extends ConsumerWidget {
     );
   }
 
+  Widget _buildStickyUserCard(LeaderboardEntry entry, String filter, int totalCount) {
+    String titleText = 'Your Hall of Fame Standing';
+    String subtitleText = 'Level ${entry.level} • ${entry.xp} Total XP';
 
-  Widget _buildStickyUserCard(LeaderboardEntry entry) {
+    if (filter == 'friends') {
+      titleText = 'Your Squad Standing';
+      subtitleText = totalCount > 1
+          ? 'Rank #${entry.rank} of $totalCount friends • ${entry.xp} XP'
+          : 'Rank #${entry.rank} • ${entry.xp} XP';
+    } else if (filter == 'weekly') {
+      titleText = 'Your Weekly Standing';
+      subtitleText = 'Rank #${entry.rank} • ${entry.xp} Weekly XP';
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -386,14 +470,14 @@ class LeaderboardScreen extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Your Hall of Fame Standing',
+                  titleText,
                   style: AppTypography.caption.copyWith(
                     color: AppColors.textSecondary,
                     fontSize: 10,
                   ),
                 ),
                 Text(
-                  'Level ${entry.level} • ${entry.xp} Total XP',
+                  subtitleText,
                   style: AppTypography.titleMedium.copyWith(
                     color: AppColors.primary,
                     fontSize: 13,

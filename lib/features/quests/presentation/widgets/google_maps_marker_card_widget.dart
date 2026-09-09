@@ -120,6 +120,8 @@ class _GoogleMapsMarkerCardWidgetState extends State<GoogleMapsMarkerCardWidget>
         mapUrl,
         height: widget.height,
         width: widget.width,
+        cacheWidth: 350,
+        cacheHeight: 200,
         fit: BoxFit.cover,
         gaplessPlayback: true,
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
@@ -153,26 +155,27 @@ class _GoogleMapsMarkerCardWidgetState extends State<GoogleMapsMarkerCardWidget>
           ),
         ),
 
-        // Center Google Maps Pin Marker
+        // Center Google Maps Pin Marker (isolated repaint boundary)
         Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Google Maps Pinpoint Marker Pin
-              AnimatedBuilder(
-                animation: _pulseController,
-                builder: (context, child) {
-                  final scale = 1.0 + (_pulseController.value * 0.08);
-                  return Transform.scale(
-                    scale: scale,
-                    child: child,
-                  );
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEA4335), // Google Maps Red
-                    shape: BoxShape.circle,
+          child: RepaintBoundary(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Google Maps Pinpoint Marker Pin
+                AnimatedBuilder(
+                  animation: _pulseController,
+                  builder: (context, child) {
+                    final scale = 1.0 + (_pulseController.value * 0.08);
+                    return Transform.scale(
+                      scale: scale,
+                      child: child,
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEA4335), // Google Maps Red
+                      shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
                         color: const Color(0xFFEA4335).withValues(alpha: 0.45),
@@ -225,6 +228,7 @@ class _GoogleMapsMarkerCardWidgetState extends State<GoogleMapsMarkerCardWidget>
             ],
           ),
         ),
+      ),
 
         // Bottom Left: GPS Coordinates Chip
         if (hasCoordinates)
@@ -307,10 +311,11 @@ class _GoogleMapsMarkerCardWidgetState extends State<GoogleMapsMarkerCardWidget>
           ),
         ),
 
-        // 4. Center Glowing Activity Emblem
+        // 4. Center Glowing Activity Emblem (isolated repaint boundary)
         Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          child: RepaintBoundary(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
             children: [
               AnimatedBuilder(
                 animation: _pulseController,
@@ -356,6 +361,7 @@ class _GoogleMapsMarkerCardWidgetState extends State<GoogleMapsMarkerCardWidget>
             ],
           ),
         ),
+      ),
 
         // 5. Top Left Activity Mode Badge
         Positioned(
@@ -422,22 +428,20 @@ class _GoogleMapsMarkerCardWidgetState extends State<GoogleMapsMarkerCardWidget>
   }
 
   Widget _wrapBorderRadius(Widget child) {
-    if (widget.borderRadius != null) {
-      return ClipRRect(
-        borderRadius: widget.borderRadius!,
-        child: SizedBox(
-          height: widget.height,
-          width: widget.width,
-          child: child,
-        ),
-      );
-    }
-
-    return SizedBox(
+    Widget bounded = SizedBox(
       height: widget.height,
       width: widget.width,
       child: child,
     );
+
+    if (widget.borderRadius != null) {
+      bounded = ClipRRect(
+        borderRadius: widget.borderRadius!,
+        child: bounded,
+      );
+    }
+
+    return RepaintBoundary(child: bounded);
   }
 
   String _getChallengeObjectiveText(Quest quest) {
