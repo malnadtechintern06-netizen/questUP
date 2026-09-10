@@ -16,6 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../config/activity_logger.php';
 
 $rawBody = file_get_contents('php://input');
 $data = json_decode($rawBody, true) ?? $_POST;
@@ -88,6 +89,13 @@ try {
             'f'  => $req['sender_id'],
         ]);
 
+        logActivity(
+            $req['receiver_id'],
+            'friend_request_accepted',
+            "Accepted friend request from player ID {$req['sender_id']}",
+            $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'
+        );
+
         echo json_encode([
             'success' => true,
             'status'  => 'accepted',
@@ -106,6 +114,13 @@ try {
             'u' => $req['sender_id'],
             'f' => $req['receiver_id'],
         ]);
+
+        logActivity(
+            $req['receiver_id'],
+            'friend_request_rejected',
+            "Declined friend request from player ID {$req['sender_id']}",
+            $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'
+        );
 
         echo json_encode([
             'success' => true,

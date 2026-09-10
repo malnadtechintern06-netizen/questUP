@@ -59,8 +59,10 @@ class UserProfileNotifier extends StateNotifier<AsyncValue<UserProfile>> {
   Future<void> loadProfile() async {
     try {
       final profile = await _getUserProfileUseCase();
+      if (!mounted) return;
       state = AsyncValue.data(profile);
     } catch (e, st) {
+      if (!mounted) return;
       if (!state.hasValue) {
         state = AsyncValue.error(e, st);
       }

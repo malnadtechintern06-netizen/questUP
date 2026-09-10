@@ -82,11 +82,21 @@ class QuestModel extends Quest {
     super.generationLatitude,
     super.generationLongitude,
     super.userId,
+    super.verificationSecret,
+    super.quizDataJson,
+    super.minDurationSeconds = 0,
+    super.requiresAdminReview = false,
+    super.allowGalleryUpload = false,
   });
 
   factory QuestModel.fromJson(Map<String, dynamic> json) {
     final questId = (json['id'] ?? json['questId'] ?? '').toString();
     final radius = double.tryParse(json['radiusMeters']?.toString() ?? json['radius_meters']?.toString() ?? json['allowedRadius']?.toString() ?? '') ?? 75.0;
+    final verSecret = json['verificationSecret'] as String? ?? json['verification_secret'] as String?;
+    final quizJson = json['quizDataJson'] as String? ?? json['quiz_data_json'] as String?;
+    final minDur = int.tryParse(json['minDurationSeconds']?.toString() ?? json['min_duration_seconds']?.toString() ?? '') ?? 0;
+    final adminRev = json['requiresAdminReview'] == true || json['requires_admin_review'] == 1 || json['requires_admin_review'] == '1' || json['requires_admin_review'] == true;
+    final galleryUp = json['allowGalleryUpload'] == true || json['allow_gallery_upload'] == 1 || json['allow_gallery_upload'] == '1' || json['allow_gallery_upload'] == true;
     
     final dynamic activeRaw = json['isActive'] ?? json['is_active'] ?? json['active'];
     final bool active = activeRaw == null ||
@@ -111,12 +121,17 @@ class QuestModel extends Quest {
     final verificationType = QuestVerificationType.values.firstWhere(
       (e) => e.name.toLowerCase() == verTypeStr,
       orElse: () {
+        if (verTypeStr == 'quiz') return QuestVerificationType.quiz;
+        if (verTypeStr == 'qr' || verTypeStr == 'qrcode') return QuestVerificationType.qrCode;
+        if (verTypeStr == 'code' || verTypeStr == 'secretcode') return QuestVerificationType.secretCode;
+        if (verTypeStr == 'task' || verTypeStr == 'taskconfirmation') return QuestVerificationType.taskConfirmation;
+        if (verTypeStr == 'admin' || verTypeStr == 'adminapproval') return QuestVerificationType.adminApproval;
         if (verTypeStr == 'photo' || verTypeStr == 'photoproof') return QuestVerificationType.photoProof;
         if (verTypeStr == 'drawing' || verTypeStr == 'drawingcanvas') return QuestVerificationType.drawingCanvas;
         if (verTypeStr == 'writing' || verTypeStr == 'writingtext') return QuestVerificationType.writingText;
         if (verTypeStr == 'walking' || verTypeStr == 'walkinggps') return QuestVerificationType.walkingGps;
         if (verTypeStr == 'gaming' || verTypeStr == 'gameplaytime') return QuestVerificationType.gameplayTime;
-        if (verTypeStr == 'qrcode' || verTypeStr == 'codephrase') return QuestVerificationType.compositeRules;
+        if (verTypeStr == 'codephrase') return QuestVerificationType.secretCode;
         if (category == QuestCategory.drawing) return QuestVerificationType.drawingCanvas;
         if (category == QuestCategory.writing) return QuestVerificationType.writingText;
         if (category == QuestCategory.walking) return QuestVerificationType.walkingGps;
@@ -263,6 +278,11 @@ class QuestModel extends Quest {
       generationLatitude: double.tryParse(json['generationLatitude']?.toString() ?? json['generation_latitude']?.toString() ?? ''),
       generationLongitude: double.tryParse(json['generationLongitude']?.toString() ?? json['generation_longitude']?.toString() ?? ''),
       userId: json['userId'] as String? ?? json['user_id'] as String?,
+      verificationSecret: verSecret,
+      quizDataJson: quizJson,
+      minDurationSeconds: minDur,
+      requiresAdminReview: adminRev,
+      allowGalleryUpload: galleryUp,
     );
   }
 
@@ -440,6 +460,16 @@ class QuestModel extends Quest {
       'generation_longitude': generationLongitude,
       'userId': userId,
       'user_id': userId,
+      'verification_secret': verificationSecret,
+      'verificationSecret': verificationSecret,
+      'quiz_data_json': quizDataJson,
+      'quizDataJson': quizDataJson,
+      'min_duration_seconds': minDurationSeconds,
+      'minDurationSeconds': minDurationSeconds,
+      'requires_admin_review': requiresAdminReview,
+      'requiresAdminReview': requiresAdminReview,
+      'allow_gallery_upload': allowGalleryUpload,
+      'allowGalleryUpload': allowGalleryUpload,
     };
   }
 
@@ -498,6 +528,11 @@ class QuestModel extends Quest {
       generationLatitude: entity.generationLatitude,
       generationLongitude: entity.generationLongitude,
       userId: entity.userId,
+      verificationSecret: entity.verificationSecret,
+      quizDataJson: entity.quizDataJson,
+      minDurationSeconds: entity.minDurationSeconds,
+      requiresAdminReview: entity.requiresAdminReview,
+      allowGalleryUpload: entity.allowGalleryUpload,
     );
   }
 }

@@ -1,6 +1,6 @@
 {
-    "name": "quest_up",
-    "short_name": "quest_up",
+    "name": "questUP",
+    "short_name": "questUP",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0F172A",

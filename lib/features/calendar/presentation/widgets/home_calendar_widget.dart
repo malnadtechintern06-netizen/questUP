@@ -153,9 +153,16 @@ class HomeCalendarWidget extends ConsumerWidget {
                           date.month == calendarState.selectedDate.month &&
                           date.day == calendarState.selectedDate.day;
 
+                      final regDay = calendarState.userJoinedAt != null
+                          ? DateTime(calendarState.userJoinedAt!.year, calendarState.userJoinedAt!.month, calendarState.userJoinedAt!.day)
+                          : null;
+                      final isBeforeRegistration = regDay != null &&
+                          DateTime(date.year, date.month, date.day).isBefore(regDay);
+
                       // Status dots for this date if in currentMonth
                       List<QuestActivityStatus> dayStatuses = [];
-                      if (date.month == calendarState.currentMonth.month &&
+                      if (!isBeforeRegistration &&
+                          date.month == calendarState.currentMonth.month &&
                           date.year == calendarState.currentMonth.year) {
                         dayStatuses = calendarState.monthStatusMap[date.day] ?? [];
                       }
@@ -195,7 +202,11 @@ class HomeCalendarWidget extends ConsumerWidget {
                                   style: AppTypography.caption.copyWith(
                                     fontSize: 10,
                                     fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
-                                    color: isToday ? AppColors.secondary : AppColors.textMuted,
+                                    color: isToday
+                                        ? AppColors.secondary
+                                        : (isBeforeRegistration
+                                            ? AppColors.textMuted.withValues(alpha: 0.4)
+                                            : AppColors.textMuted),
                                   ),
                                 ),
                                 const SizedBox(height: 2),
@@ -207,7 +218,11 @@ class HomeCalendarWidget extends ConsumerWidget {
                                     fontSize: 12,
                                     color: isSelected
                                         ? AppColors.primary
-                                        : (isToday ? AppColors.secondary : AppColors.textPrimary),
+                                        : (isToday
+                                            ? AppColors.secondary
+                                            : (isBeforeRegistration
+                                                ? AppColors.textMuted.withValues(alpha: 0.35)
+                                                : AppColors.textPrimary)),
                                   ),
                                 ),
                                 const SizedBox(height: 3),

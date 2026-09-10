@@ -57,6 +57,8 @@ foreach ($users as $u) {
         $num = (hexdec(substr(hash('sha256', $email ?: $id), 0, 4)) % 9000) + 1000;
         $playerId = 'QST-' . $num;
     }
+    $salt = trim($u['salt'] ?? '') ?: bin2hex(random_bytes(8));
+    $avatarKey = trim($u['avatar_key'] ?? '') ?: 'avatar_ranger';
     $level = max(1, (int)($u['level'] ?? 1));
     $currentXp = max(0, (int)($u['current_xp'] ?? 0));
     $coins = max(0, (int)($u['coins'] ?? 100));
@@ -68,7 +70,7 @@ foreach ($users as $u) {
                 VALUES (:id, :pid, :name, :email, :hash, :salt, 'active', NOW())
                 ON DUPLICATE KEY UPDATE
                     name = VALUES(name),
-                    player_id = COALESCE(users.player_id, VALUES(player_id)),
+                    player_id = CASE WHEN users.player_id IS NULL OR users.player_id = '' THEN VALUES(player_id) ELSE users.player_id END,
                     status = 'active'
             ");
             $stmt->execute([

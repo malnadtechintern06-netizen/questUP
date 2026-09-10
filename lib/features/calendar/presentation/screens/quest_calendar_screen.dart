@@ -99,6 +99,7 @@ class QuestCalendarScreen extends ConsumerWidget {
                   InteractiveCalendarGrid(
                     currentMonth: calendarState.currentMonth,
                     selectedDate: calendarState.selectedDate,
+                    userJoinedAt: calendarState.userJoinedAt,
                     statusMap: calendarState.monthStatusMap,
                     onDateSelected: (date) => notifier.selectDate(date),
                     onMonthChange: (offset) => notifier.changeMonth(offset),
@@ -114,6 +115,7 @@ class QuestCalendarScreen extends ConsumerWidget {
                     DailyQuestActivityList(
                       selectedDate: calendarState.selectedDate,
                       entries: calendarState.selectedDateEntries,
+                      userJoinedAt: calendarState.userJoinedAt,
                     ),
                 ],
               ),

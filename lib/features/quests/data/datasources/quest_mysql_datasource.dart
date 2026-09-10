@@ -84,6 +84,7 @@ class QuestMySqlDataSource implements IQuestMySqlDataSource {
           final list = _parseQuestsFromJson(responseBody);
           if (list != null) {
             _workingApiBaseUrl = baseUrl;
+            MySqlConfig.workingApiBaseUrl = baseUrl;
             debugPrint('[QuestUP] API quest count: ${list.length}');
             if (list.isNotEmpty) {
               debugPrint('[QuestUP] First quest ID: ${list.first.id} ("${list.first.title}")');
@@ -144,6 +145,7 @@ class QuestMySqlDataSource implements IQuestMySqlDataSource {
           final list = _parseQuestsFromJson(responseBody);
           if (list != null && list.isNotEmpty) {
             _workingApiBaseUrl = baseUrl;
+            MySqlConfig.workingApiBaseUrl = baseUrl;
             debugPrint('[QuestUP Location Quest] Places found: ${list.length}');
             debugPrint('[QuestUP Location Quest] Generating quests: ${list.length}');
             debugPrint('[QuestUP Location Quest] Generated quest count: ${list.length}');

@@ -4,7 +4,6 @@ import 'package:quest_up/app/config/app_constants.dart';
 import 'package:quest_up/core/storage/local_storage_service.dart';
 import 'package:quest_up/features/friends/data/models/friend_profile_model.dart';
 import 'package:quest_up/features/friends/data/models/friend_request_model.dart';
-import 'package:quest_up/features/friends/domain/entities/friend_request.dart';
 
 abstract class IFriendsLocalDataSource {
   Future<List<FriendProfileModel>> getFriends();
@@ -52,23 +51,22 @@ class FriendsLocalDataSource implements IFriendsLocalDataSource {
     if (raw is List) {
       return raw
           .map((item) => FriendProfileModel.fromJson(item as Map<String, dynamic>))
+          .where((f) => !f.userId.startsWith('comp_') && !f.userId.startsWith('player_QST-'))
           .toList();
     }
-    // Initial seeded friend: Aria Silverleaf
-    final initialFriends = [
-      _getAriaSilverleafProfile(),
-    ];
-    await saveFriends(initialFriends);
-    return initialFriends;
+    return [];
   }
 
   @override
   Future<void> saveFriends(List<FriendProfileModel> friends) async {
     final userId = await _getActiveUserId();
     final userSpecificKey = 'questup_friends_${userId}_v1';
-    final list = friends.map((f) => f.toJson()).toList();
-    await _storage.saveJson(userSpecificKey, list);
-    await _storage.saveJson(AppConstants.keyFriends, list);
+    final sanitized = friends
+        .where((f) => !f.userId.startsWith('comp_') && !f.userId.startsWith('player_QST-'))
+        .map((f) => f.toJson())
+        .toList();
+    await _storage.saveJson(userSpecificKey, sanitized);
+    await _storage.saveJson(AppConstants.keyFriends, sanitized);
   }
 
   @override
@@ -79,34 +77,22 @@ class FriendsLocalDataSource implements IFriendsLocalDataSource {
     if (raw is List) {
       return raw
           .map((item) => FriendRequestModel.fromJson(item as Map<String, dynamic>))
+          .where((r) => !r.senderId.startsWith('comp_') && !r.senderId.startsWith('player_QST-'))
           .toList();
     }
-    // Initial seeded incoming friend request from Kai Horizon
-    final initialRequests = [
-      FriendRequestModel(
-        id: 'req_seed_kai_1',
-        senderId: 'comp_2',
-        senderName: 'Kai Horizon',
-        senderTag: 'QST-1002',
-        senderAvatarKey: 'avatar_sky_pilot',
-        senderLevel: 5,
-        receiverId: userId,
-        receiverTag: 'MY_TAG',
-        status: FriendRequestStatus.pending,
-        createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-      ),
-    ];
-    await saveFriendRequests(initialRequests);
-    return initialRequests;
+    return [];
   }
 
   @override
   Future<void> saveFriendRequests(List<FriendRequestModel> requests) async {
     final userId = await _getActiveUserId();
     final userSpecificKey = 'questup_friend_requests_${userId}_v1';
-    final list = requests.map((r) => r.toJson()).toList();
-    await _storage.saveJson(userSpecificKey, list);
-    await _storage.saveJson(AppConstants.keyFriendRequests, list);
+    final sanitized = requests
+        .where((r) => !r.senderId.startsWith('comp_') && !r.senderId.startsWith('player_QST-'))
+        .map((r) => r.toJson())
+        .toList();
+    await _storage.saveJson(userSpecificKey, sanitized);
+    await _storage.saveJson(AppConstants.keyFriendRequests, sanitized);
   }
 
   @override
@@ -116,10 +102,8 @@ class FriendsLocalDataSource implements IFriendsLocalDataSource {
     if (raw is List) {
       players = raw
           .map((item) => FriendProfileModel.fromJson(item as Map<String, dynamic>))
+          .where((p) => !p.userId.startsWith('comp_') && !p.userId.startsWith('player_QST-'))
           .toList();
-    } else {
-      players = _generateDefaultCompetitors();
-      await savePlayerRegistry(players);
     }
 
     // Merge any locally registered users
@@ -129,8 +113,10 @@ class FriendsLocalDataSource implements IFriendsLocalDataSource {
         final data = entry.value;
         if (data is Map<String, dynamic>) {
           final userId = data['id'] as String? ?? entry.key;
+          if (userId.startsWith('comp_') || userId.startsWith('player_QST-')) continue;
+
           final userName = data['name'] as String? ?? entry.key.split('@').first;
-          final userTag = computePlayerTag(userId, entry.key);
+          final userTag = data['player_id'] as String? ?? computePlayerTag(userId, entry.key);
 
           final exists = players.any((p) => p.userId == userId || p.playerTag == userTag);
           if (!exists) {
@@ -139,25 +125,16 @@ class FriendsLocalDataSource implements IFriendsLocalDataSource {
                 userId: userId,
                 playerTag: userTag,
                 name: userName,
-                avatarKey: 'avatar_cyber_knight',
-                level: 2,
-                currentXp: 350,
-                coins: 180,
+                avatarKey: data['avatar_key'] as String? ?? 'avatar_1',
+                level: int.tryParse(data['level']?.toString() ?? '1') ?? 1,
+                currentXp: int.tryParse(data['current_xp']?.toString() ?? '0') ?? 0,
+                coins: int.tryParse(data['coins']?.toString() ?? '100') ?? 100,
                 rank: players.length + 1,
-                rankTitle: 'Scout Adventurer',
-                completedQuestsCount: 2,
-                gamesPlayedCount: 2,
+                rankTitle: 'Explorer Scout',
+                completedQuestsCount: 0,
+                gamesPlayedCount: 0,
                 completedQuests: const [],
-                earnedBadges: [
-                  FriendBadgeSummaryModel(
-                    badgeId: 'badge_first_quest',
-                    title: 'First Step into the Wild',
-                    tier: 'Standard',
-                    iconKey: 'badge_first_quest',
-                    isHardcore: false,
-                    unlockedAt: DateTime.now().subtract(const Duration(days: 1)),
-                  ),
-                ],
+                earnedBadges: const [],
                 friendshipDate: DateTime.now(),
                 isOnline: true,
                 lastActiveText: 'Active on Radar',
@@ -175,229 +152,10 @@ class FriendsLocalDataSource implements IFriendsLocalDataSource {
 
   @override
   Future<void> savePlayerRegistry(List<FriendProfileModel> players) async {
-    final list = players.map((p) => p.toJson()).toList();
-    await _storage.saveJson(AppConstants.keyPlayerRegistry, list);
-  }
-
-  FriendProfileModel _getAriaSilverleafProfile() {
-    return FriendProfileModel(
-      userId: 'comp_4',
-      playerTag: 'QST-1004',
-      name: 'Aria Silverleaf',
-      avatarKey: 'avatar_ranger',
-      level: 3,
-      currentXp: 1400,
-      coins: 650,
-      rank: 4,
-      rankTitle: 'Trail Scout',
-      completedQuestsCount: 7,
-      gamesPlayedCount: 8,
-      completedQuests: [
-        FriendCompletedQuestSummaryModel(
-          questId: 'quest_botanical_1',
-          title: 'Echoes of the Ancient Botanical Gardens',
-          category: 'Nature & Outdoors',
-          xpEarned: 220,
-          coinsEarned: 100,
-          completedAt: DateTime.now().subtract(const Duration(days: 1)),
-          locationName: 'Royal Botanical Sanctuary',
-        ),
-        FriendCompletedQuestSummaryModel(
-          questId: 'quest_clock_tower_2',
-          title: 'The Great Heritage Clock Observation',
-          category: 'Historical Landmark',
-          xpEarned: 180,
-          coinsEarned: 80,
-          completedAt: DateTime.now().subtract(const Duration(days: 2)),
-          locationName: 'Old Town Heritage Clock Tower',
-        ),
-        FriendCompletedQuestSummaryModel(
-          questId: 'quest_art_gallery_3',
-          title: 'Artisan Square Kinetic Mural Scan',
-          category: 'Arts & Culture',
-          xpEarned: 150,
-          coinsEarned: 60,
-          completedAt: DateTime.now().subtract(const Duration(days: 4)),
-          locationName: 'Artisan Kinetic Gallery',
-        ),
-      ],
-      earnedBadges: [
-        FriendBadgeSummaryModel(
-          badgeId: 'badge_first_quest',
-          title: 'First Step into the Wild',
-          tier: 'Standard',
-          iconKey: 'badge_first_quest',
-          isHardcore: false,
-          unlockedAt: DateTime.now().subtract(const Duration(days: 10)),
-        ),
-        FriendBadgeSummaryModel(
-          badgeId: 'badge_compass',
-          title: 'Wayfinder Initiate',
-          tier: 'Standard',
-          iconKey: 'badge_compass',
-          isHardcore: false,
-          unlockedAt: DateTime.now().subtract(const Duration(days: 6)),
-        ),
-        FriendBadgeSummaryModel(
-          badgeId: 'badge_trail',
-          title: 'Pathfinder Vanguard',
-          tier: 'Adept',
-          iconKey: 'badge_trail',
-          isHardcore: false,
-          unlockedAt: DateTime.now().subtract(const Duration(days: 2)),
-        ),
-      ],
-      friendshipDate: DateTime.now().subtract(const Duration(days: 5)),
-      isOnline: true,
-      lastActiveText: 'Active on Radar',
-      isFriend: true,
-      friendshipStatus: 'accepted',
-    );
-  }
-
-  List<FriendProfileModel> _generateDefaultCompetitors() {
-    return [
-      FriendProfileModel(
-        userId: 'comp_1',
-        playerTag: 'QST-1001',
-        name: 'Elena Shadowstride',
-        avatarKey: 'avatar_mystic_sage',
-        level: 6,
-        currentXp: 3850,
-        coins: 1950,
-        rank: 1,
-        rankTitle: 'Apex Mythic Explorer',
-        completedQuestsCount: 18,
-        gamesPlayedCount: 19,
-        completedQuests: const [],
-        earnedBadges: [
-          FriendBadgeSummaryModel(
-            badgeId: 'badge_immortal_mythic',
-            title: 'Immortal Mythic Legend',
-            tier: 'Mythic',
-            iconKey: 'badge_immortal_mythic',
-            isHardcore: true,
-            unlockedAt: DateTime.now().subtract(const Duration(days: 1)),
-          ),
-          FriendBadgeSummaryModel(
-            badgeId: 'badge_apex_titan',
-            title: 'Apex Titan Explorer',
-            tier: 'Hardcore',
-            iconKey: 'badge_apex_titan',
-            isHardcore: true,
-            unlockedAt: DateTime.now().subtract(const Duration(days: 3)),
-          ),
-          FriendBadgeSummaryModel(
-            badgeId: 'badge_crown',
-            title: 'Grandmaster Champion',
-            tier: 'Master',
-            iconKey: 'badge_crown',
-            isHardcore: false,
-            unlockedAt: DateTime.now().subtract(const Duration(days: 7)),
-          ),
-        ],
-        friendshipDate: DateTime.now().subtract(const Duration(days: 12)),
-        isOnline: true,
-        lastActiveText: 'Exploring Live Radar',
-        isFriend: false,
-        friendshipStatus: 'none',
-      ),
-      FriendProfileModel(
-        userId: 'comp_2',
-        playerTag: 'QST-1002',
-        name: 'Kai Horizon',
-        avatarKey: 'avatar_sky_pilot',
-        level: 5,
-        currentXp: 2900,
-        coins: 1400,
-        rank: 2,
-        rankTitle: 'Master Sky Voyager',
-        completedQuestsCount: 14,
-        gamesPlayedCount: 15,
-        completedQuests: const [],
-        earnedBadges: [
-          FriendBadgeSummaryModel(
-            badgeId: 'badge_iron_legs',
-            title: 'Iron Legs Ultra Trailblazer',
-            tier: 'Hardcore',
-            iconKey: 'badge_iron_legs',
-            isHardcore: true,
-            unlockedAt: DateTime.now().subtract(const Duration(days: 4)),
-          ),
-          FriendBadgeSummaryModel(
-            badgeId: 'badge_dragon_gold',
-            title: 'Dragon Hoard Tycoon',
-            tier: 'Master',
-            iconKey: 'badge_dragon_gold',
-            isHardcore: true,
-            unlockedAt: DateTime.now().subtract(const Duration(days: 9)),
-          ),
-        ],
-        friendshipDate: DateTime.now().subtract(const Duration(days: 8)),
-        isOnline: false,
-        lastActiveText: '2 hours ago',
-        isFriend: false,
-        friendshipStatus: 'pending_received',
-      ),
-      FriendProfileModel(
-        userId: 'comp_3',
-        playerTag: 'QST-1003',
-        name: 'Marcus Storm',
-        avatarKey: 'avatar_fire_trail',
-        level: 4,
-        currentXp: 2100,
-        coins: 980,
-        rank: 3,
-        rankTitle: 'Flame Vanguard',
-        completedQuestsCount: 11,
-        gamesPlayedCount: 12,
-        completedQuests: const [],
-        earnedBadges: [
-          FriendBadgeSummaryModel(
-            badgeId: 'badge_shield',
-            title: 'Guardian Aegis',
-            tier: 'Adept',
-            iconKey: 'badge_shield',
-            isHardcore: false,
-            unlockedAt: DateTime.now().subtract(const Duration(days: 5)),
-          ),
-        ],
-        friendshipDate: DateTime.now().subtract(const Duration(days: 6)),
-        isOnline: false,
-        lastActiveText: 'Yesterday',
-        isFriend: false,
-        friendshipStatus: 'none',
-      ),
-      _getAriaSilverleafProfile(),
-      FriendProfileModel(
-        userId: 'comp_5',
-        playerTag: 'QST-1005',
-        name: 'Zane Deepcurrent',
-        avatarKey: 'avatar_deep_diver',
-        level: 2,
-        currentXp: 850,
-        coins: 420,
-        rank: 5,
-        rankTitle: 'Abyssal Scout',
-        completedQuestsCount: 4,
-        gamesPlayedCount: 5,
-        completedQuests: const [],
-        earnedBadges: [
-          FriendBadgeSummaryModel(
-            badgeId: 'badge_first_quest',
-            title: 'First Step into the Wild',
-            tier: 'Standard',
-            iconKey: 'badge_first_quest',
-            isHardcore: false,
-            unlockedAt: DateTime.now().subtract(const Duration(days: 14)),
-          ),
-        ],
-        friendshipDate: DateTime.now().subtract(const Duration(days: 4)),
-        isOnline: true,
-        lastActiveText: 'Active on Radar',
-        isFriend: false,
-        friendshipStatus: 'none',
-      ),
-    ];
+    final sanitized = players
+        .where((p) => !p.userId.startsWith('comp_') && !p.userId.startsWith('player_QST-'))
+        .map((p) => p.toJson())
+        .toList();
+    await _storage.saveJson(AppConstants.keyPlayerRegistry, sanitized);
   }
 }

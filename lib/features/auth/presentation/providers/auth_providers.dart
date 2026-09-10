@@ -15,6 +15,8 @@ import 'package:quest_up/features/auth/domain/usecases/send_password_reset_useca
 import 'package:quest_up/features/auth/domain/usecases/verify_login_otp_usecase.dart';
 import 'package:quest_up/features/achievements/presentation/providers/achievement_providers.dart';
 import 'package:quest_up/features/calendar/presentation/providers/quest_calendar_providers.dart';
+import 'package:quest_up/features/friends/presentation/providers/friends_providers.dart';
+import 'package:quest_up/features/leaderboard/presentation/providers/leaderboard_providers.dart';
 import 'package:quest_up/features/profile/presentation/providers/user_providers.dart';
 import 'package:quest_up/features/quests/presentation/providers/quest_providers.dart';
 
@@ -153,6 +155,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> _hydrateUserDataInBackground(AuthUser user) async {
     final swProfile = Stopwatch()..start();
     try {
+      // 1. Clear any cached leaderboard data from previous user
+      ref.read(leaderboardRepositoryProvider).clearCache();
+      ref.invalidate(leaderboardByFilterProvider);
+
+      // 2. Force load fresh profile for this user
+      await ref.read(userProfileNotifierProvider.notifier).loadProfile();
       await ref.read(userProfileNotifierProvider.notifier).updateProfile(
             id: user.id,
             name: user.displayName,
@@ -402,13 +410,25 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
-    state = state.copyWith(status: AuthStatus.loading);
-    await logoutUseCase();
     state = const AuthState(status: AuthStatus.unauthenticated, user: null);
-    await ref.read(userProfileNotifierProvider.notifier).loadProfile();
-    await ref.read(questsNotifierProvider.notifier).fetchQuests(showLoading: false);
-    await ref.read(achievementsNotifierProvider.notifier).loadAchievements();
-    await ref.read(questCalendarNotifierProvider.notifier).refresh();
+    try {
+      await logoutUseCase();
+    } catch (e) {
+      debugPrint('[Auth] Error during logoutUseCase: $e');
+    }
+
+    // Reset caches and invalidate providers cleanly without blocking navigation
+    try {
+      ref.read(leaderboardRepositoryProvider).clearCache();
+      ref.invalidate(leaderboardByFilterProvider);
+      ref.invalidate(userProfileNotifierProvider);
+      ref.invalidate(questsNotifierProvider);
+      ref.invalidate(achievementsNotifierProvider);
+      ref.invalidate(questCalendarNotifierProvider);
+      ref.invalidate(friendsNotifierProvider);
+    } catch (e) {
+      debugPrint('[Auth] Error clearing provider caches: $e');
+    }
   }
 
   Future<bool> sendPasswordReset(String email) async {

@@ -123,17 +123,15 @@ class FriendsNotifier extends StateNotifier<FriendsState> {
   Future<void> searchPlayer(String query) async {
     final clean = query.replaceAll('#', '').trim();
     if (clean.isEmpty) {
-      state = state.copyWith(clearSearchResult: true, isSearching: false);
+      state = state.copyWith(clearSearchResult: true, isSearching: false, clearMessages: true);
       return;
     }
 
     state = state.copyWith(isSearching: true, clearSearchResult: true, clearMessages: true);
     try {
       final match = await _repository.searchPlayer(clean);
-      final suggested = await _repository.getSuggestedPlayers();
       state = state.copyWith(
         searchResult: match,
-        suggestedPlayers: suggested,
         isSearching: false,
         errorMessage: match == null ? 'No player found matching "$query".' : null,
       );

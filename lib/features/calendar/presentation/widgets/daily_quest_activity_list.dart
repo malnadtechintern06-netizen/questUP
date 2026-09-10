@@ -8,11 +8,13 @@ import '../../domain/entities/quest_calendar_entry.dart';
 class DailyQuestActivityList extends StatefulWidget {
   final DateTime selectedDate;
   final List<QuestCalendarEntry> entries;
+  final DateTime? userJoinedAt;
 
   const DailyQuestActivityList({
     super.key,
     required this.selectedDate,
     required this.entries,
+    this.userJoinedAt,
   });
 
   @override
@@ -56,6 +58,12 @@ class _DailyQuestActivityListState extends State<DailyQuestActivityList> {
     final dayOfWeek = _dayNames[date.weekday - 1];
     final monthName = _monthNames[date.month - 1];
     final formattedDate = '$dayOfWeek, $monthName ${date.day}, ${date.year}';
+
+    final regDay = widget.userJoinedAt != null
+        ? DateTime(widget.userJoinedAt!.year, widget.userJoinedAt!.month, widget.userJoinedAt!.day)
+        : null;
+    final isBeforeRegistration = regDay != null &&
+        DateTime(date.year, date.month, date.day).isBefore(regDay);
 
     final completed = widget.entries.where((e) => e.isCompleted).toList();
     final incomplete = widget.entries.where((e) => e.isIncomplete).toList();
@@ -188,15 +196,32 @@ class _DailyQuestActivityListState extends State<DailyQuestActivityList> {
             child: Center(
               child: Column(
                 children: [
-                  const Icon(Icons.event_note_rounded, size: 40, color: AppColors.textMuted),
+                  Icon(
+                    isBeforeRegistration
+                        ? Icons.history_rounded
+                        : Icons.event_note_rounded,
+                    size: 40,
+                    color: AppColors.textMuted,
+                  ),
                   const SizedBox(height: 8),
                   Text(
-                    'No Quests in this Category',
-                    style: AppTypography.titleMedium.copyWith(color: AppColors.textPrimary, fontSize: 14),
+                    isBeforeRegistration
+                        ? 'Before Account Registration'
+                        : (widget.entries.isEmpty
+                            ? 'No Quests Recorded'
+                            : 'No Quests in this Category'),
+                    style: AppTypography.titleMedium.copyWith(
+                      color: AppColors.textPrimary,
+                      fontSize: 14,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'No quest entries recorded for this day matching the filter.',
+                    isBeforeRegistration && widget.userJoinedAt != null
+                        ? 'This account was registered on ${_monthNames[widget.userJoinedAt!.month - 1]} ${widget.userJoinedAt!.day}, ${widget.userJoinedAt!.year}. Quest tracking begins from your registration day.'
+                        : (widget.entries.isEmpty
+                            ? 'No quest activity recorded for this date.'
+                            : 'No quest entries recorded for this day matching the filter.'),
                     textAlign: TextAlign.center,
                     style: AppTypography.caption.copyWith(color: AppColors.textMuted),
                   ),

@@ -102,6 +102,11 @@ class VerificationState {
   final bool isPasted;
   final int pastedCharactersCount;
   final bool isAuthenticallyTyped;
+  final String? secretCode;
+  final Map<String, dynamic> quizAnswers;
+  final String? qrCodeData;
+  final bool isTaskConfirmed;
+  final bool isPendingAdminReview;
   final VerificationResult? result;
   final List<ValidatorResult> validatorResults;
   final String? errorMessage;
@@ -124,6 +129,11 @@ class VerificationState {
     this.isPasted = false,
     this.pastedCharactersCount = 0,
     this.isAuthenticallyTyped = true,
+    this.secretCode,
+    this.quizAnswers = const {},
+    this.qrCodeData,
+    this.isTaskConfirmed = false,
+    this.isPendingAdminReview = false,
     this.result,
     this.validatorResults = const [],
     this.errorMessage,
@@ -151,6 +161,11 @@ class VerificationState {
     bool? isPasted,
     int? pastedCharactersCount,
     bool? isAuthenticallyTyped,
+    String? secretCode,
+    Map<String, dynamic>? quizAnswers,
+    String? qrCodeData,
+    bool? isTaskConfirmed,
+    bool? isPendingAdminReview,
     VerificationResult? result,
     List<ValidatorResult>? validatorResults,
     String? errorMessage,
@@ -173,6 +188,11 @@ class VerificationState {
       isPasted: isPasted ?? this.isPasted,
       pastedCharactersCount: pastedCharactersCount ?? this.pastedCharactersCount,
       isAuthenticallyTyped: isAuthenticallyTyped ?? this.isAuthenticallyTyped,
+      secretCode: secretCode ?? this.secretCode,
+      quizAnswers: quizAnswers ?? this.quizAnswers,
+      qrCodeData: qrCodeData ?? this.qrCodeData,
+      isTaskConfirmed: isTaskConfirmed ?? this.isTaskConfirmed,
+      isPendingAdminReview: isPendingAdminReview ?? this.isPendingAdminReview,
       result: result ?? this.result,
       validatorResults: validatorResults ?? this.validatorResults,
       errorMessage: errorMessage,
@@ -352,6 +372,36 @@ class VerificationNotifier extends StateNotifier<VerificationState> {
     );
   }
 
+  void updateSecretCode(String code) {
+    state = state.copyWith(
+      secretCode: code,
+      isRequirementSatisfied: code.trim().isNotEmpty,
+    );
+  }
+
+  void updateQuizAnswer(String questionId, dynamic answer) {
+    final updated = Map<String, dynamic>.from(state.quizAnswers);
+    updated[questionId] = answer;
+    state = state.copyWith(
+      quizAnswers: updated,
+      isRequirementSatisfied: updated.isNotEmpty,
+    );
+  }
+
+  void updateQrCode(String qrData) {
+    state = state.copyWith(
+      qrCodeData: qrData,
+      isRequirementSatisfied: qrData.trim().isNotEmpty,
+    );
+  }
+
+  void setTaskConfirmed(bool confirmed) {
+    state = state.copyWith(
+      isTaskConfirmed: confirmed,
+      isRequirementSatisfied: confirmed,
+    );
+  }
+
   void clearProof() {
     state = state.copyWith(
       capturedPhotoPath: null,
@@ -359,6 +409,10 @@ class VerificationNotifier extends StateNotifier<VerificationState> {
       drawingProofSummary: null,
       textContent: null,
       mediaHash: null,
+      secretCode: null,
+      quizAnswers: const {},
+      qrCodeData: null,
+      isTaskConfirmed: false,
       isFreshCapture: false,
       isRequirementSatisfied: false,
       validatorResults: const [],
@@ -449,6 +503,10 @@ class VerificationNotifier extends StateNotifier<VerificationState> {
         isPasted: state.isPasted,
         pastedCharactersCount: state.pastedCharactersCount,
         isAuthenticallyTyped: state.isAuthenticallyTyped,
+        secretCode: state.secretCode,
+        quizAnswers: state.quizAnswers,
+        qrCodeData: state.qrCodeData,
+        taskConfirmed: state.isTaskConfirmed,
       );
 
 

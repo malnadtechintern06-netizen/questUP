@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.questup" "\0"
-            VALUE "FileDescription", "quest_up" "\0"
+            VALUE "FileDescription", "questUP" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "quest_up" "\0"
+            VALUE "InternalName", "questUP" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.questup. All rights reserved." "\0"
-            VALUE "OriginalFilename", "quest_up.exe" "\0"
-            VALUE "ProductName", "quest_up" "\0"
+            VALUE "OriginalFilename", "questUP.exe" "\0"
+            VALUE "ProductName", "questUP" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -354,18 +355,64 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
                                 );
 
                             if (result.isSuccessful && context.mounted) {
-                              RewardDialog.show(
-                                context,
-                                questTitle: quest.title,
-                                xpEarned: result.xpEarned,
-                                coinsEarned: result.coinsEarned,
-                                didLevelUp: result.didLevelUp,
-                                newLevel: result.newLevel,
-                                unlockedBadgeTitle: result.unlockedBadgeTitle,
-                                onClaim: () {
-                                  context.go(RoutePaths.home);
-                                },
-                              );
+                              if (result.isPendingAdminReview) {
+                                showDialog(
+                                  context: context,
+                                  barrierDismissible: false,
+                                  builder: (ctx) => AlertDialog(
+                                    backgroundColor: AppColors.surface,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                      side: const BorderSide(color: AppColors.secondary, width: 1.5),
+                                    ),
+                                    title: Row(
+                                      children: [
+                                        const Icon(Icons.hourglass_top_rounded, color: AppColors.secondary, size: 28),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            'Submitted for Admin Review',
+                                            style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    content: Text(
+                                      result.message.isNotEmpty
+                                          ? result.message
+                                          : 'Your quest submission has been received and forwarded to the game master for review. Rewards will be credited once approved!',
+                                      style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+                                    ),
+                                    actions: [
+                                      ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.secondary,
+                                          foregroundColor: Colors.black,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        ),
+                                        onPressed: () {
+                                          Navigator.of(ctx).pop();
+                                          context.go(RoutePaths.home);
+                                        },
+                                        child: const Text('Return to Quests', style: TextStyle(fontWeight: FontWeight.bold)),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              } else {
+                                RewardDialog.show(
+                                  context,
+                                  questTitle: quest.title,
+                                  xpEarned: result.xpEarned,
+                                  coinsEarned: result.coinsEarned,
+                                  didLevelUp: result.didLevelUp,
+                                  newLevel: result.newLevel,
+                                  unlockedBadgeTitle: result.unlockedBadgeTitle,
+                                  onClaim: () {
+                                    context.go(RoutePaths.home);
+                                  },
+                                );
+                              }
                             }
                           },
                         ),
@@ -1039,6 +1086,21 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
           ],
         );
 
+      case QuestVerificationType.quiz:
+        return _buildQuizEngine(quest, verificationState, ref);
+
+      case QuestVerificationType.secretCode:
+        return _buildSecretCodeEngine(quest, verificationState, ref);
+
+      case QuestVerificationType.qrCode:
+        return _buildQrCodeEngine(quest, verificationState, ref);
+
+      case QuestVerificationType.taskConfirmation:
+        return _buildTaskConfirmationEngine(quest, verificationState, ref);
+
+      case QuestVerificationType.adminApproval:
+        return _buildAdminApprovalEngine(quest, verificationState, ref);
+
       case QuestVerificationType.locationGps:
       case QuestVerificationType.photoProof:
       case QuestVerificationType.compositeRules:
@@ -1066,6 +1128,7 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
             CameraProofViewfinder(
               photoPath: verificationState.capturedPhotoPath,
               requiresFreshPhoto: quest.requiresFreshPhoto,
+              allowGalleryUpload: quest.allowGalleryUpload,
               requiredObject: quest.requiredObject,
               requiredPlace: quest.requiredPlace,
               onTakePhoto: () {
@@ -1081,6 +1144,399 @@ class _QuestVerificationScreenState extends ConsumerState<QuestVerificationScree
           ],
         );
     }
+  }
+
+  Widget _buildQuizEngine(
+    Quest quest,
+    VerificationState state,
+    WidgetRef ref,
+  ) {
+    List<dynamic> questions = [];
+    if (quest.quizDataJson != null && quest.quizDataJson!.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(quest.quizDataJson!);
+        if (decoded is List) {
+          questions = decoded;
+        } else if (decoded is Map && decoded['questions'] is List) {
+          questions = decoded['questions'] as List;
+        }
+      } catch (_) {}
+    }
+
+    if (questions.isEmpty) {
+      questions = [
+        {
+          'id': 'q1',
+          'question': quest.description.isNotEmpty ? quest.description : 'Answer the quest challenge question:',
+          'options': ['Option A', 'Option B', 'Option C', 'Option D'],
+        }
+      ];
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.6), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.quiz_rounded, color: AppColors.primary, size: 22),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'KNOWLEDGE QUIZ VERIFICATION',
+                  style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.w800, color: AppColors.primary),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Answer the question(s) correctly to authenticate this quest completion:',
+            style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 16),
+          ...questions.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final q = entry.value as Map<String, dynamic>;
+            final qId = q['id']?.toString() ?? 'q$idx';
+            final qText = q['question']?.toString() ?? 'Question ${idx + 1}';
+            final options = q['options'] is List ? (q['options'] as List) : <dynamic>[];
+            final selectedAnswer = state.quizAnswers[qId]?.toString();
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceElevated,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.borderBright),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Q${idx + 1}: $qText',
+                    style: AppTypography.titleMedium.copyWith(fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  if (options.isNotEmpty)
+                    ...options.map((opt) {
+                      final optStr = opt.toString();
+                      final isSelected = selectedAnswer == optStr;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: InkWell(
+                          onTap: () {
+                            ref.read(verificationNotifierProvider.notifier).updateQuizAnswer(qId, optStr);
+                          },
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? AppColors.primary.withValues(alpha: 0.2)
+                                  : AppColors.surface,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isSelected ? AppColors.primary : AppColors.border,
+                                width: isSelected ? 1.5 : 1.0,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
+                                  color: isSelected ? AppColors.primary : AppColors.textMuted,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    optStr,
+                                    style: AppTypography.bodyMedium.copyWith(
+                                      color: isSelected ? Colors.white : AppColors.textSecondary,
+                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    })
+                  else
+                    TextField(
+                      onChanged: (val) {
+                        ref.read(verificationNotifierProvider.notifier).updateQuizAnswer(qId, val);
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'Enter your answer...',
+                        filled: true,
+                        fillColor: AppColors.surface,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSecretCodeEngine(
+    Quest quest,
+    VerificationState state,
+    WidgetRef ref,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.secondary.withValues(alpha: 0.6), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.key_rounded, color: AppColors.secondary, size: 24),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'SECRET PASSCODE AUTHENTICATION',
+                  style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.bold, color: AppColors.secondary),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Enter the location secret passcode found on-site at ${quest.locationName}:',
+            style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            onChanged: (val) {
+              ref.read(verificationNotifierProvider.notifier).updateSecretCode(val);
+            },
+            textCapitalization: TextCapitalization.characters,
+            style: AppTypography.titleMedium.copyWith(letterSpacing: 2.0, fontWeight: FontWeight.bold),
+            decoration: InputDecoration(
+              hintText: 'e.g. QUEST-7788',
+              prefixIcon: const Icon(Icons.lock_outline_rounded, color: AppColors.secondary),
+              filled: true,
+              fillColor: AppColors.surfaceElevated,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: AppColors.borderBright),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: AppColors.secondary, width: 2),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQrCodeEngine(
+    Quest quest,
+    VerificationState state,
+    WidgetRef ref,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.accentLocation.withValues(alpha: 0.6), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.qr_code_scanner_rounded, color: AppColors.accentLocation, size: 24),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'QR CODE SCAN VERIFICATION',
+                  style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.bold, color: AppColors.accentLocation),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Scan the physical QR code displayed at ${quest.locationName} or enter the scanned code string below:',
+            style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            onChanged: (val) {
+              ref.read(verificationNotifierProvider.notifier).updateQrCode(val);
+            },
+            decoration: InputDecoration(
+              hintText: 'Scanned QR Code payload...',
+              prefixIcon: const Icon(Icons.qr_code_2_rounded, color: AppColors.accentLocation),
+              filled: true,
+              fillColor: AppColors.surfaceElevated,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: AppColors.borderBright),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: AppColors.accentLocation, width: 2),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTaskConfirmationEngine(
+    Quest quest,
+    VerificationState state,
+    WidgetRef ref,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.accentSuccess.withValues(alpha: 0.6), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.checklist_rounded, color: AppColors.accentSuccess, size: 24),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'TASK CONFIRMATION',
+                  style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.bold, color: AppColors.accentSuccess),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            quest.description,
+            style: AppTypography.bodyMedium.copyWith(color: Colors.white),
+          ),
+          const SizedBox(height: 16),
+          InkWell(
+            onTap: () {
+              ref.read(verificationNotifierProvider.notifier).setTaskConfirmed(!state.isTaskConfirmed);
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: state.isTaskConfirmed
+                    ? AppColors.accentSuccess.withValues(alpha: 0.15)
+                    : AppColors.surfaceElevated,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: state.isTaskConfirmed ? AppColors.accentSuccess : AppColors.border,
+                  width: state.isTaskConfirmed ? 1.5 : 1.0,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    state.isTaskConfirmed ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                    color: state.isTaskConfirmed ? AppColors.accentSuccess : AppColors.textMuted,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'I solemnly certify that I have executed and fulfilled all objectives of this quest in the real world.',
+                      style: AppTypography.bodyMedium.copyWith(
+                        fontWeight: state.isTaskConfirmed ? FontWeight.bold : FontWeight.normal,
+                        color: state.isTaskConfirmed ? Colors.white : AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdminApprovalEngine(
+    Quest quest,
+    VerificationState state,
+    WidgetRef ref,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.secondary.withValues(alpha: 0.6), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.admin_panel_settings_rounded, color: AppColors.secondary, size: 24),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'MODERATOR / ADMIN APPROVAL REQUIRED',
+                  style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.bold, color: AppColors.secondary),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'This mission requires manual verification by a QuestUP Game Master. Once you submit, your proof and telemetry will be placed in the moderation queue.',
+            style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary, height: 1.4),
+          ),
+          if (quest.requiresPhoto || quest.requiresFreshPhoto) ...[
+            const SizedBox(height: 16),
+            CameraProofViewfinder(
+              photoPath: state.capturedPhotoPath,
+              requiresFreshPhoto: quest.requiresFreshPhoto,
+              allowGalleryUpload: quest.allowGalleryUpload,
+              requiredObject: quest.requiredObject,
+              requiredPlace: quest.requiredPlace,
+              onTakePhoto: () {
+                ref.read(verificationNotifierProvider.notifier).captureCameraProof();
+              },
+              onPickGallery: () {
+                ref.read(verificationNotifierProvider.notifier).pickProofFromGallery();
+              },
+              onClear: () {
+                ref.read(verificationNotifierProvider.notifier).clearProof();
+              },
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   IconData _getCategoryIcon(QuestCategory category) {

@@ -17,6 +17,7 @@ import 'package:quest_up/features/verification/domain/services/duplicate_proof_s
 import 'package:quest_up/features/verification/domain/services/quest_verification_service.dart';
 import 'package:quest_up/features/verification/domain/services/validators/i_validator.dart';
 
+import 'package:quest_up/features/verification/data/datasources/quest_verification_api_client.dart';
 import 'package:quest_up/features/quests/data/datasources/quest_mysql_datasource.dart';
 
 class VerificationRepositoryImpl implements VerificationRepository {
@@ -28,6 +29,7 @@ class VerificationRepositoryImpl implements VerificationRepository {
   final IQuestVerificationService verificationService;
   final IDuplicateProofService duplicateProofService;
   final IQuestMySqlDataSource mySqlDataSource;
+  final IQuestVerificationApiClient apiClient;
   final Uuid _uuid = const Uuid();
 
   VerificationRepositoryImpl({
@@ -39,8 +41,10 @@ class VerificationRepositoryImpl implements VerificationRepository {
     IDuplicateProofService? duplicateProofService,
     IQuestVerificationService? verificationService,
     IQuestMySqlDataSource? mySqlDataSource,
+    IQuestVerificationApiClient? apiClient,
   })  : duplicateProofService = duplicateProofService ?? DuplicateProofService(localDataSource),
         mySqlDataSource = mySqlDataSource ?? QuestMySqlDataSource(),
+        apiClient = apiClient ?? QuestVerificationApiClient.instance,
         verificationService = verificationService ??
             QuestVerificationService(
               duplicateProofService: duplicateProofService ?? DuplicateProofService(localDataSource),
@@ -106,7 +110,7 @@ class VerificationRepositoryImpl implements VerificationRepository {
     double? distanceMeters,
     String? mediaHash,
   }) async {
-    dev.log('[PROOF] Proof submission started for quest: "${quest.title}" (${quest.id})', name: 'SmartProof');
+    dev.log('[PROOF] Server-authoritative verification started for quest: "${quest.title}" (${quest.id})', name: 'SmartProof');
 
     // 0. Double-reward prevention check
     final profile = await userRepository.getUserProfile();
@@ -128,9 +132,29 @@ class VerificationRepositoryImpl implements VerificationRepository {
       session = await localDataSource.getActiveSessionForQuest(quest.id, profile.id);
     }
 
+    // 2. Start server-authoritative verification attempt challenge
+    final startRes = await apiClient.startVerification(
+      questId: quest.id,
+      userId: profile.id,
+    );
+
+    if (!startRes.success && startRes.isDuplicate) {
+      return VerificationResult(
+        isSuccessful: false,
+        message: startRes.message,
+        isGpsValid: true,
+        isCameraValid: true,
+      );
+    }
+
+    final serverAttemptId = startRes.attemptId.isNotEmpty
+        ? startRes.attemptId
+        : (session?.sessionId ?? _uuid.v4());
+    final challengeToken = startRes.challengeToken;
+
     final effectiveAttempt = attempt ??
         QuestAttempt(
-          attemptId: session?.sessionId ?? _uuid.v4(),
+          attemptId: serverAttemptId,
           userId: profile.id,
           questId: quest.id,
           startedAt: session?.startedAt ?? DateTime.now(),
@@ -156,7 +180,7 @@ class VerificationRepositoryImpl implements VerificationRepository {
           userLon: userLon,
           photoProofPath: photoProofPath,
           isFreshCameraCapture: photoProofPath != null && photoProofPath.isNotEmpty,
-          sessionId: session?.sessionId,
+          sessionId: session?.sessionId ?? serverAttemptId,
           questSession: session,
           mediaHash: computedHash,
           videoProofPath: videoProofPath,
@@ -167,7 +191,32 @@ class VerificationRepositoryImpl implements VerificationRepository {
           distanceMeters: distanceMeters,
         );
 
-    // 2. Centralized Smart Proof Verification Engine Evaluation
+    // 3. If photo proof present, upload photo to server for SHA-256 and GD dHash inspection
+    PhotoProofUploadResponse? uploadRes;
+    final photoPathToUpload = effectivePayload.photoProofPath ?? photoProofPath;
+    if (photoPathToUpload != null && photoPathToUpload.isNotEmpty) {
+      uploadRes = await apiClient.uploadPhotoProof(
+        attemptId: serverAttemptId,
+        userId: profile.id,
+        photoFilePath: photoPathToUpload,
+        clientCaptureTime: effectivePayload.capturedAt ?? DateTime.now(),
+      );
+
+      if (!uploadRes.success) {
+        dev.log('[PROOF] Server photo proof upload/analysis rejected: ${uploadRes.message}', name: 'SmartProof');
+        return VerificationResult(
+          isSuccessful: false,
+          message: uploadRes.message,
+          isGpsValid: userLat != null || effectivePayload.userLat != null,
+          isCameraValid: false,
+        );
+      }
+      if (uploadRes.imageHash.isNotEmpty) {
+        computedHash = uploadRes.imageHash;
+      }
+    }
+
+    // 4. Centralized Smart Proof Verification Engine Evaluation (local telemetry check)
     final report = await verificationService.evaluateAttempt(
       quest: quest,
       attempt: effectiveAttempt,
@@ -194,7 +243,7 @@ class VerificationRepositoryImpl implements VerificationRepository {
       // Record rejected proof
       final rejectedProof = QuestProof(
         proofId: _uuid.v4(),
-        sessionId: session?.sessionId ?? effectiveAttempt.attemptId,
+        sessionId: serverAttemptId,
         questId: quest.id,
         userId: profile.id,
         proofType: quest.verificationType.name,
@@ -214,7 +263,7 @@ class VerificationRepositoryImpl implements VerificationRepository {
       );
       await localDataSource.saveProof(rejectedProof);
 
-      dev.log('[PROOF] Proof submission REJECTED: ${report.overallMessage}', name: 'SmartProof');
+      dev.log('[PROOF] Proof submission REJECTED locally: ${report.overallMessage}', name: 'SmartProof');
 
       return VerificationResult(
         isSuccessful: false,
@@ -225,10 +274,70 @@ class VerificationRepositoryImpl implements VerificationRepository {
       );
     }
 
-    // 3. Mark Quest as Completed
+    // 5. Authoritative Backend Final Verification
+    ServerVerificationResult? serverVerification;
+    if (challengeToken.isNotEmpty) {
+      serverVerification = await apiClient.verifyQuest(
+        attemptId: serverAttemptId,
+        challengeToken: challengeToken,
+        questId: quest.id,
+        userId: profile.id,
+        latitude: effectivePayload.userLat ?? userLat,
+        longitude: effectivePayload.userLon ?? userLon,
+        proofPayload: {
+          'photo_path': photoProofPath ?? effectivePayload.photoProofPath,
+          'image_hash': uploadRes?.imageHash ?? computedHash,
+          'perceptual_hash': uploadRes?.perceptualHash,
+          'is_camera_capture': effectivePayload.isFreshCameraCapture,
+          'duration_seconds': effectivePayload.durationSeconds ?? durationSeconds ?? 0,
+          'distance_meters': effectivePayload.distanceMeters ?? distanceMeters ?? 0.0,
+          'text_content': effectivePayload.textContent ?? textContent,
+          'word_count': effectivePayload.wordCount ?? wordCount ?? 0,
+          'drawing_summary': effectivePayload.drawingProofSummary ?? drawingProofSummary,
+          'secret_code': effectivePayload.secretCode,
+          'quiz_answers': effectivePayload.quizAnswers,
+          'qr_code_data': effectivePayload.qrCodeData,
+          'task_confirmed': effectivePayload.taskConfirmed,
+        },
+      );
+
+      if (!serverVerification.success) {
+        dev.log('[PROOF] Authoritative Server REJECTED verification: ${serverVerification.message}', name: 'SmartProof');
+        return VerificationResult(
+          isSuccessful: false,
+          message: serverVerification.message,
+          isGpsValid: userLat != null || effectivePayload.userLat != null,
+          isCameraValid: photoProofPath != null || effectivePayload.photoProofPath != null,
+          validatorResults: report.results,
+        );
+      }
+
+      // 6. Handle Pending Admin Review Flow
+      if (serverVerification.isPendingAdminReview || serverVerification.status == 'pending_admin' || serverVerification.status == 'pending') {
+        dev.log('[PROOF] Quest submitted for admin review: attemptId=$serverAttemptId', name: 'SmartProof');
+        return VerificationResult(
+          isSuccessful: true,
+          isPendingAdminReview: true,
+          message: serverVerification.message,
+          isGpsValid: true,
+          isCameraValid: true,
+          validatorResults: report.results,
+        );
+      }
+    }
+
+    final authoritativeXp = (serverVerification != null && serverVerification.xpEarned > 0)
+        ? serverVerification.xpEarned
+        : quest.xpReward;
+    final authoritativeCoins = (serverVerification != null && serverVerification.coinsEarned > 0)
+        ? serverVerification.coinsEarned
+        : quest.coinReward;
+    final successMessage = serverVerification?.message ?? report.overallMessage;
+
+    // 7. Authoritative Verified Flow: Mark Quest as Completed
     await questRepository.markQuestCompleted(quest.id);
 
-    // 4. Update Quest Session to Verified
+    // Update Quest Session to Verified
     if (session != null) {
       final updatedSession = session.copyWith(
         status: QuestSessionStatus.verified,
@@ -237,10 +346,10 @@ class VerificationRepositoryImpl implements VerificationRepository {
       await localDataSource.updateQuestSession(updatedSession);
     }
 
-    // 5. Save Verified Quest Proof record (with SHA-256 fingerprint)
+    // Save Verified Quest Proof record (with SHA-256 fingerprint)
     final verifiedProof = QuestProof(
       proofId: _uuid.v4(),
-      sessionId: session?.sessionId ?? effectiveAttempt.attemptId,
+      sessionId: serverAttemptId,
       questId: quest.id,
       userId: profile.id,
       proofType: quest.verificationType.name,
@@ -255,31 +364,40 @@ class VerificationRepositoryImpl implements VerificationRepository {
       isPhotoOfPhoto: false,
       sceneContextStatus: 'authentic',
       verificationStatus: ProofVerificationStatus.verified,
-      verificationReason: report.overallMessage,
+      verificationReason: successMessage,
       contentVerificationStatus: 'pass',
       createdAt: DateTime.now(),
     );
     await localDataSource.saveProof(verifiedProof);
 
-    // 6. Update User Profile (XP & Coins Granted ATOMICALLY)
+    // 8. Update User Profile with Server's Authoritative XP & Coins
     final profileBefore = await userRepository.getUserProfile();
     final updatedProfile = await userRepository.addXpAndCoins(
-      xp: quest.xpReward,
-      coins: quest.coinReward,
+      xp: authoritativeXp,
+      coins: authoritativeCoins,
       completedQuestId: quest.id,
     );
 
-    final didLevelUp = updatedProfile.level > profileBefore.level;
-    dev.log('[PROOF] Reward granted: +${quest.xpReward} XP, +${quest.coinReward} Coins. Total XP: ${updatedProfile.currentXp}', name: 'SmartProof');
+    final didLevelUp = (serverVerification != null && serverVerification.didLevelUp) ||
+        (updatedProfile.level > profileBefore.level);
+    final finalLevel = (serverVerification != null && serverVerification.newLevel > 0)
+        ? serverVerification.newLevel
+        : updatedProfile.level;
 
-    // 7. Create & Save Completion Record
+    dev.log('[PROOF] Server-authoritative reward granted: +$authoritativeXp XP, +$authoritativeCoins Coins. New Level: $finalLevel', name: 'SmartProof');
+
+    // 9. Create & Save Completion Record
     final finalProof = effectivePayload.photoProofPath ??
         effectivePayload.drawingProofSummary ??
         effectivePayload.videoProofPath ??
         'smart_proof_verified';
 
+    final completionId = (serverVerification != null && serverVerification.completionId.isNotEmpty)
+        ? serverVerification.completionId
+        : _uuid.v4();
+
     final completion = QuestCompletionModel(
-      id: _uuid.v4(),
+      id: completionId,
       questId: quest.id,
       userId: updatedProfile.id,
       completedAt: DateTime.now(),
@@ -287,19 +405,12 @@ class VerificationRepositoryImpl implements VerificationRepository {
       userLongitude: effectivePayload.userLon ?? userLon ?? 0.0,
       photoProofPath: finalProof,
       status: VerificationStatus.verified,
-      xpEarned: quest.xpReward,
-      coinsEarned: quest.coinReward,
+      xpEarned: authoritativeXp,
+      coinsEarned: authoritativeCoins,
     );
     await localDataSource.saveCompletion(completion);
 
-    // Save completion to MySQL database
-    try {
-      await mySqlDataSource.saveCompletionToMySql(completion);
-    } catch (e) {
-      dev.log('[PROOF] MySQL completion save notice: $e', name: 'SmartProof');
-    }
-
-    // 8. Record Success into Quest Calendar
+    // 10. Record Success into Quest Calendar
     if (calendarRepository != null) {
       try {
         await calendarRepository!.recordQuestActivity(
@@ -308,29 +419,29 @@ class VerificationRepositoryImpl implements VerificationRepository {
           category: quest.category.name,
           difficulty: quest.difficulty.name,
           status: QuestActivityStatus.completed,
-          xpReward: quest.xpReward,
-          coinReward: quest.coinReward,
+          xpReward: authoritativeXp,
+          coinReward: authoritativeCoins,
         );
       } catch (_) {}
     }
 
-    // 9. Check Badge / Achievements Unlocks
+    // 11. Check Badge / Achievements Unlocks
     final unlockedBadge = await achievementRepository.evaluateAndUnlockAchievements(
       completedCount: updatedProfile.completedQuestIds.length,
-      currentLevel: updatedProfile.level,
+      currentLevel: finalLevel,
       totalCoins: updatedProfile.coins,
     );
 
     return VerificationResult(
       isSuccessful: true,
-      message: report.overallMessage,
+      message: successMessage,
       isGpsValid: true,
       isCameraValid: true,
       completion: completion,
-      xpEarned: quest.xpReward,
-      coinsEarned: quest.coinReward,
+      xpEarned: authoritativeXp,
+      coinsEarned: authoritativeCoins,
       didLevelUp: didLevelUp,
-      newLevel: updatedProfile.level,
+      newLevel: finalLevel,
       unlockedBadgeTitle: unlockedBadge?.title,
       validatorResults: report.results,
     );

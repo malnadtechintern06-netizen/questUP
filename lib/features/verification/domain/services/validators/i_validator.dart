@@ -28,6 +28,10 @@ class VerificationProofPayload {
   final int? pastedCharactersCount;
   final int? keystrokeCount;
   final bool isAuthenticallyTyped;
+  final String? secretCode;
+  final dynamic quizAnswers;
+  final String? qrCodeData;
+  final bool taskConfirmed;
 
   const VerificationProofPayload({
     this.userLat,
@@ -54,6 +58,10 @@ class VerificationProofPayload {
     this.pastedCharactersCount = 0,
     this.keystrokeCount,
     this.isAuthenticallyTyped = true,
+    this.secretCode,
+    this.quizAnswers,
+    this.qrCodeData,
+    this.taskConfirmed = false,
   });
 }
 

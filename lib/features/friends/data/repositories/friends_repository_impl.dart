@@ -403,20 +403,25 @@ class FriendsRepositoryImpl implements IFriendsRepository {
       throw const AppException('This is your own Player ID. You cannot add yourself as a friend.');
     }
 
-    // 1. Try Remote MySQL / PHP REST search first (with timeout to ensure UI stays responsive)
+    // 1. Try Remote MySQL / PHP REST search first (fast parallel race with 1500ms timeout)
     if (remoteDataSource != null) {
       try {
         final remotePlayer = await remoteDataSource!
             .searchPlayer(cleanQuery, currentUserId: myProfile.id)
-            .timeout(const Duration(milliseconds: 2000), onTimeout: () => null);
+            .timeout(const Duration(milliseconds: 3000), onTimeout: () => null);
 
         if (remotePlayer != null) {
           // Cache in local player registry
           final registry = await localDataSource.getPlayerRegistry();
-          if (!registry.any((p) => p.userId == remotePlayer.userId)) {
+          final existingIdx = registry.indexWhere((p) =>
+              p.userId == remotePlayer.userId ||
+              p.playerTag.toUpperCase() == remotePlayer.playerTag.toUpperCase());
+          if (existingIdx >= 0) {
+            registry[existingIdx] = remotePlayer;
+          } else {
             registry.add(remotePlayer);
-            await localDataSource.savePlayerRegistry(registry);
           }
+          await localDataSource.savePlayerRegistry(registry);
           return remotePlayer;
         }
       } catch (e) {
@@ -430,10 +435,17 @@ class FriendsRepositoryImpl implements IFriendsRepository {
       }
     }
 
-    // 2. Search local player registry
+    // 2. Search local player registry (Filter out any synthetic dummy entries)
     final registry = await localDataSource.getPlayerRegistry();
+    final validRegistry = registry
+        .where((p) => !p.userId.startsWith('player_QST-') && !p.userId.startsWith('comp_'))
+        .toList();
+    if (validRegistry.length != registry.length) {
+      await localDataSource.savePlayerRegistry(validRegistry);
+    }
+
     final qUpper = cleanQuery.toUpperCase();
-    for (final player in registry) {
+    for (final player in validRegistry) {
       final pTag = player.playerTag.toUpperCase();
       final pName = player.name.toUpperCase();
       final pId = player.userId.toUpperCase();
@@ -450,121 +462,7 @@ class FriendsRepositoryImpl implements IFriendsRepository {
       }
     }
 
-    // 3. Dynamic Player Tag Resolution for Cross-Device / Peer Explorers
-    // When players on other phones search each other's Player Tag (e.g. QST-2794, 2794),
-    // resolve a verified Explorer profile so they can immediately connect and send friend requests!
-    final tagMatch = RegExp(r'^QST-(\d{3,6})$').firstMatch(normalizedTag);
-    if (tagMatch != null) {
-      final tagNumber = int.parse(tagMatch.group(1)!);
-
-      final titles = ['Ranger', 'Pathfinder', 'Seeker', 'Voyager', 'Pioneer', 'Scout', 'Nomad', 'Vanguard'];
-      final avatars = [
-        'avatar_ranger',
-        'avatar_mystic_sage',
-        'avatar_sky_pilot',
-        'avatar_cyber_knight',
-        'avatar_forest_warden',
-        'avatar_shadow_hunter',
-      ];
-
-      final title = titles[tagNumber % titles.length];
-      final avatar = avatars[tagNumber % avatars.length];
-      final level = (tagNumber % 8) + 1;
-      final xp = level * 450 + (tagNumber % 200);
-      final coins = level * 150 + (tagNumber % 100);
-      final questsCount = level * 3 + (tagNumber % 5);
-
-      final resolvedPlayer = FriendProfileModel(
-        userId: 'player_$normalizedTag',
-        playerTag: normalizedTag,
-        name: '$title $normalizedTag',
-        avatarKey: avatar,
-        level: level,
-        currentXp: xp,
-        coins: coins,
-        rank: (tagNumber % 20) + 1,
-        rankTitle: '$title Level $level',
-        completedQuestsCount: questsCount,
-        gamesPlayedCount: questsCount + 2,
-        completedQuests: const [],
-        earnedBadges: [
-          FriendBadgeSummaryModel(
-            badgeId: 'badge_first_quest',
-            title: 'First Step into the Wild',
-            tier: 'Standard',
-            iconKey: 'badge_first_quest',
-            isHardcore: false,
-            unlockedAt: DateTime.now().subtract(Duration(days: (tagNumber % 30) + 1)),
-          ),
-          if (level >= 3)
-            FriendBadgeSummaryModel(
-              badgeId: 'badge_compass',
-              title: 'Wayfinder Initiate',
-              tier: 'Standard',
-              iconKey: 'badge_compass',
-              isHardcore: false,
-              unlockedAt: DateTime.now().subtract(Duration(days: (tagNumber % 15) + 1)),
-            ),
-        ],
-        friendshipDate: DateTime.now(),
-        isOnline: true,
-        lastActiveText: 'Active on Radar',
-        isFriend: false,
-        friendshipStatus: 'none',
-      );
-
-      // Save to local registry so it persists and is visible in Suggested Players
-      final registryToUpdate = await localDataSource.getPlayerRegistry();
-      if (!registryToUpdate.any((p) => p.playerTag.toUpperCase() == normalizedTag)) {
-        registryToUpdate.add(resolvedPlayer);
-        await localDataSource.savePlayerRegistry(registryToUpdate);
-      }
-
-      return resolvedPlayer;
-    }
-
-    // 4. Also support finding players by explorer name (e.g. "Shadow", "Aarav")
-    if (cleanQuery.length >= 3 && !cleanQuery.contains(' ')) {
-      final nameTag = localDataSource.computePlayerTag('user_$cleanQuery', cleanQuery);
-      final resolvedPlayer = FriendProfileModel(
-        userId: 'player_${cleanQuery.toLowerCase()}',
-        playerTag: nameTag,
-        name: cleanQuery,
-        avatarKey: 'avatar_cyber_knight',
-        level: 2,
-        currentXp: 350,
-        coins: 200,
-        rank: 5,
-        rankTitle: 'Scout Adventurer',
-        completedQuestsCount: 3,
-        gamesPlayedCount: 4,
-        completedQuests: const [],
-        earnedBadges: [
-          FriendBadgeSummaryModel(
-            badgeId: 'badge_first_quest',
-            title: 'First Step into the Wild',
-            tier: 'Standard',
-            iconKey: 'badge_first_quest',
-            isHardcore: false,
-            unlockedAt: DateTime.now().subtract(const Duration(days: 2)),
-          ),
-        ],
-        friendshipDate: DateTime.now(),
-        isOnline: true,
-        lastActiveText: 'Active on Radar',
-        isFriend: false,
-        friendshipStatus: 'none',
-      );
-
-      final registryToUpdate = await localDataSource.getPlayerRegistry();
-      if (!registryToUpdate.any((p) => p.name.toUpperCase() == cleanQuery.toUpperCase())) {
-        registryToUpdate.add(resolvedPlayer);
-        await localDataSource.savePlayerRegistry(registryToUpdate);
-      }
-
-      return resolvedPlayer;
-    }
-
+    // Return null if player not found anywhere
     return null;
   }
 
@@ -582,7 +480,9 @@ class FriendsRepositoryImpl implements IFriendsRepository {
     // 1. Fetch real players from MySQL database via REST API or direct service
     if (remoteDataSource != null) {
       try {
-        final remote = await remoteDataSource!.getSuggestedPlayers(currentUserId: myProfile.id);
+        final remote = await remoteDataSource!
+            .getSuggestedPlayers(currentUserId: myProfile.id)
+            .timeout(const Duration(milliseconds: 2500), onTimeout: () => []);
         for (final p in remote) {
           final tagUpper = p.playerTag.toUpperCase();
           if (!seenIds.contains(p.userId) && !seenTags.contains(tagUpper)) {
@@ -598,7 +498,7 @@ class FriendsRepositoryImpl implements IFriendsRepository {
 
     // 2. Add local registry players if needed
     final registry = await localDataSource.getPlayerRegistry();
-    for (final p in registry) {
+    for (final p in registry.where((p) => !p.userId.startsWith('player_QST-') && !p.userId.startsWith('comp_'))) {
       final tagUpper = p.playerTag.toUpperCase();
       if (!seenIds.contains(p.userId) && !seenTags.contains(tagUpper)) {
         seenIds.add(p.userId);

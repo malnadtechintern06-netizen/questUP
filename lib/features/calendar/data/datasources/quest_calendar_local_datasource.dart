@@ -31,6 +31,7 @@ class QuestCalendarLocalDataSource implements IQuestCalendarLocalDataSource {
     if (jsonList != null && jsonList is List) {
       return jsonList
           .map((item) => QuestCalendarEntryModel.fromJson(item as Map<String, dynamic>))
+          .where((e) => !e.id.startsWith('seed_'))
           .toList();
     }
     return [];
@@ -38,6 +39,7 @@ class QuestCalendarLocalDataSource implements IQuestCalendarLocalDataSource {
 
   @override
   Future<void> saveEntry(QuestCalendarEntryModel entry) async {
+    if (entry.id.startsWith('seed_')) return;
     final list = await getAllEntries();
     // Update existing entry if same id or quest on same day, otherwise add
     final index = list.indexWhere((e) => e.id == entry.id);
@@ -53,8 +55,8 @@ class QuestCalendarLocalDataSource implements IQuestCalendarLocalDataSource {
   Future<void> saveAllEntries(List<QuestCalendarEntryModel> entries) async {
     final userId = await _getActiveUserId();
     final userSpecificKey = 'questup_calendar_${userId}_v1';
-    final jsonList = entries.map((e) => e.toJson()).toList();
+    final cleanEntries = entries.where((e) => !e.id.startsWith('seed_')).toList();
+    final jsonList = cleanEntries.map((e) => e.toJson()).toList();
     await _storage.saveJson(userSpecificKey, jsonList);
-    await _storage.saveJson(AppConstants.keyCalendarEntries, jsonList);
   }
 }

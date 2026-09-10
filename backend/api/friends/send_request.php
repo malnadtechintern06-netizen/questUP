@@ -16,6 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../config/activity_logger.php';
 
 $rawBody = file_get_contents('php://input');
 if ($rawBody !== false) {
@@ -244,6 +245,13 @@ try {
             'r_tag' => $receiverTag,
         ]);
     }
+
+    logActivity(
+        $senderId,
+        'friend_request_sent',
+        "Player {$senderTag} sent friend request to {$target['name']} ({$receiverTag})",
+        $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'
+    );
 
     echo json_encode([
         'success' => true,

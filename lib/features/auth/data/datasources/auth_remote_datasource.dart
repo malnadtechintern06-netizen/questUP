@@ -145,7 +145,70 @@ class AuthMySqlDataSource implements IAuthRemoteDataSource {
       }
     }
 
-    // 2. Try MySQL Database authentication if not found in local cache
+    // 2. Try REST API authentication (works over Wi-Fi on Android / iOS / Desktop)
+    for (final base in MySqlConfig.apiBaseUrls) {
+      final urlStr = '$base/auth/login.php';
+      HttpClient? client;
+      try {
+        final uri = Uri.parse(urlStr);
+        client = HttpClient()
+          ..connectionTimeout = const Duration(milliseconds: 2500)
+          ..badCertificateCallback = ((cert, host, port) => true);
+
+        final req = await client.postUrl(uri);
+        req.headers.set('Content-Type', 'application/json; charset=utf-8');
+        req.headers.set('Accept', 'application/json');
+        req.write(jsonEncode({
+          'email': cleanEmail,
+          'password': password,
+        }));
+
+        final res = await req.close().timeout(const Duration(milliseconds: 3000));
+        if (res.statusCode == 200) {
+          final bodyStr = await res.transform(utf8.decoder).join();
+          final json = jsonDecode(bodyStr);
+          if (json is Map && json['success'] == true && json['user'] != null) {
+            final u = json['user'] as Map<String, dynamic>;
+            final user = AuthUserModel(
+              id: u['id'] ?? const Uuid().v4(),
+              email: u['email'] ?? cleanEmail,
+              displayName: u['name'] ?? (cleanEmail.split('@').first),
+              createdAt: u['created_at'] != null
+                  ? (DateTime.tryParse(u['created_at'] as String) ?? DateTime.now())
+                  : DateTime.now(),
+            );
+
+            // Cache credentials locally for instant subsequent offline logins
+            localUsers[cleanEmail] = {
+              'id': user.id,
+              'name': user.displayName,
+              'email': cleanEmail,
+              'password_hash': u['password_hash'] ?? '',
+              'salt': u['salt'] ?? '',
+              'created_at': user.createdAt.toIso8601String(),
+            };
+            await _storage.saveJson(AppConstants.keyLocalUsers, localUsers);
+            await _storage.saveJson(AppConstants.keyAuthSession, user.toJson());
+            _authStreamController.add(user);
+
+            MySqlConfig.workingApiBaseUrl = base;
+            debugPrint('[Auth REST] User authenticated via REST: ${user.email}');
+            return user;
+          }
+        } else if (res.statusCode == 401) {
+          throw const AppException('Invalid email or password. Please try again.');
+        } else if (res.statusCode == 404) {
+          throw const AppException('No account found with this email. Please register first.');
+        }
+      } on AppException {
+        rethrow;
+      } catch (_) {
+      } finally {
+        client?.close(force: true);
+      }
+    }
+
+    // 3. Try MySQL Database direct connection fallback if not found
     final isDbReady = await _dbService.connect();
     if (isDbReady) {
       try {
@@ -581,6 +644,7 @@ class AuthMySqlDataSource implements IAuthRemoteDataSource {
             try {
               final json = jsonDecode(bodyStr);
               if (json is Map && json['success'] == true) {
+                MySqlConfig.workingApiBaseUrl = urlStr.replaceAll('/auth/register.php', '');
                 debugPrint('[Auth REST] ✅ User registered in MySQL via REST API: $urlStr');
                 if (!completer.isCompleted) completer.complete(true);
                 return;
@@ -646,14 +710,16 @@ class AuthMySqlDataSource implements IAuthRemoteDataSource {
     await _storage.saveJson(AppConstants.keyAuthSession, user.toJson());
     _authStreamController.add(user);
 
-    // 1. Asynchronously sync to cloud MySQL via REST API
-    unawaited(_registerViaRestApi(
-      id: userId,
-      name: cleanName,
-      email: cleanEmail,
-      passwordHash: passwordHash,
-      salt: salt,
-    ));
+    // 1. Sync to cloud MySQL via REST API (await up to 3s to guarantee persistence before returning)
+    try {
+      await _registerViaRestApi(
+        id: userId,
+        name: cleanName,
+        email: cleanEmail,
+        passwordHash: passwordHash,
+        salt: salt,
+      ).timeout(const Duration(milliseconds: 3000));
+    } catch (_) {}
 
     // 2. Also sync via direct MySQL if connected
     if (_dbService.isConnected) {

@@ -45,7 +45,7 @@ class QuestRepositoryImpl implements QuestRepository {
           userLat: userLat,
           userLon: userLon,
         ).timeout(
-          const Duration(seconds: 4),
+          const Duration(seconds: 8),
           onTimeout: () => [],
         ),
       ];
@@ -57,7 +57,7 @@ class QuestRepositoryImpl implements QuestRepository {
             longitude: userLon,
             userId: userId,
           ).timeout(
-            const Duration(seconds: 4),
+            const Duration(seconds: 8),
             onTimeout: () => [],
           ),
         );
@@ -73,6 +73,10 @@ class QuestRepositoryImpl implements QuestRepository {
         }
       }
       remoteQuests = combined.values.toList();
+      if (remoteQuests.isNotEmpty) {
+        // Save fresh server quests to local storage so present data is always available
+        localDataSource.saveQuests(remoteQuests);
+      }
     } catch (e) {
       debugPrint('[QuestUP] Error fetching remote quests: $e');
     }

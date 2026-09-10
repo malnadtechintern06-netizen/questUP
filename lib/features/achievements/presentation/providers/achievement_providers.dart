@@ -33,8 +33,10 @@ class AchievementsNotifier extends StateNotifier<AsyncValue<List<Achievement>>> 
     state = const AsyncValue.loading();
     try {
       final list = await _getAchievementsUseCase();
+      if (!mounted) return;
       state = AsyncValue.data(list);
     } catch (e, st) {
+      if (!mounted) return;
       state = AsyncValue.error(e, st);
     }
   }

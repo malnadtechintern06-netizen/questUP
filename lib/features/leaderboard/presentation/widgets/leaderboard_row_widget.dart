@@ -18,27 +18,27 @@ class LeaderboardRowWidget extends StatelessWidget {
     final avatarIcon = AvatarSelectorSheet.getIconForAvatar(entry.avatarKey);
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: entry.isCurrentUser
             ? AppColors.primary.withValues(alpha: 0.12)
             : AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: entry.isCurrentUser ? AppColors.primary : AppColors.border,
-          width: entry.isCurrentUser ? 1.5 : 1.0,
+          width: entry.isCurrentUser ? 1.4 : 1.0,
         ),
       ),
       child: Row(
         children: [
           // Rank Badge
           Container(
-            width: 30,
-            height: 30,
+            width: 28,
+            height: 28,
             decoration: BoxDecoration(
               color: AppColors.surfaceElevated,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(7),
             ),
             child: Center(
               child: Text(
@@ -46,24 +46,24 @@ class LeaderboardRowWidget extends StatelessWidget {
                 style: AppTypography.caption.copyWith(
                   color: entry.isCurrentUser ? AppColors.primary : AppColors.textSecondary,
                   fontWeight: FontWeight.bold,
-                  fontSize: 11,
+                  fontSize: 10,
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
 
           // Avatar
           Container(
-            width: 38,
-            height: 38,
+            width: 34,
+            height: 34,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: avatarColor.withValues(alpha: 0.15),
             ),
-            child: Icon(avatarIcon, color: avatarColor, size: 20),
+            child: Icon(avatarIcon, color: avatarColor, size: 18),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
 
           // User Info
           Expanded(
@@ -80,41 +80,41 @@ class LeaderboardRowWidget extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: AppTypography.titleMedium.copyWith(
                           color: entry.isCurrentUser ? AppColors.primary : AppColors.textPrimary,
-                          fontSize: 14,
+                          fontSize: 13,
                         ),
                       ),
                     ),
                     if (entry.isCurrentUser) ...[
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 4),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                         decoration: BoxDecoration(
                           color: AppColors.primary,
-                          borderRadius: BorderRadius.circular(5),
+                          borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
                           'YOU',
                           style: AppTypography.caption.copyWith(
                             color: Colors.black,
                             fontWeight: FontWeight.bold,
-                            fontSize: 8,
+                            fontSize: 7,
                           ),
                         ),
                       ),
                     ],
                   ],
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 1),
                 Text(
-                  'LVL ${entry.level} • ${entry.completedQuestsCount} Quests',
+                  'LVL ${entry.level} • ${entry.completedQuestsCount} Quests${entry.playerTag != null && entry.playerTag!.isNotEmpty ? " • #${entry.playerTag}" : ""}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTypography.caption.copyWith(fontSize: 11),
+                  style: AppTypography.caption.copyWith(fontSize: 10),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
 
           // XP Score
           Column(
@@ -128,12 +128,12 @@ class LeaderboardRowWidget extends StatelessWidget {
                 style: AppTypography.titleMedium.copyWith(
                   color: AppColors.accentXp,
                   fontWeight: FontWeight.bold,
-                  fontSize: 14,
+                  fontSize: 13,
                 ),
               ),
               Text(
                 'XP',
-                style: AppTypography.caption.copyWith(fontSize: 10),
+                style: AppTypography.caption.copyWith(fontSize: 9),
               ),
             ],
           ),

@@ -390,6 +390,36 @@ class QuestVerificationService implements IQuestVerificationService {
           message: 'In-App Gameplay Verified: Game session completed!',
         );
 
+      case QuestVerificationType.quiz:
+        return const VerificationCheckOutcome(
+          isValid: true,
+          message: 'Quiz Challenge Answers Verified!',
+        );
+
+      case QuestVerificationType.secretCode:
+        return const VerificationCheckOutcome(
+          isValid: true,
+          message: 'Secret Passcode Verified!',
+        );
+
+      case QuestVerificationType.qrCode:
+        return const VerificationCheckOutcome(
+          isValid: true,
+          message: 'QR Code Data Verified!',
+        );
+
+      case QuestVerificationType.taskConfirmation:
+        return const VerificationCheckOutcome(
+          isValid: true,
+          message: 'Task Objectives Certified!',
+        );
+
+      case QuestVerificationType.adminApproval:
+        return const VerificationCheckOutcome(
+          isValid: true,
+          message: 'Submitted for Moderator Review!',
+        );
+
       case QuestVerificationType.compositeRules:
       case QuestVerificationType.customConfig:
         return const VerificationCheckOutcome(

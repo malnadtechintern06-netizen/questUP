@@ -48,6 +48,7 @@ class VerificationResult {
   final int newLevel;
   final String? unlockedBadgeTitle;
   final List<ValidatorResult> validatorResults;
+  final bool isPendingAdminReview;
 
   const VerificationResult({
     required this.isSuccessful,
@@ -61,5 +62,6 @@ class VerificationResult {
     this.newLevel = 1,
     this.unlockedBadgeTitle,
     this.validatorResults = const [],
+    this.isPendingAdminReview = false,
   });
 }

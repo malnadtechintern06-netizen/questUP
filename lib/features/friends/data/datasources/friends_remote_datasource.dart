@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -65,74 +66,128 @@ class FriendsRemoteDataSource implements IFriendsRemoteDataSource {
     Map<String, String>? queryParams,
     Map<String, dynamic>? body,
   }) async {
-    final candidateUrls = <String>[
-      if (_workingApiBaseUrl != null && _workingApiBaseUrl!.isNotEmpty) _workingApiBaseUrl!,
-      ...MySqlConfig.apiBaseUrls.where((u) => u != _workingApiBaseUrl),
-    ];
+    // 1. If we already found a working base URL, try it first with 2500ms timeout
+    if (_workingApiBaseUrl != null && _workingApiBaseUrl!.isNotEmpty) {
+      final cachedResult = await _trySingleRestCall(
+        _workingApiBaseUrl!,
+        endpointPath,
+        method: method,
+        queryParams: queryParams,
+        body: body,
+        timeoutMs: 2500,
+      );
+      if (cachedResult != null) return cachedResult;
+      // Invalidate failed cache
+      _workingApiBaseUrl = null;
+    }
+
+    // 2. Race all candidate base URLs in parallel with 2000ms timeout
+    final candidateUrls = MySqlConfig.apiBaseUrls;
+    final completer = Completer<Map<String, dynamic>?>();
+    int pendingCount = candidateUrls.length;
 
     for (final base in candidateUrls) {
-      try {
-        final baseUri = Uri.parse('$base/$endpointPath');
-        final uri = (queryParams != null && queryParams.isNotEmpty)
-            ? baseUri.replace(queryParameters: queryParams)
-            : baseUri;
-
-        final client = HttpClient();
-        client.connectionTimeout = const Duration(milliseconds: 1200);
-        client.badCertificateCallback = ((X509Certificate cert, String host, int port) => true);
-
-        HttpClientRequest request;
-        if (method == 'POST') {
-          request = await client.postUrl(uri);
-          request.headers.contentType = ContentType.json;
-          if (body != null) {
-            request.write(jsonEncode(body));
-          }
-        } else {
-          request = await client.getUrl(uri);
-        }
-
-        final response = await request.close();
-        final responseBody = await response.transform(utf8.decoder).join();
-        client.close();
-
-        if (response.statusCode >= 200 && response.statusCode < 500) {
+      _trySingleRestCall(
+        base,
+        endpointPath,
+        method: method,
+        queryParams: queryParams,
+        body: body,
+        timeoutMs: 2000,
+      ).then((result) {
+        if (result != null && !completer.isCompleted) {
           _workingApiBaseUrl = base;
-          final json = jsonDecode(responseBody) as Map<String, dynamic>;
-          json['_status_code'] = response.statusCode;
-          return json;
+          completer.complete(result);
+        } else {
+          pendingCount--;
+          if (pendingCount <= 0 && !completer.isCompleted) {
+            completer.complete(null);
+          }
         }
-      } catch (e) {
-        debugPrint('[Friends REST API] Notice: Endpoint $endpointPath on $base failed: $e');
-      }
+      }).catchError((_) {
+        pendingCount--;
+        if (pendingCount <= 0 && !completer.isCompleted) {
+          completer.complete(null);
+        }
+      });
     }
+
+    return completer.future;
+  }
+
+  Future<Map<String, dynamic>?> _trySingleRestCall(
+    String base,
+    String endpointPath, {
+    required String method,
+    Map<String, String>? queryParams,
+    Map<String, dynamic>? body,
+    required int timeoutMs,
+  }) async {
+    try {
+      final baseUri = Uri.parse('$base/$endpointPath');
+      final uri = (queryParams != null && queryParams.isNotEmpty)
+          ? baseUri.replace(queryParameters: queryParams)
+          : baseUri;
+
+      final client = HttpClient();
+      client.connectionTimeout = Duration(milliseconds: timeoutMs);
+      client.badCertificateCallback = ((X509Certificate cert, String host, int port) => true);
+
+      HttpClientRequest request;
+      if (method == 'POST') {
+        request = await client.postUrl(uri).timeout(Duration(milliseconds: timeoutMs));
+        request.headers.contentType = ContentType.json;
+        if (body != null) {
+          request.write(jsonEncode(body));
+        }
+      } else {
+        request = await client.getUrl(uri).timeout(Duration(milliseconds: timeoutMs));
+      }
+
+      final response = await request.close().timeout(Duration(milliseconds: timeoutMs));
+      final responseBody =
+          await response.transform(utf8.decoder).join().timeout(Duration(milliseconds: timeoutMs));
+      client.close();
+
+      if (response.statusCode >= 200 && response.statusCode < 500) {
+        final json = jsonDecode(responseBody) as Map<String, dynamic>;
+        json['_status_code'] = response.statusCode;
+        return json;
+      }
+    } catch (_) {}
     return null;
   }
 
   @override
   Future<FriendProfileModel?> searchPlayer(String query, {String? currentUserId}) async {
-    final normalizedTag = _normalizeTag(query);
+    final cleanQuery = query.trim().replaceAll('#', '');
+    if (cleanQuery.isEmpty) return null;
+    final normalizedTag = _normalizeTag(cleanQuery);
     debugPrint('[Friends] Searching player for "$query" (normalized: "$normalizedTag")...');
 
-    // 1. Try PHP REST API first
-    final restResponse = await _callRestApi(
-      'friends/search.php',
-      queryParams: {
-        'query': query,
-        ...?currentUserId != null ? {'current_user_id': currentUserId} : null,
-      },
-    );
+    // 1. Try PHP REST API first (fast parallel race)
+    try {
+      final restResponse = await _callRestApi(
+        'friends/search.php',
+        queryParams: {
+          'query': cleanQuery,
+          ...?currentUserId != null ? {'current_user_id': currentUserId} : null,
+        },
+      );
 
-    if (restResponse != null && restResponse['success'] == true) {
-      if (restResponse['is_self'] == true) {
-        throw const AppException('This is your own Player ID. You cannot add yourself as a friend.');
+      if (restResponse != null && restResponse['success'] == true) {
+        if (restResponse['is_self'] == true) {
+          throw const AppException('This is your own Player ID. You cannot add yourself as a friend.');
+        }
+        final playerData = restResponse['player'];
+        if (playerData is Map<String, dynamic>) {
+          debugPrint('[Friends] Player found via PHP REST API: ${playerData['display_name']} (${playerData['player_id']})');
+          return _mapJsonToFriendProfile(playerData);
+        }
+        return null;
       }
-      final playerData = restResponse['player'];
-      if (playerData is Map<String, dynamic>) {
-        debugPrint('[Friends] Player found via PHP REST API: ${playerData['display_name']} (${playerData['player_id']})');
-        return _mapJsonToFriendProfile(playerData);
-      }
-      return null;
+    } catch (e) {
+      if (e is AppException) rethrow;
     }
 
     // 2. Direct MySQL Fallback
@@ -140,6 +195,9 @@ class FriendsRemoteDataSource implements IFriendsRemoteDataSource {
     if (!connected) return null;
 
     try {
+      final likeQuery = '%$cleanQuery%';
+      final likeTag = '%$normalizedTag%';
+
       final res = await _dbService.execute(
         '''
         SELECT
@@ -147,21 +205,44 @@ class FriendsRemoteDataSource implements IFriendsRemoteDataSource {
           u.player_id,
           u.name AS username,
           COALESCE(up.name, u.name) AS display_name,
-          COALESCE(up.avatar_key, 'adventurer_default') AS avatar_url,
+          COALESCE(up.avatar_key, 'avatar_ranger') AS avatar_url,
           COALESCE(up.level, 1) AS level,
           COALESCE(up.current_xp, 0) AS xp,
           COALESCE(up.coins, 100) AS coins,
-          (SELECT COUNT(*) FROM quest_completions WHERE user_id = u.id) AS completed_quests_count,
+          (SELECT COUNT(*) FROM quest_completions WHERE user_id = u.id AND status = 'verified') AS completed_quests_count,
           (SELECT COUNT(*) FROM user_badges WHERE user_id = u.id) AS badges_count
         FROM users u
         LEFT JOIN user_profiles up ON up.user_id = u.id
-        WHERE UPPER(u.player_id) = UPPER(:normalized_tag) OR UPPER(u.name) = UPPER(:raw_name) OR UPPER(u.email) = UPPER(:raw_email)
+        WHERE UPPER(u.player_id) = UPPER(:normalized_tag) 
+           OR UPPER(u.player_id) = UPPER(:raw_query) 
+           OR u.id = :raw_id
+           OR UPPER(u.name) = UPPER(:raw_name) 
+           OR UPPER(up.name) = UPPER(:raw_pname)
+           OR UPPER(u.email) = UPPER(:raw_email)
+           OR u.player_id LIKE :like_tag
+           OR u.name LIKE :like_name
+           OR up.name LIKE :like_pname
+        ORDER BY
+          CASE
+            WHEN UPPER(u.player_id) = UPPER(:normalized_tag) THEN 1
+            WHEN UPPER(u.player_id) = UPPER(:raw_query) THEN 2
+            WHEN u.id = :raw_id THEN 3
+            WHEN UPPER(u.name) = UPPER(:raw_name) THEN 4
+            WHEN UPPER(up.name) = UPPER(:raw_pname) THEN 5
+            ELSE 6
+          END ASC
         LIMIT 1
         ''',
         {
           'normalized_tag': normalizedTag,
-          'raw_name': query.trim(),
-          'raw_email': query.trim(),
+          'raw_query': cleanQuery,
+          'raw_id': cleanQuery,
+          'raw_name': cleanQuery,
+          'raw_pname': cleanQuery,
+          'raw_email': cleanQuery,
+          'like_tag': likeTag,
+          'like_name': likeQuery,
+          'like_pname': likeQuery,
         },
       );
 

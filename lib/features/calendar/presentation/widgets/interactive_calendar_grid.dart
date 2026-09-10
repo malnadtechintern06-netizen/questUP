@@ -6,6 +6,7 @@ import '../../domain/entities/quest_calendar_entry.dart';
 class InteractiveCalendarGrid extends StatelessWidget {
   final DateTime currentMonth;
   final DateTime selectedDate;
+  final DateTime? userJoinedAt;
   final Map<int, List<QuestActivityStatus>> statusMap;
   final Function(DateTime date) onDateSelected;
   final Function(int offset) onMonthChange;
@@ -14,6 +15,7 @@ class InteractiveCalendarGrid extends StatelessWidget {
     super.key,
     required this.currentMonth,
     required this.selectedDate,
+    this.userJoinedAt,
     required this.statusMap,
     required this.onDateSelected,
     required this.onMonthChange,
@@ -127,6 +129,11 @@ class InteractiveCalendarGrid extends StatelessWidget {
               }
 
               final cellDate = DateTime(year, month, dayNumber);
+              final regDay = userJoinedAt != null
+                  ? DateTime(userJoinedAt!.year, userJoinedAt!.month, userJoinedAt!.day)
+                  : null;
+              final isBeforeRegistration = regDay != null && cellDate.isBefore(regDay);
+
               final isSelected = cellDate.year == selectedDate.year &&
                   cellDate.month == selectedDate.month &&
                   cellDate.day == selectedDate.day;
@@ -134,7 +141,7 @@ class InteractiveCalendarGrid extends StatelessWidget {
                   cellDate.month == now.month &&
                   cellDate.day == now.day;
 
-              final statuses = statusMap[dayNumber] ?? [];
+              final statuses = isBeforeRegistration ? <QuestActivityStatus>[] : (statusMap[dayNumber] ?? []);
               final hasCompleted = statuses.contains(QuestActivityStatus.completed);
               final hasFailed = statuses.contains(QuestActivityStatus.failed);
               final hasIncomplete = statuses.contains(QuestActivityStatus.incomplete);
@@ -163,7 +170,11 @@ class InteractiveCalendarGrid extends StatelessWidget {
                         style: AppTypography.bodyMedium.copyWith(
                           color: isSelected
                               ? AppColors.primary
-                              : (isToday ? AppColors.secondary : AppColors.textPrimary),
+                              : (isToday
+                                  ? AppColors.secondary
+                                  : (isBeforeRegistration
+                                      ? AppColors.textMuted.withValues(alpha: 0.35)
+                                      : AppColors.textPrimary)),
                           fontWeight: isSelected || isToday ? FontWeight.bold : FontWeight.normal,
                           fontSize: 13,
                         ),

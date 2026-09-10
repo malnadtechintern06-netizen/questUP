@@ -26,6 +26,14 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
   final _searchController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
@@ -565,7 +573,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Search with exact Player Tag (e.g. QST-1001, QST-1002) or Explorer Name.',
+                'Search with Player Tag (e.g. QST-9762, 7249), Explorer Name, or Email.',
                 style: AppTypography.caption.copyWith(color: AppColors.textSecondary),
               ),
               const SizedBox(height: 14),
@@ -576,11 +584,21 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
                   Expanded(
                     child: TextField(
                       controller: _searchController,
+                      textInputAction: TextInputAction.search,
                       style: AppTypography.bodyMedium.copyWith(color: Colors.white),
                       decoration: InputDecoration(
-                        hintText: 'e.g. QST-1001 or Elena',
+                        hintText: 'e.g. QST-9762, 7249 or Explorer Name',
                         hintStyle: AppTypography.bodyMedium.copyWith(color: AppColors.textMuted),
                         prefixIcon: const Icon(Icons.tag_rounded, color: AppColors.primary),
+                        suffixIcon: _searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear_rounded, color: AppColors.textMuted, size: 18),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  ref.read(friendsNotifierProvider.notifier).searchPlayer('');
+                                },
+                              )
+                            : null,
                         filled: true,
                         fillColor: AppColors.surfaceElevated,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),

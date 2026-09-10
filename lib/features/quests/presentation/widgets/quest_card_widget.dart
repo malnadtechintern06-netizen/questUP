@@ -90,6 +90,16 @@ class QuestCardWidget extends StatelessWidget {
     }
 
     switch (quest.verificationType) {
+      case QuestVerificationType.quiz:
+        return '🧠 Quiz';
+      case QuestVerificationType.secretCode:
+        return '🔑 Passcode';
+      case QuestVerificationType.qrCode:
+        return '📱 QR Scan';
+      case QuestVerificationType.taskConfirmation:
+        return '📋 Task';
+      case QuestVerificationType.adminApproval:
+        return '🛡️ Admin Review';
       case QuestVerificationType.drawingCanvas:
         return '🎨 ${quest.requiredDrawingSubject != null ? quest.requiredDrawingSubject![0].toUpperCase() + quest.requiredDrawingSubject!.substring(1) : 'Canvas'}';
       case QuestVerificationType.writingText:

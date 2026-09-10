@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../features/profile/domain/repositories/user_repository.dart';
 import '../../../../features/profile/presentation/providers/user_providers.dart';
 import '../../../../features/quests/presentation/providers/quest_providers.dart';
 import '../../data/datasources/quest_calendar_local_datasource.dart';
@@ -16,15 +17,18 @@ final questCalendarRepositoryProvider =
     Provider<QuestCalendarRepository>((ref) {
   final localData = ref.watch(questCalendarLocalDataSourceProvider);
   final questRepo = ref.watch(questRepositoryProvider);
+  final userRepo = ref.watch(userRepositoryProvider);
   return QuestCalendarRepositoryImpl(
     localDataSource: localData,
     questRepository: questRepo,
+    userRepository: userRepo,
   );
 });
 
 class QuestCalendarState {
   final DateTime selectedDate;
   final DateTime currentMonth;
+  final DateTime? userJoinedAt;
   final bool isLoading;
   final List<QuestCalendarEntry> monthEntries;
   final List<QuestCalendarEntry> selectedDateEntries;
@@ -33,6 +37,7 @@ class QuestCalendarState {
   QuestCalendarState({
     required this.selectedDate,
     required this.currentMonth,
+    this.userJoinedAt,
     this.isLoading = false,
     this.monthEntries = const [],
     this.selectedDateEntries = const [],
@@ -59,9 +64,19 @@ class QuestCalendarState {
   // Helper map for day status dots: day of month -> status list
   Map<int, List<QuestActivityStatus>> get monthStatusMap {
     final map = <int, List<QuestActivityStatus>>{};
+    final regDay = userJoinedAt != null
+        ? DateTime(userJoinedAt!.year, userJoinedAt!.month, userJoinedAt!.day)
+        : null;
+
     for (final e in monthEntries) {
       if (e.timestamp.year == currentMonth.year &&
           e.timestamp.month == currentMonth.month) {
+        final entryDay = DateTime(e.timestamp.year, e.timestamp.month, e.timestamp.day);
+        // Do not display any activity dots on days prior to account registration
+        if (regDay != null && entryDay.isBefore(regDay)) {
+          continue;
+        }
+
         final day = e.timestamp.day;
         map.putIfAbsent(day, () => []);
         if (!map[day]!.contains(e.status)) {
@@ -75,6 +90,7 @@ class QuestCalendarState {
   QuestCalendarState copyWith({
     DateTime? selectedDate,
     DateTime? currentMonth,
+    DateTime? userJoinedAt,
     bool? isLoading,
     List<QuestCalendarEntry>? monthEntries,
     List<QuestCalendarEntry>? selectedDateEntries,
@@ -83,6 +99,7 @@ class QuestCalendarState {
     return QuestCalendarState(
       selectedDate: selectedDate ?? this.selectedDate,
       currentMonth: currentMonth ?? this.currentMonth,
+      userJoinedAt: userJoinedAt ?? this.userJoinedAt,
       isLoading: isLoading ?? this.isLoading,
       monthEntries: monthEntries ?? this.monthEntries,
       selectedDateEntries: selectedDateEntries ?? this.selectedDateEntries,
@@ -93,8 +110,9 @@ class QuestCalendarState {
 
 class QuestCalendarNotifier extends StateNotifier<QuestCalendarState> {
   final QuestCalendarRepository _repository;
+  final UserRepository? _userRepository;
 
-  QuestCalendarNotifier(this._repository)
+  QuestCalendarNotifier(this._repository, [this._userRepository])
       : super(QuestCalendarState(
           selectedDate: DateTime.now(),
           currentMonth: DateTime(DateTime.now().year, DateTime.now().month),
@@ -105,15 +123,26 @@ class QuestCalendarNotifier extends StateNotifier<QuestCalendarState> {
   Future<void> loadCalendarData() async {
     state = state.copyWith(isLoading: true, error: null);
     try {
+      DateTime? joinedAt;
+      if (_userRepository != null) {
+        try {
+          final profile = await _userRepository.getUserProfile();
+          joinedAt = profile.joinedAt;
+        } catch (_) {}
+      }
+
       final monthData = await _repository.getEntriesForMonth(state.currentMonth);
       final dayData = await _repository.getEntriesForDate(state.selectedDate);
 
+      if (!mounted) return;
       state = state.copyWith(
         isLoading: false,
+        userJoinedAt: joinedAt,
         monthEntries: monthData,
         selectedDateEntries: dayData,
       );
     } catch (e) {
+      if (!mounted) return;
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
@@ -124,8 +153,10 @@ class QuestCalendarNotifier extends StateNotifier<QuestCalendarState> {
     state = state.copyWith(selectedDate: date, isLoading: true);
     try {
       final dayData = await _repository.getEntriesForDate(date);
+      if (!mounted) return;
       state = state.copyWith(selectedDateEntries: dayData, isLoading: false);
     } catch (e) {
+      if (!mounted) return;
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
@@ -138,8 +169,10 @@ class QuestCalendarNotifier extends StateNotifier<QuestCalendarState> {
     state = state.copyWith(currentMonth: nextMonth, isLoading: true);
     try {
       final monthData = await _repository.getEntriesForMonth(nextMonth);
+      if (!mounted) return;
       state = state.copyWith(monthEntries: monthData, isLoading: false);
     } catch (e) {
+      if (!mounted) return;
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
@@ -175,5 +208,6 @@ class QuestCalendarNotifier extends StateNotifier<QuestCalendarState> {
 final questCalendarNotifierProvider =
     StateNotifierProvider<QuestCalendarNotifier, QuestCalendarState>((ref) {
   final repo = ref.watch(questCalendarRepositoryProvider);
-  return QuestCalendarNotifier(repo);
+  final userRepo = ref.watch(userRepositoryProvider);
+  return QuestCalendarNotifier(repo, userRepo);
 });

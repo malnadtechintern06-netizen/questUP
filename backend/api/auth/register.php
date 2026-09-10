@@ -17,6 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../config/activity_logger.php';
 
 // 1. Parse JSON input or Form POST
 $rawBody = file_get_contents('php://input');
@@ -123,7 +124,8 @@ try {
         if ($hasPlayerId) {
             $upd = $db->prepare("
                 UPDATE users 
-                SET name = :name, password_hash = :hash, salt = :salt, status = 'active', player_id = COALESCE(player_id, :pid)
+                SET name = :name, password_hash = :hash, salt = :salt, status = 'active', 
+                    player_id = CASE WHEN player_id IS NULL OR player_id = '' THEN :pid ELSE player_id END
                 WHERE id = :id
             ");
             $upd->execute([
@@ -228,6 +230,13 @@ try {
         'xp_to_next_level' => $xpNext,
         'coins' => $coins,
     ]);
+
+    logActivity(
+        $id,
+        'user_registered',
+        "New account registered: {$name} ({$playerId}) - {$email}",
+        $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'
+    );
 
     http_response_code(201);
     echo json_encode([

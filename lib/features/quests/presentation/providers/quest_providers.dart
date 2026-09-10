@@ -227,6 +227,7 @@ class QuestsNotifier extends StateNotifier<AsyncValue<List<Quest>>> {
     try {
       final localSource = ref.read(questLocalDataSourceProvider);
       final initialQuests = await localSource.getQuests();
+      if (!mounted) return;
       if (initialQuests.isNotEmpty) {
         state = AsyncValue.data(initialQuests);
         _initSeenQuestIds(initialQuests);
@@ -236,6 +237,7 @@ class QuestsNotifier extends StateNotifier<AsyncValue<List<Quest>>> {
     // 2. Fetch live quests & real GPS in the background smoothly without blank screen
     try {
       final isLocationReady = await locationService.isLocationEnabledAndPermitted();
+      if (!mounted) return;
       if (isLocationReady) {
         await fetchQuests(showLoading: false);
       } else {
@@ -252,15 +254,18 @@ class QuestsNotifier extends StateNotifier<AsyncValue<List<Quest>>> {
           ),
         );
         final quests = await getQuestsUseCase(userId: _getCurrentUserId());
+        if (!mounted) return;
         state = AsyncValue.data(quests);
         await _handleNewQuestsDetection(quests);
       }
     } catch (_) {
       try {
         final quests = await getQuestsUseCase(userId: _getCurrentUserId());
+        if (!mounted) return;
         state = AsyncValue.data(quests);
         await _handleNewQuestsDetection(quests);
       } catch (e, st) {
+        if (!mounted) return;
         if (!state.hasValue) {
           state = AsyncValue.error(e, st);
         }
@@ -361,6 +366,7 @@ class QuestsNotifier extends StateNotifier<AsyncValue<List<Quest>>> {
 
       debugPrint('[QUEST PROVIDER] Updated quest count: ${quests.length}');
       debugPrint('[QUEST PROVIDER] Refresh completed in ${sw.elapsedMilliseconds}ms');
+      if (!mounted) return;
       state = AsyncValue.data(quests);
 
       // Check for newly uploaded quests and dispatch phone notification bar alert

@@ -5,6 +5,7 @@ import '../../../../app/theme/app_typography.dart';
 class CameraProofViewfinder extends StatelessWidget {
   final String? photoPath;
   final bool requiresFreshPhoto;
+  final bool allowGalleryUpload;
   final String? requiredObject;
   final String? requiredPlace;
   final VoidCallback onTakePhoto;
@@ -15,6 +16,7 @@ class CameraProofViewfinder extends StatelessWidget {
     super.key,
     required this.photoPath,
     this.requiresFreshPhoto = false,
+    this.allowGalleryUpload = false,
     this.requiredObject,
     this.requiredPlace,
     required this.onTakePhoto,
@@ -26,6 +28,7 @@ class CameraProofViewfinder extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasPhoto = photoPath != null && photoPath!.isNotEmpty;
     final subject = requiredObject ?? requiredPlace ?? 'Waypoint';
+    final isCameraOnly = requiresFreshPhoto || !allowGalleryUpload;
 
     return Container(
       width: double.infinity,
@@ -64,7 +67,7 @@ class CameraProofViewfinder extends StatelessWidget {
           ),
           const SizedBox(height: 6),
 
-          if (requiresFreshPhoto) ...[
+          if (isCameraOnly) ...[
             Container(
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -180,7 +183,7 @@ class CameraProofViewfinder extends StatelessWidget {
                 ],
               ),
             )
-          else if (requiresFreshPhoto)
+          else if (isCameraOnly)
             // Fresh photo only: single prominent in-app camera capture button
             InkWell(
               onTap: onTakePhoto,

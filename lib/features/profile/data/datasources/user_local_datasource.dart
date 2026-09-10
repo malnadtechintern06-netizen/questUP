@@ -31,7 +31,11 @@ class UserLocalDataSource implements IUserLocalDataSource {
       sessionPlayerId = authSession['player_id']?.toString() ?? authSession['playerId']?.toString();
     }
 
-    final effectiveUserId = targetUserId ?? sessionId ?? 'guest_player';
+    final effectiveUserId = (targetUserId != null && targetUserId.isNotEmpty)
+        ? targetUserId
+        : (sessionId != null && sessionId.isNotEmpty)
+            ? sessionId
+            : 'guest_player';
     final userSpecificKey = _getUserProfileKey(effectiveUserId);
 
     // 1. Try to get user-specific saved profile
@@ -39,8 +43,12 @@ class UserLocalDataSource implements IUserLocalDataSource {
     if (json != null && json is Map<String, dynamic>) {
       var model = UserProfileModel.fromJson(json);
       bool needsSave = false;
-      if (sessionName != null && sessionName.isNotEmpty && model.name != sessionName) {
+      if (sessionName != null && sessionName.isNotEmpty && model.name != sessionName && effectiveUserId == sessionId) {
         model = UserProfileModel.fromEntity(model.copyWith(name: sessionName));
+        needsSave = true;
+      }
+      if (sessionEmail != null && sessionEmail.isNotEmpty && model.email != sessionEmail && effectiveUserId == sessionId) {
+        model = UserProfileModel.fromEntity(model.copyWith(email: sessionEmail));
         needsSave = true;
       }
       if (model.playerId == 'QST-0000') {
@@ -56,14 +64,6 @@ class UserLocalDataSource implements IUserLocalDataSource {
       return model;
     }
 
-    // If no active session and guest key is empty, check fallback keyUserProfile
-    if (sessionId == null && targetUserId == null) {
-      final fallbackJson = await _storage.getJson(AppConstants.keyUserProfile);
-      if (fallbackJson != null && fallbackJson is Map<String, dynamic>) {
-        return UserProfileModel.fromJson(fallbackJson);
-      }
-    }
-
     final initialPlayerId = (sessionPlayerId != null && sessionPlayerId.isNotEmpty)
         ? sessionPlayerId
         : _computePlayerTag(effectiveUserId, sessionEmail);
@@ -72,8 +72,8 @@ class UserLocalDataSource implements IUserLocalDataSource {
     final defaultProfile = UserProfileModel(
       id: effectiveUserId,
       playerId: initialPlayerId,
-      name: (sessionName != null && sessionName.isNotEmpty) ? sessionName : 'Explorer',
-      email: (sessionEmail != null && sessionEmail.isNotEmpty) ? sessionEmail : 'explorer@questup.com',
+      name: (sessionName != null && sessionName.isNotEmpty && effectiveUserId == sessionId) ? sessionName : 'Explorer',
+      email: (sessionEmail != null && sessionEmail.isNotEmpty && effectiveUserId == sessionId) ? sessionEmail : 'explorer@questup.com',
       avatarKey: 'avatar_ranger',
       level: 1,
       currentXp: 0,
@@ -100,6 +100,5 @@ class UserLocalDataSource implements IUserLocalDataSource {
   Future<void> saveUserProfile(UserProfileModel profile) async {
     final key = _getUserProfileKey(profile.id);
     await _storage.saveJson(key, profile.toJson());
-    await _storage.saveJson(AppConstants.keyUserProfile, profile.toJson());
   }
 }

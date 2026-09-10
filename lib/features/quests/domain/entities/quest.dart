@@ -31,6 +31,11 @@ enum QuestCategory {
 enum QuestVerificationType {
   locationGps,
   photoProof,
+  quiz,
+  qrCode,
+  secretCode,
+  taskConfirmation,
+  adminApproval,
   videoProof,
   timedActivity,
   timedVideo,
@@ -135,6 +140,13 @@ class Quest {
   final bool isSharedQuest;
   final String? sharedStatus;
 
+  // Anti-Cheat & Server-Authoritative Verification Extensions
+  final String? verificationSecret; // Secret code, QR payload, or verification hash
+  final String? quizDataJson; // Quiz questions JSON
+  final int minDurationSeconds; // Anti-cheat minimum required seconds
+  final bool requiresAdminReview; // Requires manual admin approval
+  final bool allowGalleryUpload; // Strict camera-only enforcement flag
+
   const Quest({
     required this.id,
     required this.title,
@@ -194,6 +206,11 @@ class Quest {
     this.sharedByUserId,
     this.isSharedQuest = false,
     this.sharedStatus,
+    this.verificationSecret,
+    this.quizDataJson,
+    this.minDurationSeconds = 0,
+    this.requiresAdminReview = false,
+    this.allowGalleryUpload = false,
   });
 
   double get allowedRadius => radiusMeters;
@@ -205,9 +222,9 @@ class Quest {
   bool get hasPlaceDetection =>
       requiredPlace != null && requiredPlace!.trim().isNotEmpty;
   bool get hasGpsRequirement =>
-      requiresGPS || (latitude != 0.0 && longitude != 0.0);
+      requiresGPS || verificationType == QuestVerificationType.locationGps || verificationType == QuestVerificationType.walkingGps || (latitude != 0.0 && longitude != 0.0);
   bool get isCameraOnly =>
-      requiresFreshPhoto || (hasObjectDetection && (requiresPhoto || verificationType == QuestVerificationType.photoProof));
+      !allowGalleryUpload && (requiresFreshPhoto || verificationType == QuestVerificationType.photoProof || hasObjectDetection);
   bool get requiresAntiScreenCheck =>
       requiresFreshPhoto || hasObjectDetection || verificationType == QuestVerificationType.photoProof;
 
@@ -272,6 +289,11 @@ class Quest {
     String? sharedByUserId,
     bool? isSharedQuest,
     String? sharedStatus,
+    String? verificationSecret,
+    String? quizDataJson,
+    int? minDurationSeconds,
+    bool? requiresAdminReview,
+    bool? allowGalleryUpload,
   }) {
     return Quest(
       id: id ?? this.id,
@@ -336,6 +358,11 @@ class Quest {
       sharedByUserId: sharedByUserId ?? this.sharedByUserId,
       isSharedQuest: isSharedQuest ?? this.isSharedQuest,
       sharedStatus: sharedStatus ?? this.sharedStatus,
+      verificationSecret: verificationSecret ?? this.verificationSecret,
+      quizDataJson: quizDataJson ?? this.quizDataJson,
+      minDurationSeconds: minDurationSeconds ?? this.minDurationSeconds,
+      requiresAdminReview: requiresAdminReview ?? this.requiresAdminReview,
+      allowGalleryUpload: allowGalleryUpload ?? this.allowGalleryUpload,
     );
   }
 }
